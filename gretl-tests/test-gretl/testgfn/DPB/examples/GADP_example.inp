@@ -1,0 +1,20 @@
+set echo off
+set messages off
+
+include DPB.gfn
+
+
+
+#------- GADP MODEL: KEANE and SAUER (2009) ---------
+
+open GADP_artdata.gdtb
+
+list X = const x
+list Z = const x z
+
+
+bundle b
+  
+b = DPB_setup("GADP",y,X,Z)
+DPB_estimate(&b)
+DPB_printout(&b)  

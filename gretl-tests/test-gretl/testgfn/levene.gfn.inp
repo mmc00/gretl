@@ -1,0 +1,12 @@
+include ./levene.gfn
+
+# use NIST data
+open gear.gdt
+
+# Is the y homogeneous in variance with respect to 
+# the level of x?
+levene(y, x)
+
+# Now try using the trimmed mean (giving 3 for the third
+# argument), and using 4 bins for x (4 in the final argument).
+levene(y, x, 3, 4)

@@ -1,0 +1,69 @@
+include ./Threshold_Panel/Threshold_Panel.gfn
+#*****************************************************************************
+# EXAMPLE: Replication of Hansen's results in Journal of Econometrics (1999)
+#*****************************************************************************
+#clear
+#open http://www.wiso.uni-hamburg.de/fileadmin/sozialoekonomie/vwl/fritsche/Tarassow/invest_joe99.gdt
+open invest_joe99.gdt --frompkg=Threshold_Panel
+
+# LOAD DATASET
+list linvest = inva vala cfa debta
+matrix invest = { linvest }
+matrix i = invest[,1]     # investment/assets                             #
+matrix q = invest[,2]     # Tobin's Q                                     #
+matrix c = invest[,3]     # cash-flow/assets                              #
+matrix d = invest[,4]     # debt/assets                                   #
+scalar N = 565
+scalar T = 15
+
+# Shrink the orginal dataset for illustrative reasons
+# Comment the lines below for replicating the Hansen's results exactly! #
+# --- from here -------------------
+scalar nsel = 20
+matrix i = mshape(i,T,N)
+i = vec(i[,1:nsel])
+matrix q = mshape(q,T,N)
+q = vec(q[,1:nsel])
+matrix c = mshape(c,T,N)
+c = vec(c[,1:nsel])
+matrix d = mshape(d,T,N)
+d = vec(d[,1:nsel])
+# --- to here ---------------------
+
+# SET UP MODEL PARAMETERS
+scalar nthresh = 2				# Max. # of thresholds to test, Hansen (1999) ntresh=3
+scalar opt_const = 0			# Hansen (1999) opt_const=0
+scalar max_lag = 1
+scalar t = 15
+scalar nt = rows(i)	#rows(invest)
+scalar n = nt/t
+scalar qn = 300					# Hansen (1999) qn=400
+scalar nrep = 100				# Hansen (1999) nrep=300
+scalar trim_1 = 0.01			# Hansen (1999) trim_1=0.01
+scalar trim_2 = 0.01			# Hansen (1999) trim_2=0.01
+scalar trim_3 = 0.05			# Hansen (1999) trim_3=0.05
+scalar conf_lev = 0.95			# Hansen (1999) conf_lev=0.95
+
+# LAGS
+matrix y = LAG_V(i,0,t,n,max_lag)
+matrix q1 = LAG_V(q,1,t,n,max_lag)
+matrix d1 = LAG_V(d,1,t,n,max_lag)
+matrix cf = LAG_V(c,1,t,n,max_lag)
+matrix THRESH = d1					# set to threshold variable
+
+# SET UP THE MODEL SPECIFICATION
+# Further regime-independent regressors following Hansen (1999) eq. (22)
+matrix x = q1~(q1.^2)~(q1.^3)~d1~(q1.*d1)
+
+# RUN THE MODEL(S)
+set stopwatch
+bundle B = THRESH_SETUP(y,x,cf,d1, "i", "q1 q1_sq q1_tr d1 q1d1", \
+  "cf", "d", nthresh, opt_const, max_lag, t, \
+  qn, nrep, trim_1, trim_2, trim_3, conf_lev)
+printf "\n This took %.2f seconds\n", $stopwatch
+
+# Plot the Likelihood Ratio test confidence interval
+matrix qq = B.qq1
+matrix lrstats = B.lrstats
+matrix lrcrit = B.lrcrit
+lrplot(lrstats, lrcrit, qq)

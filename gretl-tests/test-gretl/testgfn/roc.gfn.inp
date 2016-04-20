@@ -1,0 +1,39 @@
+include ./roc/roc.gfn
+set echo off
+set messages off
+
+
+open mroz87 --quiet
+logit LFP const WA WE KL6
+
+# compute basic ROC measures and plot them
+series yhat1 = $yhat
+result = roc(LFP, yhat1)
+
+# alternatively, generate figures 'by hand' (these versions omit the annotations)
+# figure 1
+matrix figmat = result.tpr ~ result.fpr ~ result.fpr
+gnuplot --matrix=figmat --output=display --with-lines --fit=none \ 
+{set xlabel "False Positive Rate"; set ylabel "True Positive Rate";\
+set nokey}
+
+# figure 2
+matrix thresh = {yhat1}
+thresh = sort(thresh)
+matrix figmat = result.fcp ~ thresh
+gnuplot --matrix=figmat --output=display --with-lines --fit=none \
+  {set xlabel "Threshold"; set ylabel "Fraction Correctly Predicted"; \
+  set nokey}
+
+# estimate alternative models and compare the AUROCs
+logit LFP const WA WE KL6 HA HE FAMINC --quiet
+series yhat2 = $yhat
+
+logit LFP const WA WE KL6 HA HE FAMINC AX MTR --quiet
+series yhat3 = $yhat
+
+list yhat = yhat1 yhat2 yhat3
+matrix bar = {yhat1, yhat2, yhat3}
+
+string names = "model1 model2 model3" 
+result = roccomp(LFP, yhat, names)

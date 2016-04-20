@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="armax" ID="1367656225" needs-time-series-data="true" minver="1.9.0">
+<author>Yi-Nung Yang</author>
+<version>0.92</version>
+<date>2014-09-04</date>
+<description>Automatically Choose and Show best ARMAX models based on AIC, BIC, or HQC</description>
+<label>armax_auto</label>
+<menu-attachment>MAINWIN/Model/TSModels</menu-attachment>
+<help>
+This script automatically chooses and shows best ARMAX model based on AIC, BIC, or HQC by specifying lags of max. AR p and max. MA q. Similiar to &quot;test down&quot; from combinations of orders p and q.
+
+see also: http://gretlcycu.wordpress.com/2013/05/07/armax/.
+
+armax changelog:
+2014/09/04
+    version 0.92: Fix a bug if exogenous list doesn't include constant,  
+                  specifying &quot;include a constant&quot; (argument 5 =&quot;1&quot;) does
+                  nothing and model estimated without constant.
+2014/09/02
+    version 0.91: Updated version released.
+                 Fixed &quot;occasional&quot; armax aborting which is stooped by gretl in the
+                 loop when gretl catches errors, for example, failed to compute
+                 numerical Hessian .
+                 See also for other discussion:
+                 http://lists.wfu.edu/pipermail/gretl-users/2014-May/010040.html
+2013/05/07
+    version 0.4: first beta version released
+</help>
+<gretl-function name="armax" type="matrix">
+ <params count="9">
+  <param name="ar_order" type="int" min="0" default="1">
+<description>max. AR p</description>
+  </param>
+  <param name="ma_order" type="int" min="0" default="0">
+<description>max. MA q</description>
+  </param>
+  <param name="y" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="xlist" type="list" optional="true">
+<description>Exogenous variable list</description>
+  </param>
+  <param name="cons" type="bool" default="1">
+<description>Include a constant</description>
+  </param>
+  <param name="method" type="int" min="1" max="2" default="1">
+<description>Method</description>
+<labels count="2">
+"exact ML (完全最大概似法)" "conditional ML (條件最大概似法)" </labels>
+  </param>
+  <param name="showBestModel" type="bool" default="0">
+<description>show Best model based on Info. Criterion below</description>
+  </param>
+  <param name="crit" type="int" min="1" max="3" default="1">
+<description>Info. Criterion</description>
+<labels count="3">
+"AIC" "BIC" "HQC" </labels>
+  </param>
+  <param name="quiet" type="bool" default="0">
+<description>Quiet</description>
+  </param>
+ </params>
+<code># set upper limit lags
+maxp=ar_order
+maxq=ma_order
+string sY=argname(y)
+series @sY=y
+# estimation method: exact ML is the default in gretl
+if method=2
+  string eMethod =&quot; --conditional&quot;
+else
+  string eMethod =&quot;&quot;
+endif
+if cons
+  string sCons = &quot;&quot;
+  list tlist = 0
+  list xlist = xlist || tlist
+else
+  string sCons = &quot; --nc&quot;
+endif
+
+# store output in this matrix
+string tabname=&quot;tab1&quot;
+scalar order_aic=0
+scalar order_sc=0
+scalar order_hq=0
+# --- define decimals in output
+nwidth=12
+ndecimal=4
+# declare a Matrix to store information criteria
+matrix @tabname = zeros((maxp+1)*(maxq+1),5)
+colnames(@tabname,&quot;p q AIC BIC HQC&quot;)
+# loop through every combination of arma lags
+nrow = 1
+loop p=0..maxp -q
+  ## for q=0 to maxq
+  loop q = 0..maxq -q
+    # estimate model
+    if nelem(xlist)=0
+      if p=0 &amp;&amp; q=0
+        # p,q=0 時, 一定要有 const, 不然會有參數數目不足之 error
+        catch arima p q ; y -q @eMethod
+        err=$error
+        if err
+          printf &quot;armax: Got error %d (%s) while p=%d,q=%d\n&quot;, err, errmsg(err),p,q
+        else
+          printf &quot;armax: successfully-1:p=%d,q=%d\n&quot;,p,q
+        endif
+      else
+        catch arima p q ; y -q @eMethod @sCons
+        err=$error
+        if err
+          printf &quot;armax: Got error %d (%s) while p=%d,q=%d\n&quot;, err, errmsg(err),p,q
+        else
+          # printf &quot;armax: successfully-1:p=%d,q=%d\n&quot;,p,q
+        endif
+      endif
+    else
+      catch arima p q ; y xlist -q @eMethod @sCons
+      err=$error
+      if err
+        printf &quot;tarmax: Got error %d (%s) while p=%d,q=%d\n&quot;, err, errmsg(err),p,q
+      else
+        # printf &quot;armax: successfully-1:p=%d,q=%d\n&quot;,p,q
+      endif
+    endif
+    /*
+    err = $error
+    if (err)
+      #printf &quot;Got error %d (%s)\n&quot;, err, errmsg(err)
+    endif
+    */
+    #if isnull($aic)=0
+    @tabname[nrow,1] = p
+    @tabname[nrow,2] = q
+    if err&gt;0
+      # printf &quot;有誤 ----- Got error,p=%d,q=%d\n&quot;,p,q
+      @tabname[nrow,3] = 99999.9999
+      @tabname[nrow,4] = 99999.9999
+      @tabname[nrow,5] = 99999.9999
+    else
+      @tabname[nrow,3] = $aic
+      @tabname[nrow,4] = $bic
+      @tabname[nrow,5] = $hqc
+      # test for mininum noise model
+      if nrow=1
+        min_aic = $aic
+        min_sc = $bic
+        min_hq = $hqc
+        order_aic = nrow
+        order_sc = nrow
+        order_hq = nrow
+      else
+        if $aic &lt; min_aic
+          min_aic = $aic
+          order_aic = nrow
+        endif
+        if $bic &lt; min_sc
+          min_sc = $bic
+          order_sc = nrow
+        endif
+        if $hqc &lt; min_hq
+          min_hq = $hqc
+          order_hq = nrow
+        endif
+      endif
+    endif
+    nrow = nrow+1
+  endloop
+endloop
+# --- remember the best model
+scalar naic=order_aic
+scalar nbic=order_sc
+scalar nhqc=order_hq
+if quiet
+  # Don't show anything.
+else
+  printf &quot;===============================================\n&quot;
+  printf &quot; Information Criteria of ARMAX(p,q) for %s\n&quot;,argname(y)
+  printf &quot;-----------------------------------------------\n&quot;
+  printf &quot; p, q %*s %*s %*s\n&quot;,nwidth,&quot;AIC&quot;,nwidth+1,&quot;BIC&quot;,nwidth+1,&quot;HQC&quot;
+  printf &quot;-----------------------------------------------\n&quot;
+  nrow=1
+  loop p=0..maxp -q
+    loop q=0..maxq -q
+      if nrow=naic
+        string star_aic=&quot;*&quot;
+      else
+        string star_aic=&quot;&quot;
+      endif
+      if nrow=nbic
+        string star_bic=&quot;*&quot;
+      else
+        string star_bic=&quot;&quot;
+      endif
+      if nrow=nhqc
+        string star_hqc=&quot;*&quot;
+      else
+        string star_hqc=&quot;&quot;
+      endif
+      printf &quot;%2d,%2d %*.*f%1s %*.*f%1s %*.*f%1s\n&quot;,p,q,nwidth,ndecimal,@tabname[nrow,3],star_aic, nwidth,ndecimal,@tabname[nrow,4],star_bic, nwidth,ndecimal,@tabname[nrow,5],star_hqc
+      nrow = nrow + 1
+    endloop
+  endloop
+  printf &quot;===============================================\n&quot;
+  printf &quot;* indicates best models.\n&quot;
+  printf &quot;'9999.9999' suggests failures to estimate the models.\n&quot;
+  #    printf &quot;%10.4f\n&quot;,@tabname
+  if showBestModel
+    scalar aic_p=@tabname[naic,1]
+    scalar aic_q=@tabname[naic,2]
+    scalar bic_p=@tabname[nbic,1]
+    scalar bic_q=@tabname[nbic,2]
+    scalar hqc_p=@tabname[nhqc,1]
+    scalar hqc_q=@tabname[nhqc,2]
+    if crit=1
+      best_p = aic_p
+      best_q = aic_q
+    endif
+    if crit=2
+      best_p = bic_p
+      best_q = bic_q
+    endif
+    if crit=3
+      best_p = hqc_p
+      best_q = hqc_q
+    endif
+    # show the best model output
+    if best_p=0 &amp;&amp; best_q =0
+      arima best_p best_q ; @sY xlist @eMethod
+    else
+      arima best_p best_q ; @sY xlist @eMethod  @sCons
+    endif
+    
+  endif
+endif
+return @tabname
+</code>
+</gretl-function>
+<gretl-function name="summary_ts" type="void" private="1">
+ <params count="6">
+  <param name="X" type="list"/>
+  <param name="q" type="int" min="1" max="200" default="1">
+<description>Q 檢定階次: Q() lag=</description>
+  </param>
+  <param name="q2" type="int" min="1" max="200" default="5">
+<description>Q 檢定階次: Q() lag=</description>
+  </param>
+  <param name="q3" type="int" min="1" max="200" default="10">
+<description>Q 檢定階次: Q() lag=</description>
+  </param>
+  <param name="width" type="int" min="6" max="20" default="14">
+<description>數字長度 width of numbers</description>
+  </param>
+  <param name="dec" type="int" min="0" max="10" default="4">
+<description>小數點位數 decimal</description>
+  </param>
+ </params>
+<code>#==================================================================================
+#   summary statistics package for (financial) time series for gretl by Yi-Nung Yang
+#           ver. 1.1
+#   Chung Yuan Christian University, Taiwan
+#   http://yaya.it.cycu.edu.tw/gretl
+#==================================================================================
+/*
+q=1
+q2=5
+q3=10
+*/
+sq=q
+sq2=q2
+sq3=q3
+#width =12
+#dec=2
+set messages off
+set echo off
+printf &quot;=================================================================================\n&quot;
+printf &quot;Summary Statistics for Time Series Analysis by Yi-Nung Yang\n&quot;
+set messages on
+smpl
+set messages off
+printf &quot;=================================================================================\n&quot;
+loop w=width..width --quiet   # this is for the width of numbers
+  printf &quot;%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    printf &quot;%$ws&quot;, &quot;$i&quot;
+  endloop
+  printf &quot;\n&quot;
+  printf &quot;%8s&quot;, &quot;mean&quot;
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, mean(X.$i)
+  endloop
+  printf &quot;\n%8s&quot;,&quot;SD&quot;
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, sd(X.$i)
+  endloop
+  printf &quot;\n%8s&quot;,&quot;SK&quot;
+  loop foreach i X --quiet
+    N=nobs(X.$i)
+    scalar SK=(1/N)*sum(((X.$i)-mean((X.$i)))^3/(sd((X.$i))*((N-1)/N)^0.5)^3)
+    printf &quot;%$w.*f&quot;,dec, SK
+  endloop
+  printf &quot;\n%8s&quot;,&quot;KT&quot;
+  loop foreach i X --quiet
+    scalar KT=(1/nobs((X.$i)))*sum(((X.$i)-mean((X.$i)))^4/(sd((X.$i))*((N-1)/N)^0.5)^4)
+    printf &quot;%$w.*f&quot;,dec, KT
+  endloop
+  # -------- 3 Ljung-Box Q-------------------------------
+  #Ljung-box Q(1)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q&quot;,q
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i,q)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,q,ljungbox(X.$i,q))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(2)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q&quot;,q2
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i,q2)
+  endloop
+  #Ljung-box p-value2
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,q2,ljungbox(X.$i,q2))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(3)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q&quot;,q3
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i,q3)
+  endloop
+  #Ljung-box p-value3
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,q3,ljungbox(X.$i,q3))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  # =============== 3 Ljung-Box Q2 ==========================
+  /*
+  #Ljung-box Q(1)
+  # q=1
+  printf &quot;\n%s(%d)\t&quot;,&quot;Q2&quot;,sq
+  loop foreach i X --quiet
+    printf &quot;%.6f\t&quot;, ljungbox(X.$i^2,sq)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%s\t&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    printf &quot;[%.4f]\t&quot;, pvalue(X,sq,ljungbox(X.$i^2,sq))
+  endloop
+  */
+  # -------- 3 Ljung-Box Q2-------------------------------
+  #Ljung-box Q(1)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q2&quot;,sq
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i^2,sq)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,sq,ljungbox(X.$i^2,sq))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(2)
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q2&quot;,sq2
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i^2,sq2)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,sq2,ljungbox(X.$i^2,sq2))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(3)
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q2&quot;,sq3
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i^2,sq3)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,sq3,ljungbox(X.$i^2,sq3))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #JB normality test
+  printf &quot;\n%8s&quot;,&quot;JB &quot;
+  loop foreach i X --quiet
+    normtest X.$i --jbera --quiet
+    printf &quot;%$w.*f&quot;,dec, $test
+  endloop
+  #JB p-value
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    normtest X.$i --jbera --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, $pvalue
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  printf &quot;\n\n&quot;
+  printf &quot;*SD, SK, KT, and JB denote standard deviation, sknewness, kurtosis, and Jarque-Bera statistic, respectively.\n&quot;
+  printf &quot; Figures in [] are corresponding p-values\n&quot;
+  printf &quot;*SD 是標準差, SK 是偏態係數, KT 是峰態係數, 小括號中的數字是標準差, 中括號中的數字是 p值\n&quot;
+endloop
+</code>
+</gretl-function>
+<gretl-function name="JB" type="scalar" private="1">
+ <params count="2">
+  <param name="y" type="series"/>
+  <param name="k" type="scalar" min="0" default="0"/>
+ </params>
+<code>scalar y_mean=mean(y)
+scalar N=nobs(y)
+scalar y_sd=sd(y)*((N-1)/N)^0.5
+scalar SK=(1/N)*sum((y-y_mean)^3/y_sd^3)
+scalar KT=(1/N)*sum((y-y_mean)^4/y_sd^4)
+scalar JB=(1/6)*(N-k)*(SK^2+(1/4)*(KT-3)^2)
+scalar pv=pvalue(x, 2, JB)
+printf &quot;Jarque-Bera Test for Normality\n&quot;
+printf &quot;Using %d observations\n&quot;, N
+printf &quot;The number of coefficients in estimation = %d\n&quot;, k
+printf &quot;H0: the series is normally distributed\n\n&quot;
+printf &quot;Test Statistic = %g\n&quot;, JB
+printf &quot;One-tailed p-value = Pr(Chi-Square(2)&gt; %g) = %g\n&quot;, JB, pv
+return pv
+</code>
+</gretl-function>
+<sample-script>
+include armax.gfn
+open djclose
+series r=ldiff(djclose)*100
+list xlist = const
+myM=armax(3,3,r,xlist)
+myMatrix = armax(4, 0, r, null, 1, 1, 1, 1, 0)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

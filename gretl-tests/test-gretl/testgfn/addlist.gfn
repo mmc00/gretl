@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="addlist" ID="1427120060" minver="1.9.3">
+<author email="cottrell@wfu.edu">Allin Cottrell</author>
+<version>1.2</version>
+<date>2010-12-17</date>
+<description>Sequential addition of variables to a model</description>
+<help>
+arguments:
+y     - dependent variable
+list0 - list of regressors to be included unconditionally
+list1 - list of candidate regressors for addition
+crit  - criterion: 1 = AIC, 2 = BIC
+
+1. Regresses y on list0 using OLS, then scans list1 for the variable
+that, if added, improves the selected Information Criterion to the
+greatest extent.  
+
+2. If improvement is possible, add the new regressor to list0 and
+remove it from list1, and go to step 1; if not, stop.
+
+Returns the final list of regressors.
+</help>
+<gretl-function name="addlist" type="list">
+ <params count="4">
+  <param name="y" type="series">
+<description>dependent variable</description>
+  </param>
+  <param name="list0" type="list">
+<description>initial regressors</description>
+  </param>
+  <param name="list1" type="list">
+<description>candidates for addition</description>
+  </param>
+  <param name="criterion" type="int" min="1" max="2" default="1">
+<labels count="2">
+"AIC" "BIC" </labels>
+  </param>
+ </params>
+<code># check for overlapping lists
+if nelem(list0 &amp;&amp; list1) &gt; 0
+  funcerr &quot;The two list arguments must be disjoint&quot;
+endif
+# baseline OLS
+ols y list0 --quiet
+if criterion == 1
+  string critstr = &quot;AIC&quot;
+  string ctype = &quot;$aic&quot;
+  scalar critmin = $aic
+else
+  string critstr = &quot;BIC&quot;
+  string ctype = &quot;$bic&quot;
+  scalar critmin = $bic
+endif
+string vname
+string bestx
+scalar crit
+printf &quot;Baseline        %s = %g\n&quot;, critstr, critmin
+loop while (nelem(list1) &gt; 0) --quiet
+  bestx = null
+  loop foreach i list1 --quiet
+    ols y list0 list1.$i --quiet
+    crit = @ctype
+    if (crit &lt; critmin)
+      critmin = crit
+      vname = &quot;$i&quot;
+      bestx = &quot;list1.$i&quot;
+    endif
+  endloop
+  if strlen(bestx)
+    printf &quot;Adding %-8s %s = %g\n&quot;, vname, critstr, critmin
+    list0 += @bestx
+    list1 -= @bestx
+  else
+    break
+  endif
+endloop
+printf &quot;\nMinimized %s = %g, with this model:\n&quot;, critstr, critmin
+ols y list0
+return list0
+</code>
+</gretl-function>
+<sample-script>
+include addlist.gfn
+open data4-10
+list l1 = const CATHOL INCOME
+list l2 = PUPIL WHITE ADMEXP REV MEMNEA COLLEGE
+# use AIC
+list final = addlist(ENROLL, l1, l2, 1)
+list final print
+# use BIC
+final = addlist(ENROLL, l1, l2, 2)
+list final print
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

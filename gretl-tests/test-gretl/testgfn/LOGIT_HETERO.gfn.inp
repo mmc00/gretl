@@ -1,0 +1,7 @@
+include ./LOGIT_HETERO.gfn
+open greene19_1.gdt --quiet
+list ylist = GRADE
+list xlist = 0 GPA TUCE PSI
+logit GRADE 0 GPA TUCE PSI
+
+CHECK = LOGIT_HETERO(ylist,xlist,$coeff)

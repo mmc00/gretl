@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="tobit_y" ID="1427124861" model-requirement="tobit" minver="1.9.5">
+<author email="cottrell@wfu.edu">Allin Cottrell</author>
+<version>0.2</version>
+<date>2015-03-23</date>
+<description>Tobit dependent variable prediction</description>
+<label>Predicted values</label>
+<menu-attachment>MODELWIN/Analysis</menu-attachment>
+<help>
+This function computes the conditional expectation of the dependent
+variable for a Tobit model, allowing for the effect of censoring.
+
+Note that this differs from the series made available via the $yhat 
+accessor after estimation via gretl's tobit command: that holds the 
+conditional expectation of the latent variable, y-star.
+
+Arguments:
+
+series XB: X*beta-hat, the predicted latent variable. This is
+available via the $yhat accessor after Tobit estimation. 
+
+scalar s: the estimated standard deviation of the error term,
+available via $sigma after Tobit estimation.
+
+scalar lo: the lower bound. This defaults to 0; supply NA if
+there is no lower bound.
+
+scalar hi: the upper bound. This defaults to NA (no upper bound).
+</help>
+<gui-help>
+This function computes the conditional expectation of the dependent
+variable for a Tobit model, allowing for the effect of censoring.
+
+Note that this differs from the series made available via the $yhat 
+accessor after estimation via gretl's tobit command: that holds the 
+conditional expectation of the latent variable, y-star.
+</gui-help>
+<gretl-function name="GUI_tobit_y" type="bundle" no-print="1" menu-only="1" pkg-role="gui-main">
+<code>## no-print ##
+bundle b
+scalar lo = 0
+scalar hi = NA
+catch lo = $[&quot;llimit&quot;]
+catch hi = $[&quot;rlimit&quot;]
+eval $error
+series XB = $yhat
+b[&quot;lower&quot;] = lo
+b[&quot;upper&quot;] = hi
+b[&quot;XB&quot;] = XB
+b[&quot;yhat_o&quot;] = tobit_y(XB, $sigma, lo, hi)
+return b
+</code>
+</gretl-function>
+<gretl-function name="tobit_y" type="series">
+ <params count="4">
+  <param name="XB" type="series"/>
+  <param name="s" type="scalar"/>
+  <param name="lo" type="scalar" default="0"/>
+  <param name="hi" type="scalar" default="NA"/>
+ </params>
+<code>series yh = 0
+series p_uncens = 1
+series p_cens
+series E_uncens
+if missing(lo) &amp;&amp; missing(hi)
+  return XB
+endif
+if ok(lo) &amp;&amp; ok(hi)
+  if hi &lt;= lo
+    funcerr &quot;the upper bound must be greater than the lower&quot;
+  endif
+endif
+if ok(lo) # handle left-censoring
+  series w_lo = (lo - XB)/s
+  p_cens = cnorm(w_lo)
+  if lo != 0
+    yh += p_cens * lo
+  endif
+  p_uncens -= p_cens
+endif
+if ok(hi) # handle right-censoring
+  series w_hi = (hi - XB)/s
+  p_cens = 1 - cnorm(w_hi)
+  if hi != 0
+    yh += p_cens * hi
+  endif
+  p_uncens -= p_cens
+endif
+if missing(hi)
+  E_uncens = XB + s * invmills(w_lo)
+elif missing(lo)
+  E_uncens = XB - s * (dnorm(w_hi)/cnorm(w_hi)))
+else
+  series num = dnorm(w_lo) - dnorm(w_hi)
+  series den = cnorm(w_hi) - cnorm(w_lo)
+  E_uncens = XB + s * (num/den))
+endif
+yh += p_uncens * E_uncens
+return yh
+</code>
+</gretl-function>
+<gretl-function name="tobit_y_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>series XB = b[&quot;XB&quot;]
+series yhat_o = b[&quot;yhat_o&quot;]
+scalar lo = b[&quot;lower&quot;]
+scalar hi = b[&quot;upper&quot;]
+printf &quot;Predictions for Tobit dependent variable:\n\n&quot;
+print &quot; XB is the expected value of the latent variable,&quot;
+print &quot; yhat_o is the expected value of the observable y.&quot;
+string lowstr
+if ok(lo)
+  sprintf lowstr, &quot;%g&quot;, lo
+else
+  lowstr = &quot;-inf&quot;
+endif
+string highstr
+if ok(hi)
+  sprintf highstr, &quot;%g&quot;, hi
+else
+  highstr = &quot;inf&quot;
+endif
+printf &quot; Observed y is in [%s, %s]\n&quot;, lowstr, highstr
+print XB yhat_o --byobs
+</code>
+</gretl-function>
+<sample-script>
+include tobit_y.gfn
+open greene22_2.gdt
+list X = const Z*
+tobit Y X
+series Xb = $yhat
+series alt_yhat = tobit_y(Xb, $sigma)
+print Y Xb alt_yhat --byobs
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

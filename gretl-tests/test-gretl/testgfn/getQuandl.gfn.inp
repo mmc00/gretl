@@ -1,0 +1,9 @@
+include ./getQuandl.gfn
+nulldata 50
+setobs 1 1964
+# 台灣、美國、中國名目 GDP per capital in US dollars
+xlist = getQuandl("TWN_NGDPDPC", null, null, 0, 1, null, 0, null, "")
+xlist = getQuandl("USA_NGDPDPC", null, null, 0, 1, null, 0, null, "")
+xlist = getQuandl("CHN_NGDPDPC", null, null, 0, 1, null, 0, null, "")
+xlist = getQuandl("JPN_NGDPDPC", null, null, 0, 1, null, 0, null, "")
+xlist = getQuandl("KOR_NGDPDPC", null, null, 0, 1, null, 0, null, "")

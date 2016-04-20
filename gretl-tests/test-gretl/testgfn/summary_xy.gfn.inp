@@ -1,0 +1,23 @@
+include ./summary_xy.gfn
+open denmark
+# extract year and quarter from obslabel(i)
+scalar T=$nobs
+series year=NA
+series quarter=NA
+scalar yr=0
+scalar qq=0
+
+loop for i=1..T -q
+string tmp=obslabel(i)
+    sscanf tmp, "%d:%d", &yr, &qq
+    year[i]=yr
+    quarter[i]=qq
+endloop
+series decade=(year>1979) ? 1980 : 1970
+
+# if only row category is needed,use "const" in coloumn parameter.  
+summary_xy(LRM,year,const)
+# show mean, stdev., skewness, kurtosis, JB in the row-column table. 
+summary_xy(LRM,decade,quarter,1,1,1,1)
+# show additional Q and Q2 statisitics (carefully used with time series).
+summary_xy(LRM,decade,quarter,1,1,1,1,1,1,1,4)

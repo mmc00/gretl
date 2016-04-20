@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="RVNR" ID="1431796991" minver="1.8.4">
+<author email="guillermo.verduzco@alumnos.cide.edu">Guillermo Verduzco Bustos</author>
+<version>1.0.1</version>
+<date>2015-05-16</date>
+<description>Rank Von Neumann Ratio</description>
+<help>
+Rank Von Neumann Ratio
+
+Detecting the presence of autocorrelation in time series is essential for proper econometric analysis. The Rank Von Neumann Ratio (RVNR) is an alternative and very effective tool to test for autocorrelation in our data.
+
+The idea behind the RVNR is that, when a variable is not autocorrelated, it will not have a perfect sequence. Therefore, the RVNR computes ranks (1 for the size of the sample, T) of the series, assigning a Rank equal to 1 to the smallest value and equal to T to the biggest. RVNR then works with the vector: R={R(1); R(2);…;R(T)} where R(t) is the rank of the t observation in our data.
+
+The ratio is computed as follows: the numerator is the square of the sum that runs from 2 to T of R(t) minus R(t-1) times 12. The denominator is T*[(T^2)-1]. Thus, the RVNR is:
+
+[12*(numerator)^2]/T*[(T^2)-1]
+
+As for the null and alternative hypotheses, these are:
+H(0): rho equal to 0 (Data are not autocorrelated)
+H(1): rho distinct to  0 (Data are autocorrelated)
+
+1.- If RVNR ≤ Critical Value, then, we have evidence to reject the null, this is, the variable is autocorrelated.
+2.- If RVNR &gt; Critical Value, then, we fail to reject the null, this is, the variable is not autocorrelated.
+</help>
+<gretl-function name="RVNR" type="bundle">
+ <params count="2">
+  <param name="X" type="series">
+<description>Variable</description>
+  </param>
+  <param name="Level" type="scalar">
+<description>Significance level: 0.5, 1, 5 or 10 percent</description>
+  </param>
+ </params>
+<code>bundle R
+smpl X --no-missing
+genr T=$nobs
+if T&lt;6
+  funcerr &quot;Insufficient observations&quot;
+endif
+matrix Y=seq(1,T)'
+matrix P={const,const}
+P[,1]=Y
+P[,2]=X
+matrix Pnew=msortby(P,2)
+Pnew[,2]=Y
+matrix Pnew2=msortby(Pnew,1)
+matrix LC={1,0,0,0,0,0;2,0,0,0,0,0;3,0,0,0,0,0;4,0,0,0,0,0.6;5,0,0,0.4,0.7,0;6,0.29,0.46,0.63,0.8,0.97;7,0.50,0.54,0.64,0.86,1.11;8,0.55,0.62,0.76,0.93,1.14; 9,0.57, 0.67, 0.82, 0.98, 1.18; 10, 0.62, 0.72, 0.89, 1.04, 1.23;11, 0.67, 0.77, 0.93, 1.08, 1.26;12, 0.71, 0.81, 0.96, 1.11, 1.29;13, 0.74, 0.84, 1.00, 1.14, 1.32;14, 0.78, 0.87, 1.03, 1.17, 1.34;15, 0.81, 0.90, 1.05, 1.19, 1.36;16, 0.84, 0.93, 1.08, 1.21, 1.38;17, 0.87, 0.96, 1.10, 1.24, 1.40;18, 0.89, 0.98, 1.13, 1.26, 1.41;19, 0.92, 1.01, 1.15, 1.27, 1.43;20, 0.94, 1.03, 1.17, 1.29, 1.44;21, 0.96, 1.05, 1.18, 1.31, 1.45;22, 0.98, 1.07, 1.20, 1.32, 1.46;23, 1.00, 1.09, 1.22, 1.33, 1.48;24, 1.02, 1.10, 1.23, 1.35, 1.49;25, 1.04, 1.12, 1.25, 1.36, 1.50;26, 1.05, 1.13, 1.26, 1.37, 1.51;27, 1.07, 1.15, 1.27, 1.38, 1.51;28, 1.08, 1.16, 1.28, 1.39, 1.52;29, 1.10, 1.18, 1.30, 1.40, 1.53;30, 1.11, 1.19, 1.31, 1.41, 1.54;32, 1.13, 1.21, 1.33, 1.43, 1.55;33, 1.13, 1.21, 1.33, 1.43, 1.55;34, 1.16, 1.23, 1.35, 1.45, 1.57;35, 1.16, 1.23, 1.35, 1.45, 1.57;36, 1.18, 1.25, 1.36, 1.46, 1.58;37, 1.18, 1.25, 1.36, 1.46, 1.58;38, 1.20, 1.27, 1.38, 1.48, 1.59;39, 1.20, 1.27, 1.38, 1.48, 1.59;40, 1.22, 1.29, 1.39, 1.49, 1.60;41, 1.22, 1.29, 1.39, 1.49, 1.60;42, 1.24, 1.30, 1.41, 1.50, 1.61;43, 1.24, 1.30, 1.41, 1.50, 1.61;44, 1.25, 1.32, 1.42, 1.51, 1.62;45, 1.25, 1.32, 1.42, 1.51, 1.62;46, 1.27, 1.33, 1.43, 1.52, 1.63;47, 1.27, 1.33, 1.43, 1.52, 1.63;48, 1.28, 1.35, 1.45, 1.53, 1.63;49, 1.28, 1.35, 1.45, 1.53, 1.63;50, 1.29, 1.36, 1.46, 1.54, 1.64;51, 1.29, 1.36, 1.46, 1.54, 1.64;52, 1.29, 1.36, 1.46, 1.54, 1.64;53, 1.29, 1.36, 1.46, 1.54, 1.64;54, 1.29, 1.36, 1.46, 1.54, 1.64;55, 1.33, 1.39, 1.48, 1.56, 1.66;56, 1.33, 1.39, 1.48, 1.56, 1.66;57, 1.33, 1.39, 1.48, 1.56, 1.66;58, 1.33, 1.39, 1.48, 1.56, 1.66;59, 1.33, 1.39, 1.48, 1.56, 1.66;60, 1.35, 1.41, 1.50, 1.58, 1.67;61, 1.35, 1.41, 1.50, 1.58, 1.67;62, 1.35, 1.41, 1.50, 1.58, 1.67;63, 1.35, 1.41, 1.50, 1.58, 1.67;64, 1.35, 1.41, 1.50, 1.58, 1.67;65, 1.38, 1.43, 1.52, 1.60, 1.68;66, 1.38, 1.43, 1.52, 1.60, 1.68;67, 1.38, 1.43, 1.52, 1.60, 1.68;68, 1.38, 1.43, 1.52, 1.60, 1.68;69, 1.38, 1.43, 1.52, 1.60, 1.68;70, 1.40, 1.45, 1.54, 1.61, 1.70;71, 1.40, 1.45, 1.54, 1.61, 1.70;72, 1.40, 1.45, 1.54, 1.61, 1.70;73, 1.40, 1.45, 1.54, 1.61, 1.70;74, 1.40, 1.45, 1.54, 1.61, 1.70;75, 1.42, 1.47, 1.55, 1.62, 1.71;76, 1.42, 1.47, 1.55, 1.62, 1.71;77, 1.42, 1.47, 1.55, 1.62, 1.71;78, 1.42, 1.47, 1.55, 1.62, 1.71;79, 1.42, 1.47, 1.55, 1.62, 1.71;80, 1.44, 1.49, 1.57, 1.64, 1.71;81, 1.44, 1.49, 1.57, 1.64, 1.71;82, 1.44, 1.49, 1.57, 1.64, 1.71;83, 1.44, 1.49, 1.57, 1.64, 1.71;84, 1.44, 1.49, 1.57, 1.64, 1.71;85, 1.45, 1.50, 1.58, 1.65, 1.72;86, 1.45, 1.50, 1.58, 1.65, 1.72;87, 1.45, 1.50, 1.58, 1.65, 1.72;88, 1.45, 1.50, 1.58, 1.65, 1.72;89, 1.45, 1.50, 1.58, 1.65, 1.72;90, 1.47, 1.52, 1.59, 1.66, 1.73;91, 1.47, 1.52, 1.59, 1.66, 1.73;92, 1.47, 1.52, 1.59, 1.66, 1.73;93, 1.47, 1.52, 1.59, 1.66, 1.73;94, 1.47, 1.52, 1.59, 1.66, 1.73;95, 1.48, 1.53, 1.60, 1.66, 1.74;96, 1.48, 1.53, 1.60, 1.66, 1.74;97, 1.48, 1.53, 1.60, 1.66, 1.74;98, 1.48, 1.53, 1.60, 1.66, 1.74;99, 1.48, 1.53, 1.60, 1.66, 1.74;100, 1.49, 1.54, 1.61, 1.67, 1.74}
+R_T=Pnew2[,2]
+R_lag=mlag(R_T,1)
+matrix Res=(R_T-R_lag)
+matrix Numerator=Res.*Res
+Sum=sum(Numerator[,1])-Numerator[1,1]
+VonNeumann=(12*Sum)/(T*((T^2)-1))
+if Level=0.5
+  Critic=2
+endif
+if Level=1
+  Critic=3
+endif
+if Level=2.5
+  Critic=4
+endif
+if Level=5
+  Critic=45
+endif
+if Level=10
+  Critic=6
+endif
+if T&gt;=100
+  T2=99
+else
+  T2=T
+endif
+if VonNeumann&lt;LC[T2,Critic]
+  Data=&quot;THE VARIABLE IS AUTOCORRELATED&quot;
+else
+  Data=&quot;THE VARIABLE IS NOT AUTOCORRELATED&quot;
+endif
+printf &quot;The Von Neumann Ratio is %.3g\n&quot;, VonNeumann
+printf &quot;The Critical Value is %.3g\n&quot;, LC[T2,Critic]
+printf &quot;Test result: %.100s\n&quot;, Data
+R[&quot;The Von Neumann Ratio is&quot;] = VonNeumann
+R[&quot;The Critical Value is&quot;] = LC[T2,Critic]
+R[&quot;Test result:&quot;] = Data
+return R
+</code>
+</gretl-function>
+<sample-script>
+include RVNR.gfn
+open AWM.gdt
+# YER = real GDP
+bundle Test = RVNR(YER,1)
+print Test
+# &quot;1&quot; is the significance level. You can choose from 0.5, 1, 5 or 10 percent
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

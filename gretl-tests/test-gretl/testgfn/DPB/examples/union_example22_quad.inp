@@ -1,0 +1,95 @@
+set echo off
+set messages off
+
+include DPB.gfn
+
+open http://gretl.cvs.sourceforge.net/viewvc/gretl/gretl/share/data/misc/union_wooldridge.gdt
+
+list TIME = dummify(year)
+TIME -= Dyear_2
+list MARR = marr8*
+
+list X = const union_1 union80 married MARR TIME
+
+probit union  X --random-effects --quadpoints=12 -q
+
+
+m = nelem(MARR)
+k   = nelem(X)
+bw  = $coeff[1:k]
+s2a = exp($coeff[k+1])
+
+
+matrix h = quadtable(12, 1, 0, 1)
+matrix alphas = h[,1] .* sqrt(s2a)
+
+
+# --------Table II, p. 52------------------
+
+
+# p11_m = P(u87=1 | u86=1, married=1) 
+series ndx = bw[1] + bw[2] + bw[3]*union80 + bw[4] + lincomb(MARR,bw[5:m+4]) + bw[m+10]
+matrix ndX = ndx .+ alphas'
+series wp11_m = cnorm(ndX) * (h[,2])
+
+# p10_m = P(u87=1 | u86=0, married=1) 
+series ndx = bw[1]  + bw[3]*union80 + bw[4] + lincomb(MARR,bw[5:m+4]) + bw[m+10]
+matrix ndX = ndx .+ alphas'
+series wp10_m =  cnorm(ndX) * (h[,2])
+
+# p11 = P(u87=1 | u86=1, married=0) 
+series ndx = bw[1] + bw[2] + bw[3]*union80 + lincomb(MARR,bw[5:m+4]) + bw[m+10]
+matrix ndX = ndx .+ alphas'
+series wp11 = cnorm(ndX) * (h[,2])
+
+# p10 = P(u87=1 | u86=0, married=0) 
+series ndx = bw[1]  + bw[3]*union80 + lincomb(MARR,bw[5:m+4]) + bw[m+10]
+matrix ndX = ndx .+ alphas'
+series wp10 =  cnorm(ndX) * (h[,2])
+
+summary wp11_m wp10_m wp11 wp10 --simple
+
+
+#---- Heckman (1981b) ----------
+
+list X = const married MARR TIME
+list Z = const married 
+
+b = DPB_setup("DP",union,X,Z)
+DPB_setoption(&b, "nrep", 12)
+DPB_setoption(&b, "verbose", 0)
+DPB_estimate(&b)
+
+
+k = b.nk
+z = b.nz
+bz = b.coeff[k+2:k+z+1]
+bh = b.coeff[1:k+1]
+sig_a = b.coeff[k+z+3]
+s2a = sig_a^2
+theta = b.coeff[k+z+2]
+
+matrix alphas = h[,1] .* sqrt(s2a)
+
+
+# hp11_m = P(u87=1 | u86=1, married87=1)
+series ndx = bh[1] + bh[2] + bh[3] + lincomb(MARR, bh[4:m+3]) + bh[m+9] 
+matrix ndX = ndx .+ alphas'
+series hp11_m = cnorm(ndX) * (h[,2])
+
+# hp10_m = P(u87=1 | u86=0, married87=1)
+series ndx =  bh[2] + bh[3] + lincomb(MARR, bh[4:m+3]) + bh[m+9] 
+matrix ndX = ndx .+ alphas'
+series hp10_m = cnorm(ndX) * (h[,2])
+
+# hp11 = P(u87=1 | u86=1, married87=0)
+series ndx = bh[1] + bh[2] + lincomb(MARR, bh[4:m+3]) + bh[m+9] 
+matrix ndX = ndx .+ alphas'
+series hp11 = cnorm(ndX) * (h[,2])
+
+# hp10 = P(u87=1 | u86=0, married87=0)
+series ndx =  bh[2] + lincomb(MARR, bh[4:m+3]) + bh[m+9] 
+matrix ndX = ndx .+ alphas'
+series hp10 = cnorm(ndX) * (h[,2])
+
+summary hp11_m hp10_m hp11 hp10 --simple

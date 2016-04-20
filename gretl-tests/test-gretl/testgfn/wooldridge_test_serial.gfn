@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="wooldridge_test_serial" ID="1316895273" needs-panel-data="true" minver="1.8.4">
+<author>Giuseppe Vittucci</author>
+<version>1.0</version>
+<date>2011-09-24</date>
+<description>Wooldridge test for serial correlation of residuals in panel</description>
+<help>
+This package computes the Wooldridge test for serial correlation of residuals in panel.
+The null hypothesis is: no serial correlation.
+
+The function prints:
+- the results of the auxiliary regression for the model in first-differences;
+- the results of the regression of the estimated residuals in the previous regression against their lag;
+- the F-test (with the related p-value) for the null that the coefficient attached to the lagged residuals is equal to -0.5.
+The function returns the test statistic.
+
+The parameters of the function are:
+y	- series for the dependent variable
+X	- list of regressors 
+
+The test is discussed in: Wooldridge, J.M. 2002. Econometric Analysis of Cross Section and Panel Data. Cambridge, MA: MIT Press, pp.282-283.
+
+Please note that the degrees of freedom for the F-test in the corresponding function in Stata (xtserial, see Drukker, D.M. 2003. Testing for serial correlation in linear panel-data models, Stata Journal 3(2), 168-177) are lower and equal to the number of cross-sectional units minus one, for the command uses the option &quot;cluster&quot; in the regression.
+Please also note that the results obtained with the sample db provided with xtserial in Stata are different from the results obtained in gretl with the same db by using this function simply because the db has got the variable time with breaks. Ex.: year 75, 77, 80, 81...
+While Stata looks at the content of the variable and does not treat as successive two time periods when they are not contiguous years, gretl does not look at the value of the variable set for the time. Therefore the two programs return different series for teh first-differenced variables. 
+  
+For any suggestion, bug, etc. write to:
+giuseppe.vittucci@unimib.it
+</help>
+<gretl-function name="wooldridge_test_serial" type="scalar">
+ <params count="2">
+  <param name="y" type="series">
+<description>dependent variable</description>
+  </param>
+  <param name="X" type="list">
+<description>regressors</description>
+  </param>
+ </params>
+<code># Wooldridge test for autocorrelation in panel data
+# Wooldridge (2002) Econometric Analysis of Cross Section and Panel Data, pp.282-283;
+diff y X
+list dX = null
+loop foreach i X --quiet
+  list dX += d_$i
+endloop
+ols d_y dX --robust --quiet
+matrix coef_stde = $coeff ~ $stderr
+string parnames = varname(dX)
+printf &quot;\nFirst-Differenced equation (dependent d_y):\n&quot;
+modprint coef_stde parnames
+printf &quot;\nRegression of residuals of the FD equation on lagged residuals\n&quot;
+printf &quot;uhat = rho*uhat(-1) + e\n&quot;
+series u = $uhat
+ols u u(-1) --robust --quiet
+matrix coef_stde = $coeff ~ $stderr
+string parnames = &quot;uhat(-1)&quot;
+modprint coef_stde parnames
+printf &quot;\nWooldridge test for autocorrelation in panel data\nH0: no first-order autocorrelation (rho = -0.5)\n&quot;
+scalar m = ($coeff[1,1]+0.5)^2/$vcv[1,1]
+printf &quot;F(1,%g) = %g\n&quot;, $df, m
+scalar p = pvalue(F, 1, $df, m)
+printf &quot;Prob &gt; F = %g&quot;, p
+return m
+</code>
+</gretl-function>
+<sample-script>
+include wooldridge_test_serial.gfn
+open abdata.gdt
+list X = n k
+wooldridge_test_serial(ys,X)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

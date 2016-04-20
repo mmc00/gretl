@@ -1,0 +1,13 @@
+include ./VSG_test.gfn
+
+open chomage.gdt
+bundle TRIAL = VSG_test(y,10,2,1,0)
+#------------------------------------------------
+# "10" accounts for the omitted observations at 
+# the  beginning (at at the end of the sample); 
+# "2"  chooses the level of the test, 5% in this 
+#      case; 
+# "1"  indicates that you are looking for a break
+# "0"  indicates that you don't want to plot the
+#      variable
+print TRIAL

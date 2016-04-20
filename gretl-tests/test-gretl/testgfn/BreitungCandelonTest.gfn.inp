@@ -1,0 +1,10 @@
+include ./BreitungCandelonTest.gfn
+# test case:
+open denmark
+smpl 1975:1 1987:3
+list conditioning = IBO
+#list conditioning = null
+lagorder = 4
+points = 50
+siglevel = 0.05
+matrix BC1 = BreitungCandelonTest(LRM,LRY,conditioning,lagorder,points,siglevel)

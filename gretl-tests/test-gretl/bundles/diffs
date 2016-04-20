@@ -1,0 +1,15 @@
+=== /home/helio/test-gretl/bundles ===
+output/bundle-speed2.out vs newout/bundle-speed2.out:
+5,6c5,6
+< copy-in mode: 0.10607 secs
+< pointer mode: 0.000347329 secs
+---
+> copy-in mode: 0.141037 secs
+> pointer mode: 0.00029738 secs
+output/bundle-speed.out vs newout/bundle-speed.out:
+5,6c5,6
+< copy-in mode: 0.111303 secs
+< pointer mode: 0.000352812 secs
+---
+> copy-in mode: 0.139415 secs
+> pointer mode: 0.000296763 secs

@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="DHF_test" ID="1251790799" needs-qm-data="true" minver="2.1.10">
+<author email="marcin.blazejowski@wsb.torun.pl">Marcin Blazejowski (marcin.blazejowski@wsb.torun.pl)</author>
+<version>1.041</version>
+<date>2015-11-03</date>
+<description>Dickey-Hasza-Fuller Seasonal Unit Root Test</description>
+<tags>C22 C12</tags>
+<label>DHF seasonal unit root test</label>
+<menu-attachment>MAINWIN/Variable/URTests</menu-attachment>
+<help>
+This package implements the Dickey-Hasza-Fuller seasonal unit root test 
+in 3 variants:
+
+1. without constant
+2. with constant
+3. with seasonal dummies
+
+The null hypothesis for this test is that the series in question has a 
+unit root at the seasonal frequency. Rejecting the null means concluding
+that the series does not have a seasonal unit root, or in other words it
+is I(0) at the seasonal frequency.  
+
+The DHF_test function prints the DHF test statistic along with its critical value at a chosen significance level. It returns a scalar value: 1 if the null is rejected or 0 if the null is it not rejected.
+
+Data requirement: seasonal time-series with periodicity 2, 4 or 12.
+
+The parameters of DHF_test are as follows:
+
+x          - the series to be tested
+with_const - the test model includes a constant (default: Yes)
+seasonals  - the test model includes seasonal dummies (default: No)
+alpha      - significance level (default: 0.1; acceptable values are
+             0.01, 0.025, 0.05, 0.1, 0.5, 0.9, 0.95, 0.975, 0.99)
+print_res  - do we print summary? (default: Yes)
+           
+The procedure (including the internal tables of critical values) is based on D.A. Dickey, D.P. Hasza, W.A. Fuller, &quot;Testing for Unit Roots in Seasonal Time Series&quot;, Journal of the American Statistical Association, Vol. 79, No. 386 (June 1984), pp. 355-367.
+
+If you have any suggestions, you found a bug, etc, feel free to write:
+marcin.blazejowski@wsb.torun.pl
+</help>
+<gretl-function name="DHF_test" type="scalar">
+ <params count="5">
+  <param name="x" type="series">
+<description>Series to test</description>
+  </param>
+  <param name="with_const" type="bool" default="1">
+<description>Include constant?</description>
+  </param>
+  <param name="seasonals" type="bool" default="0">
+<description>Include seasonal dummies?</description>
+  </param>
+  <param name="alpha" type="scalar" min="0.01" max="0.99" default="0.1">
+<description>Significance level</description>
+  </param>
+  <param name="print_res" type="bool" default="1">
+<description>Print summary?</description>
+  </param>
+ </params>
+<code># This function realizes Dickey-Hasza-Fuller seasonal unit root test
+#
+# x          - series for which we test seasonal unit root
+# with_const - include a constant? (default: Yes)
+# seasonals  - include seasonal dummies? (default: No)
+# alpha      - significance level (default: 0.1)
+# print_res  - do we print summary? (default: Yes)
+#
+scalar DHF      # value of DHF statistic
+scalar DHF_crit # critical value in DHF test
+scalar reject   # do we reject H0 (1 means &quot;Reject&quot;, there is no seasonal unit root)
+# check frequency of the dataset
+if ($pd != 2 &amp;&amp; $pd != 4 &amp;&amp; $pd != 12)
+  funcerr &quot;Data frequency must be 2, 4 or 12&quot;
+endif
+# check the supplied alpha
+matrix alpha_vals = { 0.01, 0.025, 0.05, 0.1, 0.5, 0.9, 0.95, 0.975, 0.99 }'
+scalar nvals = rows(alpha_vals)
+critval_col = 0
+loop i=1..nvals --quiet
+  if alpha == alpha_vals[i]
+    critval_col = i
+    break
+  endif
+endloop
+if critval_col == 0
+  printf &quot;Supported alpha values:\n%6.3g\n&quot;, alpha_vals
+  funcerr &quot;Unsupported alpha value&quot;
+endif
+DHF = DHF_stat(&amp;x, with_const, seasonals)
+DHF_crit = DHF_critval($pd, $nobs, with_const, seasonals, critval_col)
+# note: this is a one-sided, left-tailed test
+reject = (DHF &lt; DHF_crit)
+if print_res == 0
+  return reject
+else
+  printf &quot;H0: series has a seasonal unit root\n&quot;
+  printf &quot;DHF statistics:\t\t%f\n&quot;, DHF
+  printf &quot;%g%% critical value:\t%f\n&quot;, 100 * alpha, DHF_crit
+  printf &quot;Decision: %s\n\n&quot;, reject? &quot;reject the null (H0)&quot; : &quot;no evidence against the null (H0)&quot;
+  return reject
+endif
+</code>
+</gretl-function>
+<gretl-function name="DHF_critval" type="scalar" private="1">
+ <params count="5">
+  <param name="m" type="scalar"/>
+  <param name="n" type="scalar"/>
+  <param name="with_const" type="bool" default="NA"/>
+  <param name="seasonals" type="bool" default="NA"/>
+  <param name="col" type="scalar"/>
+ </params>
+<code># This function returns the critical value of DHF test
+#
+# m           - data frequency (2, 4 or 12)
+# n           - number of observations in the sample
+# with_const  - including a constant? (0/1)
+# seasonals   - including seasonal dummies? (0/1)
+# col         - relevant column of critical values table (based on alpha)
+scalar row            # relevant row of the matrix with crit values
+scalar DHF_crit = NA  # returned critical value
+# determine the row number in the critical values matrix
+matrix rvals = {10, 15, 20, 50, 100, 200 }
+row = 7
+tmp = n / m
+loop i=1..6 --quiet
+  if tmp &lt;= rvals[1,i]
+    row = i
+    break
+  endif
+endloop
+# Adjust the row based on the data frequency, m
+if m == 4
+  row += 7
+elif m == 12
+  row += 14
+endif
+# Look up the relevant critical value
+if seasonals
+  matrix DS = { -4.46, -3.98, -3.60, -3.18, -1.92, -0.66, -0.29, 0.03, 0.42; -4.25, -3.84, -3.50, -3.13, -1.95, -0.73, -0.36, -0.04, 0.34; -4.15, -3.77, -3.45, -3.11, -1.96, -0.76, -0.40, -0.08, 0.29; -4.00, -3.66, -3.38, -3.07, -1.99, -0.81, -0.46, -0.15, 0.21; -3.95, -3.63, -3.36, -3.05, -1.99, -0.83, -0.48, -0.18, 0.18; -3.93, -3.62, -3.35, -3.05, -2.00, -0.83, -0.49, -0.19, 0.17; -3.90, -3.60, -3.34, -3.04, -2.00, -0.84, -0.50, -0.20, 0.15; -5.01, -4.57, -4.21, -3.83, -2.55, -1.30, -0.94, -0.61, -0.26; -4.85, -4.46, -4.14, -3.79, -2.58, -1.36, -1.01, -0.70, -0.35; -4.78, -4.41, -4.11, -3.78, -2.60, -1.40, -1.05, -0.74, -0.39; -4.67, -4.34, -4.06, -3.75, -2.63, -1.45, -1.11, -0.81, -0.46; -4.64, -4.32, -4.05, -3.74, -2.64, -1.47, -1.14, -0.84, -0.48; -4.62, -4.31, -4.04, -3.74, -2.65, -1.48, -1.15, -0.85, -0.49; -4.61, -4.30, -4.04, -3.73, -2.65, -1.49, -1.16, -0.86, -0.50; -6.63, -6.20, -5.86, -5.49, -4.21, -2.97, -2.62, -2.35, -1.95; -6.52, -6.15, -5.84, -5.49, -4.27, -3.06, -2.71, -2.39, -2.01; -6.47    , -6.13, -5.83, -5.49, -4.30, -3.10, -2.75, -2.43, -2.05; -6.39, -6.09, -5.82, -5.49, -4.34, -3.17, -2.83, -2.52, -2.18; -6.37, -6.07, -5.82, -5.49, -4.35, -3.19, -2.86, -2.56, -2.23; -6.36, -6.07, -5.82, -5.49, -4.36, -3.20, -2.87, -2.58, -2.26; -6.35, -6.06, -5.82, -5.49, -4.36, -3.22, -2.88, -2.60, -2.29 }
+  DHF_crit = DS[row, col]
+elif with_const
+  matrix DC = { -3.54, -3.08, -2.72, -2.32, -0.97, 0.49, 0.92, 1.31, 1.76; -3.44, -3.02, -2.69, -2.31, -1.01, 0.46, 0.88, 1.25, 1.68; -3.40, -3.00, -2.68, -2.31, -1.02, 0.44, 0.86, 1.22, 1.65; -3.31, -2.95, -2.65, -2.31, -1.05, 0.41, 0.83, 1.19, 1.61; -3.28, -2.93, -2.64, -2.31, -1.05, 0.40, 0.83, 1.19, 1.60; -3.27, -2.93, -2.64, -2.31, -1.06, 0.40, 0.82, 1.18, 1.59; -3.25, -2.92, -2.63, -2.31, -1.06, 0.40, 0.82, 1.18, 1.59; -3.14, -2.73, -2.38, -2.00, -0.60, 0.80, 1.19, 1.54, 1.94; -3.11, -2.71, -2.38, -2.00, -0.63, 0.76, 1.15, 1.49, 1.89; -3.09, -2.71, -2.38, -2.01, -0.64, 0.74, 1.13, 1.47, 1.87; -3.07, -2.70, -2.38, -2.02, -0.66, 0.72, 1.11, 1.46, 1.86; -3.06, -2.70, -2.38, -2.02, -0.67, 0.72, 1.11, 1.45, 1.85; -3.06, -2.70, -2.38, -2.02, -0.67, 0.72, 1.10, 1.45, 1.85; -3.05, -2.70, -2.38, -2.03, -0.67, 0.72, 1.10, 1.45, 1.85; -2.73, -2.33, -2.01, -1.65, -0.31, 1.02, 1.38, 1.71, 2.08; -2.73, -2.35, -2.02, -1.66, -0.33, 0.99, 1.35, 1.68, 2.06; -2.73, -2.36, -2.02, -1.66, -0.34, 0.98, 1.34, 1.67, 2.05;     -2.73, -2.37, -2.04, -1.66, -0.35, 0.97, 1.34, 1.66, 2.03; -2.73, -2.37, -2.05, -1.66, -0.35, 0.96, 1.33, 1.65, 2.02; -2.74, -2.37, -2.06, -1.66, -0.36, 0.96, 1.33, 1.65, 2.02; -2.74, -2.37, -2.06, -1.66, -0.36, 0.96, 1.33, 1.65, 2.01 }
+  DHF_crit = DC[row, col]
+else
+  matrix D = { -2.69, -2.27, -1.94, -1.57, -0.29, 1.07, 1.48, 1.85, 2.28; -2.64, -2.24, -1.93, -1.58, -0.31, 1.04, 1.43, 1.79, 2.21; -2.62, -2.23, -1.93, -1.58, -0.32, 1.03, 1.42, 1.76, 2.18; -2.58, -2.22, -1.92, -1.59, -0.34, 1.01, 1.39, 1.72, 2.12; -2.57, -2.22, -1.92, -1.59, -0.35, 1.00, 1.38, 1.71, 2.10; -2.56, -2.22, -1.92, -1.59, -0.35, 1.00, 1.38, 1.70, 2.09; -2.55, -2.22, -1.92, -1.60, -0.35, 0.99, 1.38, 1.69, 2.08; -2.58, -2.20, -1.87, -1.51, -0.20, 1.14, 1.53, 1.86, 2.23; -2.57, -2.20, -1.89, -1.52, -0.21, 1.10, 1.49, 1.82, 2.20; -2.56, -2.20, -1.89, -1.53, -0.22, 1.09, 1.47, 1.80, 2.18; -2.56, -2.20, -1.90, -1.53, -0.23, 1.07, 1.45, 1.78, 2.17; -2.56, -2.20, -1.90, -1.53, -0.24, 1.07, 1.44, 1.77, 2.16; -2.56, -2.20, -1.90, -1.53, -0.24, 1.07, 1.44, 1.77, 2.16; -2.56, -2.20, -1.90, -1.53, -0.24, 1.07, 1.44, 1.77, 2.16; -2.50, -2.08, -1.77, -1.39, -0.10, 1.20, 1.55, 1.87, 2.24; -2.49, -2.09, -1.77, -1.41, -0.12, 1.17, 1.53, 1.85, 2.22; -2.49, -2.10, -1.77, -1.42, -0.13, 1.16, 1.53, 1.85, 2.21; -    2.49, -2.10, -1.79, -1.43, -0.14, 1.15, 1.52, 1.84, 2.20; -2.49, -2.10, -1.79, -1.43, -0.14, 1.15, 1.52, 1.84, 2.20; -2.49, -2.10, -1.80, -1.43, -0.14, 1.15, 1.52, 1.84, 2.20; -2.49, -2.10, -1.80, -1.44, -0.14, 1.15, 1.52, 1.84, 2.20 }
+  DHF_crit = D[row, col]
+endif
+return DHF_crit
+</code>
+</gretl-function>
+<gretl-function name="DHF_stat" type="scalar" private="1">
+ <params count="3">
+  <param name="X" type="seriesref"/>
+  <param name="with_const" type="bool" default="NA"/>
+  <param name="seasonals" type="bool" default="NA"/>
+ </params>
+<code># This function computes the DHF statistic based on DHF regression
+#
+# *X         - pointer to series to be tested
+# with_const - include a constant in test regression? (0/1)
+# seasonals  - include seasonal dummies in test regression? (0/1)
+#
+series sd_X      # series of seasonal differencies of series X
+scalar k = $pd   # periodicity of given series
+scalar DHF       # value of DHF statistic
+# add the seasonal difference of X
+sd_X = sdiff(X)
+# &quot;Technical&quot; model from we retrieve lambda coefficients
+if seasonals
+  genr dummy
+  if k == 4
+    list seasonal = dq*
+  elif k == 12
+    list seasonal = dm*
+  else
+    list seasonal = dummy_*
+  endif
+  ols sd_X sd_X(-1 to -k) seasonal --quiet
+elif with_const
+  ols sd_X const sd_X(-1 to -k) --quiet
+else
+  ols sd_X sd_X(-1 to -k) --quiet
+endif
+if with_const &amp;&amp; !seasonals
+  lambda = $coeff[2:k+1]
+else
+  lambda = $coeff[1:k]
+endif
+# We have to find series V
+lags k ; X
+# form list of lags of X
+list TMP = X_*
+# Now check for any NAs embedded in the sample
+smpl X TMP --no-missing
+if ($pd != k)
+  # time-series structure gone: must be missing values
+  funcerr &quot;Missing values encountered&quot;
+endif
+matrix X_lag = { TMP }  # matrix of lagged series X
+matrix X_mat = X        # matrix (vector) of series X
+X_mat -= X_lag * lambda
+# series V &quot;cleaned&quot; by autoregressive model
+series V = NA
+s = $t1 # the start of the sample range
+r = rows(X_mat)
+loop for (i=1; i&lt;=r; i++) --quiet
+  V[s] = X_mat[i]
+  s++
+endloop
+# Main Dickey-Hasza-Fuller regression
+ols sd_X V(-k) sd_X(-1 to -k) --quiet
+DHF = $coeff[1]/$stderr[1]
+return DHF
+</code>
+</gretl-function>
+<sample-script>
+# Simple example
+open data9-7
+diff QNC
+
+# Variant 1:
+# We just want to find value of DHF statistics for series u 
+# and adequate critical value:
+
+# including seasonal dummies:
+DHF_test(d_QNC, 0, 1, 0.1, 1)
+
+# including constant, without seasonal dummies:
+DHF_test(d_QNC, 1, 0, 0.1, 1)
+
+# without constant and without seasonal dummies:
+DHF_test(d_QNC, 0, 0, 0.1, 1)
+
+# Variant 2:
+# We want to know if we should reject H0 (1) or not reject (0)
+# including seasonal dummies:
+printf &quot;Do we reject H0?\t%d\n&quot;, DHF_test(d_QNC,0,1,0.1,1)
+# we get 0: do not reject H0 - there is seasonal unit root
+
+# including constant, without seasonal dummies:
+printf &quot;Do we reject H0?\t%d\n&quot;, DHF_test(d_QNC,1,0,0.1,1)
+# we get 1: we reject H0 - there is not seasonal unit root
+
+# without constant and without seasonal dummies:
+printf &quot;Do we reject H0?\t%d\n&quot;, DHF_test(d_QNC,0,0,0.1,1)
+# we get 1: we reject H0 - there is not seasonal unit-root
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

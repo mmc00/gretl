@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="DP" ID="1437021646" needs-time-series-data="true" minver="1.8.4">
+<author email="urieleconometria@hotmail.com">Uriel Rodriguez Ramirez</author>
+<version>1.3</version>
+<date>2015-07-15</date>
+<description>double unit root</description>
+<help>
+--------------------------------------------------------------------------
+Dickey-Pantula test
+Uriel Rodríguez Ramirez, 
+Secretaria de Finanzas, Inversion y Administracion,
+urieleconometria@hotmail.com 
+--------------------------------------------------------------------------
+
+Although the stochastic behaviour of many economic time series has been reported in the literature to be well approximated by integrated processes of order one, denoted I(1), there are some series better described as I(2) processes. Considering the problem of testing for a double unit root, Dickey and Pantula (1987) and Pantula (1989) have suggested a popular sequential testing procedure in applied work which takes the largest number of unit roots under consideration as the first maintained hypothesis and then decreases the order of differencing each time the current null hypothesis is rejected.
+
+Inputs:
+1. Time Serie
+
+Output:
+1. Test Statistics
+2. P-Value
+
+Bibliography:
+*Dickey, D., Pantula, S., 1987. Determining the order of differencing in autoregressive processes. Journal of Business and Economic Statistics 15, 455–461.
+</help>
+<gretl-function name="DP" type="scalar">
+ <params count="1">
+  <param name="y" type="series"/>
+ </params>
+<code>y1=diff(diff(y))
+lags y
+z=y_1
+y2=diff(z)
+ols y1 y2
+p=(sum(y2*(y1)))/(sum((y2*y2)))
+u=$uhat
+T=$T
+sig=sum(u*u)/(T-1)
+vari=sig/(sum((y2*y2)))
+t=p/sqrt(vari)
+pv  = urcpval(t, T, 1, 1)
+printf &quot;==============================================================\n&quot;
+printf &quot;double unit root Test\n&quot;
+printf &quot;==============================================================\n&quot;
+printf &quot;Null Hypothesis: two unit roots, y~I(2)\n&quot;
+printf &quot;Test Statistic = %g\n&quot;,t
+printf &quot;p-value = %g\n&quot;,pv
+printf &quot;--------------------------------------------------------------\n\n&quot;
+return pv
+</code>
+</gretl-function>
+<sample-script>
+include DP.gfn
+open np.gdt
+series y=ngnp
+DP(y)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

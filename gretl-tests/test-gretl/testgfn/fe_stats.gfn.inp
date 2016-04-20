@@ -1,0 +1,6 @@
+include ./fe_stats.gfn
+open greene14_1.gdt
+logs C Q PF
+panel l_C 0 l_Q l_PF LF --fixed
+matrix A = fe_stats($ahat, $xlist, $vcv, $sigma)
+print A

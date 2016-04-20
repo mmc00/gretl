@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="levene" ID="1192460143" minver="1.8.4">
+<author>Marcos Larios Santa Rosa</author>
+<version>0.2</version>
+<date>2009-08-22</date>
+<description>Levene's Test for Equality of Variances</description>
+<gretl-function name="levene" type="scalar" private="0">
+<help>This function implements Levene's Test for equality of variance across groups. It can be used to detect problems of heteroskedasticity in a series, e.g., the residuals of a regression.
+
+The calculation is as shown by the National Institue of Standards and Technology's Engineering Statistics Handbook; for more information please visit: http://www.itl.nist.gov/div898/handbook/ .
+
+The y series is the variable you want to test for homogeneity. The x series gives the basis for dividing the y values into groups.  The third argument is an integer code for the variant of the test: 
+
+case 1: The mean is used as the measure of central tendency
+case 2: The median is used
+case 3: The &quot;10 percent trimmed mean&quot; is used, meaning the mean calculated from a sample restricted to the range from the 0.05 quantile to the 0.95 quantile
+
+If this argument is omitted, the median is used.
+
+The final argument gives the number of groups or bins to create.  If it is omitted or given as zero a group is created for each distinct value of x, otherwise the y values are grouped corresponding to nbins equally sized ranges for the x series.  Note that each group must contain at least two y values, and considerably more values per group are needed if the trimmed mean option is selected.
+
+For more information about this function or if you want to give me some advice or improvement, please do send me an e-mail to mlsr.ftp@gmail.com</help>
+ <params count="4">
+  <param name="y" type="series"/>
+  <param name="x" type="series"/>
+  <param name="code" type="int" min="1" max="3" default="2"/>
+  <param name="nbins" type="int" min="0" default="0"/>
+ </params>
+<code>if nbins = 0
+  matrix xval = values(x)
+  k = rows(xval)
+else
+  k = nbins
+endif
+if k &lt; 2
+  funcerr &quot;You need to set a minimum of 2 categories&quot;
+endif
+if nbins &gt; 0
+  x_min = min(x)
+  binsize = (max(x) - x_min) / k
+endif
+
+matrix Ni = zeros(k, 1)
+matrix Zbar = zeros(k, 1)
+scalar Den = 0
+matrix Zi
+N = $nobs
+
+loop i=1..k  --quiet
+  if nbins &gt; 0
+    hi = x_min + i*binsize
+    lo = hi - binsize
+    series cond = (i==1)? (x&lt;=hi &amp;&amp; x&gt;=lo) : (x&lt;=hi &amp;&amp; x&gt;lo)
+    smpl cond --restrict
+  else
+    smpl (x == xval[i]) --restrict
+  endif
+  n = $nobs
+  Ni[i] = n
+  if code == 1
+    cent_y = mean(y)
+  elif code == 2
+    cent_y = median(y)
+  else
+    cent_y = trimmed_mean(y, 10)
+  endif
+  Zi = abs(y - cent_y)
+  Zbar[i] = meanc(Zi)
+  loop j=1..n --quiet
+    Den += (Zi[j] - Zbar[i])^2
+  endloop
+  smpl --full
+endloop
+
+matrix W = Ni/N
+scalar Gmean = sumc(W .* Zbar)
+scalar Num = sumc(Ni .* (Zbar - Gmean).^2)
+
+dfn = k - 1
+dfd = N - k
+
+L = (dfd/dfn) * (Num / Den)
+
+cv95 = critical(F, dfn, dfd, 0.05)
+cv99 = critical(F, dfn, dfd, 0.01)
+
+pv = pvalue(F, dfn, dfd, L)
+
+if code == 1
+  cstr = &quot;Mean&quot;
+elif code == 2
+  cstr = &quot;Median&quot;
+else
+  cstr = &quot;10% trimmed mean&quot;
+endif
+
+printf &quot;\nLEVENE TEST FOR HOMOGENEITY OF VARIANCE\n&quot;
+printf &quot;NULL HYPOTHESIS: VARIANCES ARE EQUAL, S(1)=S(2)=...=S(k)\n\n&quot;
+printf &quot;TEST RESULTS using %s\n&quot;, cstr
+printf &quot;   Degrees of Freedom Numerator \t= %10.6f\n&quot;, dfn
+printf &quot;   Degrees of Freedom Denominator \t= %10.6f\n&quot;, dfd
+printf &quot;   Levene's F statistic \t\t=  %9.6f\n&quot;, L
+printf &quot;   Critical Value 95%% \t\t\t=  %9.6f\n&quot;, cv95
+printf &quot;   Critical Value 99%% \t\t\t=  %9.6f\n&quot;, cv99
+printf &quot;   P-Value \t\t\t\t= %10.6f\n&quot;, pv
+
+return pv
+</code>
+</gretl-function>
+<gretl-function name="trimmed_mean" type="scalar" private="1">
+ <params count="2">
+  <param name="y" type="series"/>
+  <param name="trimpc" type="scalar"/>
+ </params>
+<code># calculate trimmed mean
+scalar a = trimpc / 200.0
+scalar ymin = quantile(y, a)
+scalar ymax = quantile(y, 1-a)
+if (missing(ymin) || missing(ymax))
+  funcerr &quot;Couldn't find the requested quantile&quot;
+endif
+smpl (y&gt;=ymin &amp;&amp; y&lt;=ymax) --restrict
+return mean(y)
+</code>
+</gretl-function>
+<sample-script>
+include levene.gfn
+
+# use NIST data
+open gear.gdt
+
+# Is the y homogeneous in variance with respect to 
+# the level of x?
+levene(y, x)
+
+# Now try using the trimmed mean (giving 3 for the third
+# argument), and using 4 bins for x (4 in the final argument).
+levene(y, x, 3, 4)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

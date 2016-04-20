@@ -1,0 +1,5 @@
+include ./MCO_Ridge.gfn
+open australia.gdt
+matrix Y = PAU
+matrix C = {PUS, IUS, IAU}
+MCO_Ridge(Y,C , 0.3644, 3, 77)

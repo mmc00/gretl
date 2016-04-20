@@ -1,0 +1,100 @@
+include ./margeff_el.gfn
+## after ols
+nulldata 500
+
+
+# generate data
+series x1 = normal(1,1)
+series x2 = normal(1,1)
+series x3 = normal(1,1)
+series x4 = normal(1,1)
+series x5 = normal(1,1)
+
+series eps = normal(0,1)
+series y = x1+x2+x3+x4+x5+x1^2+x1*x2+x1*x3\
+  +x1*x4+x1*x5+x2^2+x2*x3+x2*x4+x2*x5+x3^2+x3*x4\
+  +x3*x5+x4^2+x4*x5+x5^2+eps
+
+# forming lists of independent variables
+list x = 0 x1 x2 x3 x4 x5
+list xbig = square(x-0,1)
+
+# regression with full set
+# of the second order terms
+ols y x xbig
+
+# making model formula
+fla = make_formula0 (varname($xlist))
+fla
+
+# elasticities
+b40 = elast(fla,"",meanc({x-0}),$coeff,$vcv,"",{0})
+print_elast (&b40)
+
+# b41 and b400 are obtained using numeric second derivatives
+# while b41 and b401 are based on fjack only
+# you can test the performance of
+# help fucnction computing second derivatives
+
+b41 = elast(fla,"@^1",meanc({x-0}),$coeff,$vcv,"",{0})
+print_elast (&b41)
+
+
+b400 = margeff(fla,"",meanc({x-0}),$coeff,$vcv,"",{0})
+print_margeff (&b400)
+
+b401 = margeff(fla,"@^1",meanc({x-0}),$coeff,$vcv,"",{0})
+print_margeff (&b401)
+
+# computing marginal effects with respect to
+# terms is very simple:
+fla402 = strsub(varname($xlist),","," ")
+b402 = margeff(fla402,"",meanc({$xlist-0}),$coeff,$vcv,"",{0})
+print_margeff (&b402)
+
+
+# You can use the following shortcut,
+# the names of variables in this case will be v1, v2, ...
+b403 = margeff("","",meanc({$xlist-0}),$coeff,$vcv,"",{0})
+print_margeff (&b403)
+
+b404 = elast("","",meanc({$xlist-0}),$coeff,$vcv,"",{0})
+print_elast (&b404)
+
+
+## after a glm (poisson)
+
+open greene22_2
+list X = 0 Z1 Z2 Z3
+
+poisson Y X
+list X0 = X - 0
+mmm = meanc({X0})
+
+bp21 = elast("0 Z1 Z2 Z3","exp(@)",mmm,$coeff,$vcv,"",{1})
+print_elast(&bp21)
+
+bp22 = margeff("0 Z1 Z2 Z3","exp(@)",mmm,$coeff,$vcv,"",{1})
+print_margeff(&bp22)
+
+eval predict_y("0 Z1 Z2 Z3","exp(@)",mmm,$coeff,$vcv,"")
+
+## after nls
+
+open greene11_3.gdt
+
+ols C 0 Y
+scalar a = $coeff(0)
+scalar b = $coeff(Y)
+scalar g = 1.0
+
+nls C = a + b * Y^g
+   params a b g
+end nls --vcv
+
+b11 = elast("a + b * Y^g","nls",{mean(Y)},$coeff,$vcv,"a b g",{0})
+b110 = margeff("a + b * Y^g","nls",{mean(Y)},$coeff,$vcv,"a b g",{0})
+print_elast (&b11)
+print_margeff (&b110)
+
+eval predict_y("a + b * Y^g","nls",{mean(Y)},$coeff,$vcv,"a b g")

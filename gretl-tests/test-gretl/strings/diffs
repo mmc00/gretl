@@ -1,0 +1,64 @@
+=== /home/helio/test-gretl/strings ===
+output/backtick.out vs newout/backtick.out:
+12c12
+< There are 58 files in this directory
+---
+> There are 56 files in this directory
+output/grabroots.out vs newout/grabroots.out:
+26,28c26,28
+<   phi_1         0.980634      0.340964    2.876    0.0040   ***
+<   phi_2        -0.0991775     0.253418   -0.3914   0.6955  
+<   theta_1      -0.537678      0.319358   -1.684    0.0923   *
+---
+>   phi_1         0.980635      0.340963    2.876    0.0040   ***
+>   phi_2        -0.0991779     0.253417   -0.3914   0.6955  
+>   theta_1      -0.537678      0.319357   -1.684    0.0923   *
+41c41
+<     Root  1           1.8599     0.0000     1.8599     0.0000
+---
+>     Root  1           1.8598     0.0000     1.8598     0.0000
+56c56
+<       1.8599       0.0000       1.8599       0.0000 
+---
+>       1.8598       0.0000       1.8598       0.0000 
+output/jsontest.out vs newout/jsontest.out:
+4,24d3
+<  /home/cottrell/stats/test-gretl/strings/jsontest.inp
+< {"STR": "42", "ARR": [ 11, 22 ] , "DARR": [["foo", 111], ["bar", 222]] }
+< $.STR:
+< '42'
+< 
+< $.ARR[0]:
+< '11'
+< 
+< $.ARR:
+< '11
+< 22
+< '
+< 
+< $.DARR[0][1]:
+< '111'
+< 
+< $.DARR[0]:
+< 'foo
+< 111
+< '
+< 
+output/readfile2.out vs newout/readfile2.out:
+13,15c13,15
+< AR	Nonseasonal	01	+0.115456473640303E+01	+0.000000000000000E+00	+0.115456473640303E+01	+0.000000000000000E+00
+< AR	Nonseasonal	02	+0.873310389952882E+01	+0.000000000000000E+00	+0.873310389952882E+01	+0.000000000000000E+00
+< MA	Nonseasonal	01	+0.185985077050044E+01	+0.000000000000000E+00	+0.185985077050044E+01	+0.000000000000000E+00
+---
+> AR	Nonseasonal	01	+0.115456453133609E+01	+0.000000000000000E+00	+0.115456453133609E+01	+0.000000000000000E+00
+> AR	Nonseasonal	02	+0.873306599232928E+01	+0.000000000000000E+00	+0.873306599232928E+01	+0.000000000000000E+00
+> MA	Nonseasonal	01	+0.185984847001011E+01	+0.000000000000000E+00	+0.185984847001011E+01	+0.000000000000000E+00
+output/strings.out vs newout/strings.out:
+21c21
+< back in main, blot = en_US.UTF-8
+---
+> back in main, blot = C
+33c33
+< cottrell
+---
+> 

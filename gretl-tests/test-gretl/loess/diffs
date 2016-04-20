@@ -1,0 +1,18 @@
+=== /home/helio/test-gretl/loess ===
+output/bwght.out vs newout/bwght.out:
+6,18c6
+< 
+< Read datafile /opt/esl/share/gretl/data/wooldridge/bwght.gdt
+< periodicity: 1, maxobs: 1388
+< observations range: 1 to 1388
+< 
+< Listing 13 variables:
+<   0) const       1) bwght       2) cigtax      3) cigprice    4) faminc    
+<   5) fatheduc    6) motheduc    7) parity      8) male        9) white     
+<  10) cigs       11) bwghtlbs   12) packs     
+< 
+< ? series yh = loess(bwght, cigs, 1, 0.10)
+< Generated series yh (ID 13)
+< Done
+---
+> bwght.gdt: No such file or directory

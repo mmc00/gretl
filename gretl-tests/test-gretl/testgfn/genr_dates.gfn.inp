@@ -1,0 +1,19 @@
+include ./genr_dates.gfn
+
+# The following gretl data can demonstrate the use of this package.
+#open djclose			# daily data
+open australia	  # quarterly data
+#open arma				# monthly data
+#open http://www.it.cycu.edu.tw/yaya20/files/2013/06/2005-CARR.gdt	# weekly data
+
+# Default date format 'yyyy-mm-dd'
+# Conversion of obslabel() will be automatically handled without any parameters for most of time sereies frequencies .
+
+list mylist = genr_dates()
+
+# if the date format is 'yyyy/mm/dd'and for user_defined variable names.
+
+/*
+nFormat = 2
+list mylist = genr_dates(nFormat, 1, 1, 1, 1, 1, "year", "quarter", "month", "day", "weekday")
+*/

@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="summary_ts" ID="1269361868" needs-time-series-data="true" minver="1.8.4">
+<author>yinung Yang</author>
+<version>1.2</version>
+<date>2010-03-24</date>
+<description>Summary statistics for (financial) time series</description>
+<help>
+This function is to provide summary statistics for (financial) times series.
+The statisitcs reported are mean, sd, skewness, kurtosis, 3 Q-stat with user-specified lags, 3 Q2-stat with user-specified lags, and JB normality test.
+
+# ==== release notes ===================================================
+# 2010.3.24: ver. 1.1
+#     Add parameters for user-defined width and decimal of figures.
+#     Correct formula for the sample SK and KT.
+# 2010.3.24: ver. 1.0
+# =======================================================================
+
+This function package in general works in gretl 1.8.4 and higher. But it works best in gretl 1.8.6 and higher.
+</help>
+<gretl-function name="summary_ts" type="void">
+ <params count="6">
+  <param name="X" type="list"/>
+  <param name="q" type="int" min="1" max="200" default="1">
+<description>Q 檢定階次: Q() lag=</description>
+  </param>
+  <param name="q2" type="int" min="1" max="200" default="5">
+<description>Q 檢定階次: Q() lag=</description>
+  </param>
+  <param name="q3" type="int" min="1" max="200" default="10">
+<description>Q 檢定階次: Q() lag=</description>
+  </param>
+  <param name="width" type="int" min="6" max="20" default="14">
+<description>數字長度 width of numbers</description>
+  </param>
+  <param name="dec" type="int" min="0" max="10" default="4">
+<description>小數點位數 decimal</description>
+  </param>
+ </params>
+<code>#==================================================================================
+#   summary statistics package for (financial) time series for gretl by Yi-Nung Yang
+#           ver. 1.1
+#   Chung Yuan Christian University, Taiwan
+#   http://yaya.it.cycu.edu.tw/gretl
+#==================================================================================
+/*
+q=1
+q2=5
+q3=10
+*/
+sq=q
+sq2=q2
+sq3=q3
+#width =12
+#dec=2
+set messages off
+set echo off
+printf &quot;=================================================================================\n&quot;
+printf &quot;Summary Statistics for Time Series Analysis by Yi-Nung Yang\n&quot;
+set messages on
+smpl
+set messages off
+printf &quot;=================================================================================\n&quot;
+loop w=width..width --quiet   # this is for the width of numbers
+  printf &quot;%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    printf &quot;%$ws&quot;, &quot;$i&quot;
+  endloop
+  printf &quot;\n&quot;
+  printf &quot;%8s&quot;, &quot;mean&quot;
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, mean(X.$i)
+  endloop
+  printf &quot;\n%8s&quot;,&quot;SD&quot;
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, sd(X.$i)
+  endloop
+  printf &quot;\n%8s&quot;,&quot;SK&quot;
+  loop foreach i X --quiet
+    N=nobs(X.$i)
+    scalar SK=(1/N)*sum(((X.$i)-mean((X.$i)))^3/(sd((X.$i))*((N-1)/N)^0.5)^3)
+    printf &quot;%$w.*f&quot;,dec, SK
+  endloop
+  printf &quot;\n%8s&quot;,&quot;KT&quot;
+  loop foreach i X --quiet
+    scalar KT=(1/nobs((X.$i)))*sum(((X.$i)-mean((X.$i)))^4/(sd((X.$i))*((N-1)/N)^0.5)^4)
+    printf &quot;%$w.*f&quot;,dec, KT
+  endloop
+  # -------- 3 Ljung-Box Q-------------------------------
+  #Ljung-box Q(1)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q&quot;,q
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i,q)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,q,ljungbox(X.$i,q))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(2)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q&quot;,q2
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i,q2)
+  endloop
+  #Ljung-box p-value2
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,q2,ljungbox(X.$i,q2))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(3)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q&quot;,q3
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i,q3)
+  endloop
+  #Ljung-box p-value3
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,q3,ljungbox(X.$i,q3))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  # =============== 3 Ljung-Box Q2 ==========================
+  /*
+  #Ljung-box Q(1)
+  # q=1
+  printf &quot;\n%s(%d)\t&quot;,&quot;Q2&quot;,sq
+  loop foreach i X --quiet
+    printf &quot;%.6f\t&quot;, ljungbox(X.$i^2,sq)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%s\t&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    printf &quot;[%.4f]\t&quot;, pvalue(X,sq,ljungbox(X.$i^2,sq))
+  endloop
+  */
+  # -------- 3 Ljung-Box Q2-------------------------------
+  #Ljung-box Q(1)
+  # q=1
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q2&quot;,sq
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i^2,sq)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,sq,ljungbox(X.$i^2,sq))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(2)
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q2&quot;,sq2
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i^2,sq2)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,sq2,ljungbox(X.$i^2,sq2))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #Ljung-box Q(3)
+  sprintf sTmp &quot;%s(%d)&quot;,&quot;Q2&quot;,sq3
+  printf &quot;\n%8s&quot;,sTmp
+  loop foreach i X --quiet
+    printf &quot;%$w.*f&quot;,dec, ljungbox(X.$i^2,sq3)
+  endloop
+  #Ljung-box p-value1
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, pvalue(X,sq3,ljungbox(X.$i^2,sq3))
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  #JB normality test
+  printf &quot;\n%8s&quot;,&quot;JB &quot;
+  loop foreach i X --quiet
+    normtest X.$i --jbera --quiet
+    printf &quot;%$w.*f&quot;,dec, $test
+  endloop
+  #JB p-value
+  printf &quot;\n%8s&quot;,&quot; &quot;
+  loop foreach i X --quiet
+    normtest X.$i --jbera --quiet
+    sprintf sTmp &quot;[%.3f]&quot;, $pvalue
+    printf &quot;%$ws&quot;,sTmp
+  endloop
+  printf &quot;\n\n&quot;
+  printf &quot;*SD, SK, KT, and JB denote standard deviation, sknewness, kurtosis, and Jarque-Bera statistic, respectively.\n&quot;
+  printf &quot; Figures in [] are corresponding p-values\n&quot;
+  printf &quot;*SD 是標準差, SK 是偏態係數, KT 是峰態係數, 小括號中的數字是標準差, 中括號中的數字是 p值\n&quot;
+endloop
+</code>
+</gretl-function>
+<sample-script>
+include summary_ts.gfn
+open djclose
+series r=100*ldiff(djclose)
+ols r const r(-1) r(-2) r(-3)
+series u1=$uhat
+ols r const r(-2)
+series u2=$uhat
+garch 1 1; r const r(-1) r(-2) r(-4) --stdresid
+series stz_u1=$uhat
+list xlist = r u1 u2 stz_u1
+summary_ts(xlist,1,5,20)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

@@ -1,0 +1,33 @@
+set echo off
+set messages off
+
+include DPB.gfn
+
+
+
+#---------------- QE MODEL: BARTOLUCCI and NIGRO (2010) ------------
+
+open QE_artdata.gdtb 
+
+
+list X = x1 x2 x3
+
+bundle mod
+mod = DPB_setup("QE",y,X)
+err = DPB_setoption(&mod, "vcv", 2)
+
+DPB_estimate(&mod)
+DPB_printout(&mod)
+
+
+genr time 
+list TIME = dummify(time)
+TIME -= Dtime_2 Dtime_6
+X += TIME
+
+mod = DPB_setup("QE",y,X)
+err = DPB_setoption(&mod, "vcv", 2)
+
+DPB_estimate(&mod)
+DPB_printout(&mod)
+

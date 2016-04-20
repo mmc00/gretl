@@ -1,0 +1,1097 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="BMA" ID="1329840465" minver="2.1.10" lives-in-subdir="true">
+<author email="marcin.blazejowski@wsb.torun.pl">Marcin Błażejowski, Jacek Kwiatkowski</author>
+<version>1.24</version>
+<date>2015-10-29</date>
+<description>Bayesian Model Averaging for the linear regression models with jointness measures</description>
+<tags>C11 C21</tags>
+<label>Bayesian Model Averaging</label>
+<menu-attachment>MAINWIN/Model/LinearModels</menu-attachment>
+<help>
+pdfdoc:BMA.pdf
+</help>
+<data-files count="1">
+BMA.pdf </data-files>
+<gretl-function name="BMA_main" type="matrix">
+ <params count="11">
+  <param name="big_list" type="list">
+<description>List of all variables for BMA (Y must be the first one)</description>
+  </param>
+  <param name="acc_type" type="int" min="1" max="2" default="1">
+<description>Model prior</description>
+<labels count="2">
+"Binomial" "Binomial-Beta" </labels>
+  </param>
+  <param name="av_model_size" type="scalar" min="0" default="1">
+<description>Prior average model size</description>
+  </param>
+  <param name="alpha" type="scalar" min="0" max="1" default="0.6">
+<description>Significance level for the initial model</description>
+  </param>
+  <param name="l_rank" type="int" min="2" default="4">
+<description>Number of the top ranked models</description>
+  </param>
+  <param name="g_type" type="int" min="1" max="5" default="1">
+<description>g-prior type</description>
+<labels count="5">
+"Benchmark prior" "Unit Information Prior (g-UIP)" "Risk Inflation Criterion (g-RIC)" "Hannan and Quinn HQC" "Root of g-UIP" </labels>
+  </param>
+  <param name="do_joint" type="int" min="0" max="2" default="0">
+<description>Jointness analysis</description>
+<labels count="3">
+"None" "Ley-Steel Measure" "Doppelhofer-Weeks Measure" </labels>
+  </param>
+  <param name="h_predict" type="int" min="0">
+<description>Number of out-of-sample forecasts</description>
+  </param>
+  <param name="Nrep" type="int" default="1e+06">
+<description>Total number of replications</description>
+  </param>
+  <param name="burn" type="int" min="0" max="99" default="10">
+<description>Percentage of burn-in draws</description>
+  </param>
+  <param name="verbosity" type="int" min="1" max="2" default="1">
+<description>Verbosity</description>
+  </param>
+ </params>
+<code>##################
+# Part 1: Setting up the MC3 sampling algorithm options
+err = BMA_parse(big_list, nelem(big_list)-1, &amp;av_model_size, &amp;l_rank)
+if (strlen(err) != 0)
+  funcerr &quot;@err !!!&quot;
+else
+  # Local variables
+  scalar k = nelem(big_list) - 1 # total number of indenpendent variables
+  scalar Nburn = round(burn/100*Nrep) # number of burn-in draws
+  scalar progress = floor(Nrep/10) # progress of MCMC
+  scalar percentage = progress # percentage of progress of MCMC
+  matrix var_numbers = big_list # vector containing numbers of all variables (including Y) in (dataset not in procedure)
+  matrix var_numbers2 = transp(msortby(transp(var_numbers[2:k+1] | seq(2,k+1)), 1)) # vector containing the dataset numbers of all variables and their order in the 'big_list'
+  matrix big_mat = { big_list } # matrix of all variables (including Y)
+  matrix big_mat_dem = cdemean(big_mat)	# matrix of all demeaned variables (including Y)
+  # Part 2: Setting up the MC3 sampling algorithm options
+  # In case of &quot;out-of-sample&quot; prediction
+  if (h_predict &gt; 0)
+    scalar last_obs = $nobs-h_predict # number of &quot;out-of-sample&quot; forecasts
+    matrix big_mat_predict = big_mat[last_obs+1:$nobs,]	# &quot;out-of-sample&quot; matrix of all variables (including Y)
+    matrix big_mat_dem_predict = big_mat_dem[last_obs+1:$nobs,]	# &quot;out-of-sample&quot; matrix of all demeaned variables (including Y)
+    matrix Y_mat_predict = big_mat_predict[,1] # &quot;out-of-sample&quot; matrix of the dependent variable
+    matrix X_old_predict = {} # &quot;out-of-sample&quot; the X matrix for the previous (old) model (demeaned)
+    matrix Yhat = zeros(h_predict,1) # vector of Y predictions in current draw
+    matrix precision = zeros(h_predict,1) # prediction precision
+    matrix Yhat_avg = zeros(h_predict,1) # vector of Y predictions - average
+    matrix Yhat_var_avg = zeros(h_predict,1) # predicion variance
+    scalar dj = 0 # scalar needed for prediction precision computation
+    scalar dj_old = 0 # scalar needed for prediction precision computation
+    string predict_obs_names = &quot;&quot; # obs labels for forecasts
+    loop for i=(last_obs + 1)..$nobs --quiet
+      predict_obs_names += strsub(obslabel(i), &quot; &quot;, &quot;&quot;) ~ &quot; &quot;
+    endloop
+    smpl 1 last_obs # setting sample
+    matrix big_mat = big_mat[1:last_obs,]
+    matrix big_mat_dem = big_mat_dem[1:last_obs,]
+  else
+    matrix big_mat_dem_predict = {}
+    matrix Yhat_avg = {}
+    matrix Yhat_var_avg = {}
+    matrix Y_mat_predict = {}
+    string predict_obs_names = &quot;&quot;
+  endif
+  matrix ZtZinv = {} # inverse of Z'Z (X's without constant term)
+  matrix ZtZinv_old = {} # old inverse of Z'Z (X's without constant term)
+  matrix X_new_predict = {} # &quot;out-of-sample&quot; the X matrix for the current (new) model (demeaned)
+  series Y = big_mat[,1] # series of the dependent variable
+  matrix Y_mat = big_mat[,1] # matrix of the dependent variable
+  matrix Ones = ones($nobs,1) # column (N x 1) vector containing ones (for constant term)
+  scalar k_new = 0 # number of variables in the current (new) model
+  scalar k_old = 0 # number of variables in the previous (old) model
+  scalar y_dem_sq = big_mat_dem[,1]'big_mat_dem[,1] # sum of squares of the demeaned Y
+  scalar y_mean = meanc(Y_mat) # mean of the Y
+  scalar lprob_old = 0 # scalar with natural logarithm of marginal density of the old model
+  scalar lprob_new = 0 # scalar with natural logarithm of marginal density of the new model
+  scalar mod_size = 0 # size of models in MCMC (sum)
+  scalar yMy = 0 # scalar for P_y computation
+  matrix scaling_f = zeros(7,1) # vector containing the scaling factors
+  matrix mod_struct = zeros(1,k) # 0-1 vector containing the structure of the current model
+  matrix mod_rank = -1 * ones(l_rank,k) # 0-1 matrix containing structure of models in ranking
+  matrix mod_rank_prob = zeros(l_rank,1) # probability of the models in ranking (analytical)
+  matrix mod_nume_prob = zeros(l_rank,1) # probability of the models in ranking (numerical)
+  matrix var_prob = zeros(1,k) # vector containing PIPs
+  matrix X_new_num = {} # vector containing numbers of variables in the new model
+  matrix X_old_num = {} # vector containing numbers of variables in the old model
+  matrix X_new = {} # the X matrix for the current (new) model (demeaned)
+  list X_old_l = big_list - var_numbers[1] # list of variables in the old model (trick for getting proper all_names_sp)
+  list X_new_l = {} # list of variables in the new model
+  list start_model = {} # list of variables in the starting model
+  string all_names_sp = strsub(varname(X_old_l), &quot;,&quot;, &quot; &quot;) # string with names of all indenpendent variables
+  if (do_joint != 0)
+    matrix jointness_m = zeros(k,k) # square matrix containing counts of coexistence (jointness) of every pair of indenpendent variables
+  else
+    matrix jointness_m = {}
+  endif
+  if (acc_type == 1) # options for the prior
+    scalar a = ln(av_model_size/k)
+    scalar b = ln(1 - av_model_size/k)
+    scalar c = 0
+  else
+    scalar a = 1
+    scalar b = (k - av_model_size)/av_model_size
+    scalar c = lngamma(a + b) - lngamma(a) - lngamma(b)
+  endif
+  matrix bhat = {} # column vector containing the estimated coefficients for the current model
+  matrix bvar = {} # column vector containing the variances of the coefficients for the current model
+  matrix XtY = {} # X'Y (part of OLS)
+  matrix XtXinv = {} # inverse of X'X (part of OLS)
+  matrix bhat_avg = zeros(1,k) # column vector containing average values of coefficients (over MCMC)
+  matrix bvar_avg = zeros(1,k) # column vector containing average values of variances of the coefficients (over MCMC)
+  if (verbosity == 1)
+    set warnings off
+  endif
+  ##################
+  # Setting scaling factors: g0, g1, g2, .5*log(g1), .5*(n-1), Y'Y
+  BMA_scaling_factors(&amp;scaling_f, &amp;k, &amp;y_dem_sq, g_type, &amp;Y_mat)
+  # Part 2: Starting model
+  # We estimate starting model and construct starting mod_rank_struc and mod_rank
+  X_old_l = BMA_initial_model(&amp;Y, X_old_l, &amp;alpha, &amp;k_new, transp(var_numbers2))
+  start_model = X_old_l
+  BMA_new_X_matrix(&amp;big_mat_dem, &amp;Ones, &amp;k, &amp;X_new_num, &amp;X_new, X_old_l, &amp;k_new, &amp;var_numbers2, &amp;big_mat_dem_predict, &amp;X_new_predict, &amp;h_predict)
+  BMA_matrix_precompute(&amp;Y_mat, &amp;X_new, &amp;k_new, &amp;Ones, &amp;scaling_f, &amp;XtY, &amp;XtXinv, &amp;yMy, &amp;ZtZinv, h_predict)
+  lprob_old = scaling_f[5]*(k_new + 1) - scaling_f[6]*log(scaling_f[3]*yMy + scaling_f[4])
+  dj = BMA_ols(&amp;scaling_f, &amp;XtY, &amp;XtXinv, &amp;yMy, &amp;bhat, &amp;bvar)
+  mod_struct = BMA_model_structure(&amp;X_new_num, &amp;k, &amp;mod_rank, &amp;l_rank, 1)
+  X_new_l = X_old_l
+  lprob_new = lprob_old
+  ##################
+  # Part 3: Markov Chain Monte Carlo
+  set stopwatch
+  printf &quot;\nOverall progress: &quot;
+  loop for rep=1..Nrep --quiet
+    # Now we draw number of the new candidate
+    potential_var = randint(0,k)
+    # Saving data for the old model
+    X_old_num = X_new_num
+    k_old = nelem(X_old_l)
+    if (h_predict &gt; 0)
+      X_old_predict = X_new_predict
+      ZtZinv_old = ZtZinv
+      dj_old = dj
+    endif
+    # Now we modify the list of variables (remove an existing variable or add a new variable)
+    if (potential_var &gt; 0)
+      if (mod_struct[potential_var] == 1)
+        X_new_l = X_old_l - var_numbers[potential_var+1]
+      else
+        X_new_l = X_old_l var_numbers[potential_var+1]
+      endif
+      # We create the new matrix of indenpendent variables and run some precomputes based on it
+      k_new = nelem(X_new_l)
+      BMA_new_X_matrix(&amp;big_mat_dem, &amp;Ones, &amp;k, &amp;X_new_num, &amp;X_new, X_new_l, &amp;k_new, &amp;var_numbers2, &amp;big_mat_dem_predict, &amp;X_new_predict, &amp;h_predict)
+      BMA_matrix_precompute(&amp;Y_mat, &amp;X_new, &amp;k_new, &amp;Ones, &amp;scaling_f, &amp;XtY, &amp;XtXinv, &amp;yMy, &amp;ZtZinv, h_predict)
+      lprob_new = scaling_f[5]*(k_new + 1) - scaling_f[6]*log(scaling_f[3]*yMy + scaling_f[4])
+      # Now we decide if to accept the new model
+      if (log(randgen1(u,0,1)) &lt; BMA_accept_prob(acc_type, &amp;lprob_new, &amp;lprob_old, &amp;k_new, &amp;k_old, &amp;k, &amp;a, &amp;b, &amp;c))
+        X_old_l = X_new_l
+        lprob_old = lprob_new
+        mod_struct = BMA_model_structure(&amp;X_new_num, &amp;k, null, null, 0)
+        dj = BMA_ols(&amp;scaling_f, &amp;XtY, &amp;XtXinv, &amp;yMy, &amp;bhat, &amp;bvar)
+      else
+        X_new_num = X_old_num
+        k_new = k_old
+        if (h_predict &gt; 0)
+          X_new_predict = X_old_predict
+          ZtZinv = ZtZinv_old
+          dj = dj_old
+        endif
+      endif
+    endif
+    # Essentials of MCMC (after burn-in iterations): building of rankings, averaging the results and jointness stuff
+    # Now we construct rankings
+    if ($rep &gt; Nburn)
+      BMA_build_rank(&amp;mod_rank, &amp;mod_rank_prob, &amp;mod_nume_prob, &amp;mod_struct, &amp;l_rank, &amp;lprob_old)
+      # Now we compute average model size, PIPs and average values of all coefficients and variances
+      mod_size += k_new
+      var_prob += mod_struct
+      loop for i=1..k_new --quiet
+        bhat_avg[X_new_num[i] - 1] += bhat[i+1]
+        bvar_avg[X_new_num[i] - 1] += (bvar[i+1] + bhat[i+1]^2)
+      endloop
+      # Out-of-sample forecasts
+      if (h_predict &gt; 0 &amp;&amp; k_new &gt; 0)
+        # Mean
+        Yhat = X_new_predict * bhat[2:k_new+1] + y_mean
+        Yhat_avg += Yhat
+        # Variance
+        precision = (($nobs - 1) / dj) * ((1 + 1/$nobs + scaling_f[3] * diag(X_new_predict * ZtZinv * X_new_predict')) .^ -1)
+        Yhat_var_avg += (($nobs - 1) / (precision * ($nobs - 3)) + Yhat .^ 2)
+      endif
+      # Jointness analysis
+      if (do_joint != 0)
+        BMA_jointness_matrix(&amp;mod_struct, &amp;k, &amp;jointness_m)
+      endif
+    endif
+    if (rep == percentage)
+      printf &quot;%d%s..&quot;, floor(100 * rep/Nrep), &quot;%&quot;
+      percentage += progress
+    endif
+    flush
+  endloop
+  # Part 4: Results printing
+  Post_Results = BMA_print_results(all_names_sp, &amp;Y_mat, &amp;big_mat_dem, &amp;Ones, &amp;scaling_f, &amp;var_numbers, &amp;mod_rank, &amp;k, &amp;l_rank, acc_type, &amp;av_model_size, g_type, &amp;alpha, &amp;mod_rank_prob, &amp;mod_nume_prob, start_model, &amp;mod_size, &amp;Nrep, &amp;Nburn, &amp;var_prob, &amp;bhat_avg, &amp;bvar_avg, &amp;jointness_m, do_joint, &amp;h_predict, &amp;Yhat_avg, &amp;Yhat_var_avg, &amp;Y_mat_predict, predict_obs_names, &amp;verbosity)
+  return Post_Results
+endif
+set warnings on
+</code>
+</gretl-function>
+<gretl-function name="BMA_parse" type="string" private="1">
+ <params count="4">
+  <param name="big_list" type="list"/>
+  <param name="k" type="scalar" const="true"/>
+  <param name="av_model_size" type="scalarref" const="true"/>
+  <param name="l_rank" type="scalarref" const="true"/>
+ </params>
+<code># Function parses given list of variables end checks several conditions
+#
+# big_list		-	list of given variables (all)
+# k				-	the scalar with number of indenpendent variables
+# *av_model_size	-	pointer to the scalar with prior average model size
+# *l_rank			-	pointer to the scalar with number of models in ranking
+#
+#	Returns	-	string err holding the first error found in given dataset
+# Starting value
+string err = &quot;&quot;
+# We check if the given does not include the const
+list tmp = const
+list tmp = big_list &amp;&amp; tmp
+if (tmp != null)
+  err = &quot;Const cannot be within the variables list&quot;
+  return err
+endif
+# We check if given variables are not co-linear
+ols big_list const --quiet
+if ($ncoeff &lt; k + 1)
+  ols big_list const
+  err = &quot;Variables are colinear&quot;
+  return err
+endif
+# We check if average model size is within 0 and K
+if ((av_model_size &lt;= 0) || (av_model_size &gt;= k))
+  err = &quot;Average model size should be greater then 0 and lower than K&quot;
+  return err
+endif
+# We check if number of models in ranking is not greater than 2^K (model space)
+if (l_rank &gt; 2^k)
+  err = &quot;Number of the top ranked models cannot be greater than 2^K (space of parameters)&quot;
+  return err
+endif
+return err
+</code>
+</gretl-function>
+<gretl-function name="BMA_initial_model" type="list" private="1">
+ <params count="5">
+  <param name="Y" type="seriesref" const="true"/>
+  <param name="X" type="list"/>
+  <param name="alpha" type="scalarref" const="true"/>
+  <param name="k" type="scalarref"/>
+  <param name="var_order" type="matrix"/>
+ </params>
+<code># Function creates list of variables for the initial model
+#
+# *Y			- pointer to the series of dependent variable
+# X			- list of indenpendent variables
+# *alpha		- pointer to the scalar with value of alpha for initial model
+# *k			- pointer to the scalar with value of number of variables in estimated model
+# var_order	- 2-rows matrix with numbers of variables in dataset (original) (1st row)
+#					and order of these variables in &quot;big_list&quot; (given at startup) (2nd row)
+#
+# Local variables:
+# max_k		- number of given indenpendent variables
+#
+#	Returns: list of indenpendent variables in the initial model (without constant)
+# Starting values of the local variables
+list last = {}
+scalar max_k = cols(var_order)
+var_order = transp(msortby(var_order, 2))
+if (alpha == 0) # Empty model (const only)
+  k = 0
+elif (alpha == 1)	# Truly random model
+  k = randint(0, max_k)
+  if (k &gt; 0)
+    if (k == max_k) # All variables in the starting model, nothing to draw
+      last = X
+    else
+      loop for i=1..k --quiet
+        scalar accept = 0
+        #set loop_maxiter 99999 # This should be set if we cannot construct random list
+        loop while (accept == 0) --quiet
+          cand = var_order[1, randint(1, max_k)]
+          if (inlist(last, cand) == 0)
+            last += cand
+            accept = 1
+          endif
+        endloop
+      endloop
+      # We have to sort variables in created list
+      matrix last_mat = zeros(2,k)
+      last_mat[1,] = last
+      loop for i=1..k --quiet
+        loop for j=1..max_k --quiet
+          if (last_mat[1,i] == var_order[1,j])
+            last_mat[2,i] = var_order[2,j]
+            break
+          endif
+        endloop
+      endloop
+      last_mat = transp(msortby(transp(last_mat),2))
+      last = last_mat[1,]
+    endif
+  endif
+else	# Model reduced at given alpha (classic OLS)
+  ols Y const X --quiet
+  omit --auto=alpha --silent
+  last = $xlist
+  last -= const
+  k = $ncoeff -1
+endif
+return last
+</code>
+</gretl-function>
+<gretl-function name="BMA_scaling_factors" type="void" private="1">
+ <params count="5">
+  <param name="factors" type="matrixref"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="y_sq" type="scalarref"/>
+  <param name="g_type" type="int" const="true"/>
+  <param name="Y" type="matrixref" const="true"/>
+ </params>
+<code># Function computes scaling factors for further computations:
+#
+# *factors -	pointer to the matrix holding factors
+# *k		 -	pointer to the scalar holding number of variables
+# *y_sq	 -	pointer to the scalar holding sum of squares of demeaned Y
+# g_type	 -	scalar with type of g-prior
+# *Y		 -	pointer to the vector of observations on Y variable
+# g0 (g-prior)
+factors[1] = BMA_gprior(&amp;k, g_type)
+# g1 (g/(1+g))
+factors[2] = factors[1] / (1 + factors[1])
+# g2 (1/(1+g))
+factors[3] = 1 / (1 + factors[1])
+# g1*y_sq
+factors[4] = y_sq * factors[2]
+# .5*log(g1)
+factors[5] = .5 * log(factors[2])
+# .5*(n-1)
+factors[6] = .5 * ($nobs - 1)
+# Y'Y (sum of squares of Y)
+factors[7] = Y'Y
+</code>
+</gretl-function>
+<gretl-function name="BMA_model_structure" type="matrix" private="1">
+ <params count="5">
+  <param name="X_new_num" type="matrixref"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="models_rank" type="matrixref" optional="true"/>
+  <param name="l_models_rank" type="scalarref" optional="true" const="true"/>
+  <param name="start_model" type="bool" default="0"/>
+ </params>
+<code># Function constructs new model structure
+# X_new_num		-	pointer to the vector holding numbers (position) of indenpendent variables in new model
+# k				-	pointer to the scalar holding total number of indenpendent variables in procedure
+# models_rank		-	pointer to the matrix holding structure of models in ranking
+# l_models_rank	-	pointer to the scalar holding number of models in ranking
+# start_model		-	do we create start ranking? 1-yes
+#
+#	Returns	- vector holding structure of given (new) model
+# Starting values
+matrix model_struct = zeros(1,k)
+# Setting 1 for variables in current draw
+loop for i=1..cols(X_new_num) --quiet
+  model_struct[X_new_num[$i]-1] = 1
+endloop
+# Filling the models_rank with starting structure
+if (start_model == 1)
+  loop for i=1..l_models_rank --quiet
+    models_rank[$i,] = model_struct
+  endloop
+endif
+return model_struct
+</code>
+</gretl-function>
+<gretl-function name="BMA_correlation_coeff" type="scalar" private="1">
+ <params count="3">
+  <param name="mod_rank_prob" type="matrixref" const="true"/>
+  <param name="mod_nume_prob" type="matrixref" const="true"/>
+  <param name="l_rank" type="scalarref" const="true"/>
+ </params>
+<code># Function computes Pearson correlation coefficient between 2 ranking vectors
+#
+# *mod_rank_prob	- pointer to the ranking vector with analytical prababilities of models
+# *mod_nume_prob	- pointer to the ranking vector with numerical prababilities of models
+# *l_rank			- pointer to the scalar with number of models in ranking(s)
+#
+# Local variables:
+# tmp1, tmp2		- matrices with normalized analitycal and numerical probabilites
+# j				- scalar with number of the first row in rankings to ommit
+#
+# Returns - correlation coefficient between analitical and numerical rankings
+# Starting values
+matrix tmp1 = mod_rank_prob
+matrix tmp2 = mod_nume_prob
+scalar j = 0
+# We check if there are zeros in numerical probablities...
+# ...and if so we ommit such rows in both rankings.
+loop i=1..l_rank --quiet
+  if (tmp2[i] == 0.0)
+    scalar j = i
+    break
+  endif
+endloop
+if (j &gt;= 3)
+  tmp1 = tmp1[1:j-1,]
+  tmp2 = tmp2[1:j-1,]
+endif
+# Now we have to normalize the given rankings
+tmp1 -= maxc(tmp1)
+tmp1 = exp(tmp1) ./ sumc(exp(tmp1))
+tmp2 = tmp2 ./ sumc(tmp2)
+return corr(tmp1,tmp2)
+</code>
+</gretl-function>
+<gretl-function name="BMA_build_rank" type="void" private="1">
+ <params count="6">
+  <param name="mod_rank" type="matrixref"/>
+  <param name="mod_rank_prob" type="matrixref"/>
+  <param name="mod_nume_prob" type="matrixref"/>
+  <param name="mod_struct_old" type="matrixref" const="true"/>
+  <param name="l_rank" type="scalarref" const="true"/>
+  <param name="lprob_old" type="scalarref" const="true"/>
+ </params>
+<code># Function creates both analitycal and numerical model rankings
+#
+# *mod_rank		- pointer to the matrix holding structures of models in ranking
+# *mod_rank_prob	- pointer to the matrix holding analytical probabilities of models in ranking
+# *mod_nume_prob	- pointer to the matrix holding numerical probabilities of models in ranking
+# *mod_struct_old	- pointer to the matrix holding structure of current model
+# *l_rank			- pointer to the scalar with numer of models in ranking
+# *lprob_old		- pointer to the scalar with probability of current model
+#
+# Local variable:
+#	nr				- position (row) in rankings to be replaced
+# Initial value
+scalar nr = 0
+# We look for the lowest probability and replace it by probability of the current model (if bigger)
+loop for j=1..l_rank --quiet
+  if ((lprob_old = mod_rank_prob[j]) &amp;&amp; (mod_rank[j,] = mod_struct_old))
+    break
+  elif (mod_rank_prob[j] == 0)
+    nr = j
+    break
+  elif (lprob_old &gt; mod_rank_prob[j])
+    nr = j
+    break
+  endif
+endloop
+# Now we replace analytical probability and model structure by new one (taken from current draw)
+if (nr &gt; 0)
+  if (nr &lt; l_rank)
+    mod_rank_prob[nr+1:l_rank,] = mod_rank_prob[nr:l_rank-1,] # analytical
+    mod_nume_prob[nr+1:l_rank,] = mod_nume_prob[nr:l_rank-1,] # numerical
+    mod_rank[nr+1:l_rank,] = mod_rank[nr:l_rank-1,] # models in ranking (structure)
+  endif
+  mod_rank_prob[nr] = lprob_old
+  mod_nume_prob[nr] = 0
+  mod_rank[nr,] = mod_struct_old
+endif
+# Now we compute numerical probs
+loop for j=1..l_rank --quiet
+  if (mod_rank[j,] = mod_struct_old)
+    mod_nume_prob[j] += 1
+    break
+  endif
+endloop
+</code>
+</gretl-function>
+<gretl-function name="BMA_get_variable_position" type="matrix" private="1">
+ <params count="3">
+  <param name="X_new_num" type="matrixref" const="true"/>
+  <param name="var_numbers2" type="matrixref" const="true"/>
+  <param name="k" type="scalarref" const="true"/>
+ </params>
+<code># Function creates vactor holding positions of variables in current draw (in terms of order in the &quot;big_list&quot;)
+#
+# *X_new_num		- pointer to the vector with numbers of variables in current draw
+# *var_numbers2	- pointer to the matrix with variable numbers and their positions (in terms of order in the &quot;big_list&quot;)
+# *k				- pointer to scalar holding total number of indenpendent variables
+#
+# Local variables:
+# X_num_or		- vector of ordered values taken from vecor X_new_num
+# col1			- number of colums in vector X_new_num (size)
+# start			- scalar indicating shift in position searching
+#
+# Returns: vector of positions of variables in current draw (ordered)
+# Starting values
+scalar col1 = cols(X_new_num)
+matrix var_position = zeros(1, col1)
+matrix X_num_or = sort(X_new_num)
+scalar start = 1
+# We have to determine the positions (numbers) of variables in current draw
+loop for i=1..col1 --quiet
+  loop for j=start..k --quiet
+    if (X_num_or[i] == var_numbers2[1, j])
+      var_position[i] = var_numbers2[2, j]
+      start = j + 1
+      break
+    endif
+  endloop
+endloop
+return sort(var_position)
+</code>
+</gretl-function>
+<gretl-function name="BMA_gprior" type="scalar" private="1">
+ <params count="2">
+  <param name="k" type="scalarref" const="true"/>
+  <param name="type" type="int"/>
+ </params>
+<code># Function computes g-prior
+#
+# *k	 - pointer to scalar holding numer of indenpendent variables
+# type - type of g-prior to be computed
+#
+# Returs: scalar gprior
+# Starting value
+scalar gprior = 0
+if (type == 1) # Benchmark prior
+  if ($nobs &lt; k^2)
+    gprior = 1/k^2
+  else
+    gprior = 1/$nobs
+  endif
+elif (type == 2) # Unit Information Prior (g-UIP)
+  gprior = 1/$nobs
+elif (type == 3) # Risk Inflation Criterion (g-RIC)
+  gprior = 1/k^2
+elif (type == 4) # Hannan and Quinn HQC
+  gprior = 1/(ln($nobs))^3
+elif (type == 5) # Root of g-UIP
+  gprior = sqrt(1/$nobs)
+endif
+return gprior
+</code>
+</gretl-function>
+<gretl-function name="BMA_accept_prob" type="scalar" private="1">
+ <params count="9">
+  <param name="type" type="int"/>
+  <param name="lprob_new" type="scalarref" const="true"/>
+  <param name="lprob_old" type="scalarref" const="true"/>
+  <param name="k_new" type="scalarref" const="true"/>
+  <param name="k_old" type="scalarref" const="true"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="a" type="scalarref" const="true"/>
+  <param name="b" type="scalarref" const="true"/>
+  <param name="C" type="scalarref" const="true"/>
+ </params>
+<code># Function computes probability (P_y) of given model based on selected prior
+#
+# type			- type of prior (chosen at startup)
+# *lprob_new	- pointer to the scalar with probability of the new model (current draw)
+# *lprob_old	- pointer to the scalar with probability of the old model (previous draw)
+# *k_new		- pointer to the scalar with number of variables in the new model
+# *k_old		- pointer to the scalar with number of variables in the old model
+# *k			- pointer to the scalar with total number of variables
+# *a, *b, *C	- pointrs to the scalars with parameters for priors
+#
+# Local variables:
+# A, B		- scalars for computing probability based on Binomial-beta
+#
+# Returns: the scalar with probability of current draw
+if (type == 1) # Binomial
+  return (k_new - k_old)*(a - b) + lprob_new - lprob_old
+elif (type == 2) # Binomial-beta
+  scalar A = 0
+  scalar B = 0
+  A = lngamma(k + 1) - lngamma(k_new + 1) - lngamma(k - k_new + 1)
+  B = lngamma(a + k_new) + lngamma(k + b - k_new) - lngamma(a + b + k)
+  return A + B + C
+endif
+</code>
+</gretl-function>
+<gretl-function name="BMA_jointness_matrix" type="void" private="1">
+ <params count="3">
+  <param name="mod_struct" type="matrixref" const="true"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="jointness_m" type="matrixref"/>
+ </params>
+<code># Function counts coexistence (jointness) of every pair of variables in the given draw
+#
+# *mod_struct		- pointer to the vector with structure of current draw
+# *k				- pointer to the scalar with total number of indenpendent variables
+# *jointness_m	- pointer to the matrix with sum of coexistence of every pair of variables
+# We look for pairs of variables
+loop for i=1..k --quiet
+  if (mod_struct[i] == 1)
+    loop for j=i+1..k --quiet
+      if (mod_struct[j] == 1)
+        jointness_m[i,j] += 1
+      endif
+    endloop
+  endif
+endloop
+</code>
+</gretl-function>
+<gretl-function name="BMA_jointness_measure" type="void" private="1">
+ <params count="4">
+  <param name="var_prob" type="matrix" const="true"/>
+  <param name="jointness_m" type="matrixref"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="type" type="int"/>
+ </params>
+<code># Function computes jointness measure based on given jointness matrix
+#
+# *var_prob		- vector with posterior probability of indenpendent variables
+# *jointness_m	- pointer to the matrix of jointness
+# *k				- pointer to the scalar with total number of indenpendent variables
+# type			- type of jointness measure to compute
+#
+# Local variables:
+# B, C, D			- scalars for Doppelhofer-Weeks Measure computation
+#
+if (type == 1) # Ley-Steel Measure
+  loop for i=1..k --quiet
+    loop for j=i+1..k --quiet
+      jointness_m[i,j] = ln(jointness_m[i,j]/(var_prob[i] + var_prob[j] - 2*jointness_m[i,j]))
+    endloop
+  endloop
+elif (type == 2) # Doppelhofer-Weeks Measure
+  loop for i=1..k --quiet
+    loop for j=i+1..k --quiet
+      scalar D = var_prob[j] - jointness_m[i,j]
+      scalar B = 1 - var_prob[i] - D
+      scalar C = var_prob[i] - jointness_m[i,j]
+      jointness_m[i,j] = ln((jointness_m[i,j]*B)/(C*D))
+    endloop
+  endloop
+endif
+</code>
+</gretl-function>
+<gretl-function name="BMA_print_results" type="matrix" private="1">
+ <params count="30">
+  <param name="X_names" type="string" const="true"/>
+  <param name="Y_mat" type="matrixref" const="true"/>
+  <param name="big_mat_dem" type="matrixref" const="true"/>
+  <param name="Ones" type="matrixref" const="true"/>
+  <param name="scaling_f" type="matrixref" const="true"/>
+  <param name="var_numbers" type="matrixref" const="true"/>
+  <param name="mod_rank" type="matrixref" const="true"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="l_rank" type="scalarref" const="true"/>
+  <param name="acc_type" type="int" const="true"/>
+  <param name="av_model_size" type="scalarref" const="true"/>
+  <param name="g_type" type="int" const="true"/>
+  <param name="alpha" type="scalarref" const="true"/>
+  <param name="mod_rank_prob" type="matrixref" const="true"/>
+  <param name="mod_nume_prob" type="matrixref" const="true"/>
+  <param name="start_model" type="list" const="true"/>
+  <param name="mod_size" type="scalarref" const="true"/>
+  <param name="Nrep" type="scalarref" const="true"/>
+  <param name="Nburn" type="scalarref" const="true"/>
+  <param name="var_prob" type="matrixref"/>
+  <param name="bhat_avg" type="matrixref"/>
+  <param name="bvar_avg" type="matrixref"/>
+  <param name="jointness_m" type="matrixref"/>
+  <param name="do_joint" type="int" const="true"/>
+  <param name="h_predict" type="scalarref" const="true"/>
+  <param name="Yhat_avg" type="matrixref"/>
+  <param name="Yhat_var_avg" type="matrixref"/>
+  <param name="Y_mat_predict" type="matrixref" const="true"/>
+  <param name="predict_obs_names" type="string" const="true"/>
+  <param name="verbosity" type="scalarref" const="true"/>
+ </params>
+<code># Function prints results of BMA
+#
+# Normalisation of numerical probabilities of models in ranking
+matrix Numerical_Likelihood = mod_nume_prob./(Nrep - Nburn)
+# Additional information in summary
+printf &quot;\n&quot;
+string Y_n = varname(var_numbers[1])
+if (verbosity == 2)
+  if (acc_type == 1)
+    string prior = &quot;Binomial&quot;
+  else
+    string prior = &quot;Binomial-Beta&quot;
+  endif
+  if (g_type == 1)
+    string gtype = &quot;Benchmark prior&quot;
+  elif (g_type == 2)
+    string gtype = &quot;Unit Information Prior (g-UIP)&quot;
+  elif (g_type == 3)
+    string gtype = &quot;Risk Inflation Criterion (g-RIC)&quot;
+  elif (g_type == 4)
+    string gtype = &quot;Hannan and Quinn HQC&quot;
+  elif (g_type == 5)
+    string gtype = &quot;Root of g-UIP&quot;
+  endif
+  series @Y_n = Y_mat
+  print &quot;----------------------------------&quot;
+  printf &quot;Total CPU time: %f min.\n&quot;, $stopwatch/60
+  printf &quot;Prior: %s\n&quot;, prior
+  printf &quot;Prior average model size: %f\n&quot;, av_model_size
+  printf &quot;Significance level for the initial model: %f\n&quot;, alpha
+  printf &quot;g-prior: %s\n&quot;, gtype
+  printf &quot;Total number of iterations: %d\n&quot;, Nrep
+  printf &quot;Number of burn-in draws: %d\n&quot;, Nburn
+  printf &quot;\n&quot;
+  print &quot;The initial model:&quot;
+  ols @Y_n const start_model --simple
+endif
+# Standard information (PIPs, Means and so on)
+print &quot;----------------------------------&quot;
+printf &quot;\n&quot;
+matrix Post_Results = transp(var_prob./(Nrep - Nburn))
+bhat_avg = bhat_avg ./ (Nrep - Nburn)
+bvar_avg = bvar_avg ./ (Nrep - Nburn)
+matrix bvar = sqrt(bvar_avg - bhat_avg.^2)
+matrix tmp = bhat_avg' ~ bvar'
+matrix Post_Results = Post_Results ~ tmp
+tmp = Post_Results[,2] ./ Post_Results[,1]
+matrix Post_Results = Post_Results ~ tmp
+tmp = sqrt((Post_Results[,3] .* Post_Results[,3] .+ Post_Results[,2] .* Post_Results[,2]) ./ Post_Results[,1] .- Post_Results[,4] .* Post_Results[,4])
+matrix Post_Results = Post_Results ~ tmp
+string title = &quot;PIP Mean Std.Dev. Cond.Mean Cond.Std.Dev&quot;
+colnames(Post_Results, title)
+rownames(Post_Results, X_names)
+printf &quot;Posterior average model size: %f\n&quot;, mod_size/(Nrep - Nburn)
+printf &quot;\n&quot;
+print &quot;Posterior moments (unconditional and conditional on inclusion):&quot;
+printf &quot;%15f&quot;, Post_Results
+printf &quot;\n&quot;
+print &quot;----------------------------------&quot;
+printf &quot;\n&quot;
+print &quot;Posterior probability of models:&quot;
+loop for i=1..l_rank --quiet
+  printf &quot;Model %d:\t%f\n&quot;, $i, Numerical_Likelihood[i]
+endloop
+printf &quot;Total probability of the models in ranking (numerical): %f\n&quot;, sumc(Numerical_Likelihood)
+printf &quot;\n&quot;
+printf &quot;Correlation coefficient between the analytical\n&quot;
+printf &quot;and numerical probabilities of the above models: %f\n&quot;, BMA_correlation_coeff(&amp;mod_rank_prob, &amp;Numerical_Likelihood, &amp;l_rank)
+# Forecasts
+if (h_predict &gt; 0)
+  Yhat_avg = Yhat_avg ./ (Nrep - Nburn)
+  Yhat_var_avg = Yhat_var_avg ./ (Nrep - Nburn)
+  Yhat_var_avg = sqrt(Yhat_var_avg - Yhat_avg .^ 2)
+  matrix prediction = Y_mat_predict ~ Yhat_avg ~ Yhat_var_avg
+  printf &quot;\n&quot;
+  print &quot;----------------------------------&quot;
+  printf &quot;\n&quot;
+  print &quot;Predictive results:&quot;
+  colnames(prediction, Y_n ~ &quot; Mean Std.Dev.&quot;)
+  rownames(prediction, predict_obs_names)
+  printf &quot;%15f&quot;, prediction
+  printf &quot;\n&quot;
+endif
+# Jointess analysis
+if (do_joint != 0)
+  jointness_m = jointness_m ./ (Nrep - Nburn)
+  colnames(jointness_m, X_names)
+  rownames(jointness_m, X_names)
+  if (do_joint == 1)
+    string jointess_measure = &quot;Ley-Steel Measure&quot;
+  else
+    string jointess_measure = &quot;Doppelhofer-Weeks Measure&quot;
+  endif
+  print &quot;----------------------------------&quot;
+  printf &quot;\n&quot;
+  print &quot;Posterior joint probability of variables:&quot;
+  printf &quot;%15f&quot;, jointness_m
+  printf &quot;\n&quot;
+  BMA_jointness_measure(Post_Results[,1], &amp;jointness_m, &amp;k, do_joint)
+  printf &quot;Jointness statistics (%s):\n&quot;, jointess_measure
+  printf &quot;%15f&quot;, jointness_m
+  scalar strong_sub = 0
+  scalar significant_sub = 0
+  scalar strong_com = 0
+  scalar significant_com = 0
+  matrix pairs = zeros(round(0.5*k^2), 3)
+  scalar pair = 0
+  loop for i=1..k --quiet
+    loop for j=i+1..k --quiet
+      if (abs(jointness_m[i,j]) &gt; 1)
+        pair += 1
+        pairs[pair,1] = jointness_m[i,j]
+        pairs[pair,2] = i
+        pairs[pair,3] = j
+        if (jointness_m[i,j] &lt; 0)
+          if (jointness_m[i,j] &lt; -2)
+            strong_sub += 1
+          else
+            significant_sub += 1
+          endif
+        else
+          if (jointness_m[i,j] &gt; 2)
+            strong_com += 1
+          else
+            significant_com += 1
+          endif
+        endif
+      endif
+    endloop
+  endloop
+  if (pair &gt; 0)
+    pairs = msortby(pairs[1:pair, ], 1)
+    scalar shift = 0
+    if (strong_sub &gt; 0)
+      BMA_jointness_pairs(&amp;strong_sub, &amp;var_numbers, &amp;shift, &amp;pairs, &quot;Strong substitutes:&quot;)
+    endif
+    if (significant_sub &gt; 0)
+      BMA_jointness_pairs(&amp;significant_sub, &amp;var_numbers, &amp;shift, &amp;pairs, &quot;Significant substitutes:&quot;)
+    endif
+    if (significant_com &gt; 0)
+      BMA_jointness_pairs(&amp;significant_com, &amp;var_numbers, &amp;shift, &amp;pairs, &quot;Significant complements:&quot;)
+    endif
+    if (strong_com &gt; 0)
+      BMA_jointness_pairs(&amp;strong_com, &amp;var_numbers, &amp;shift, &amp;pairs, &quot;Strong complements:&quot;)
+    endif
+  endif
+endif
+# Printing the models in ranking
+if (verbosity == 2)
+  matrix k_new_mat = sumr(mod_rank)
+  loop for i=1..l_rank --quiet
+    if (mod_nume_prob[i] == 0)
+      break
+    endif
+    matrix X_new = {}
+    matrix XtY = {}
+    matrix XtXinv = {}
+    matrix bhat = {}
+    matrix bvar = {}
+    scalar yMy = 0
+    string Xnames = &quot;&quot;
+    list X = const
+    loop for j=1..k --quiet
+      if (mod_rank[i,j] == 1)
+        if (rows(X_new) == 0)
+          X_new = big_mat_dem[,j+1]
+        else
+          X_new = X_new ~ big_mat_dem[,j+1]
+        endif
+        Xnames += &quot;,&quot; ~ varname(var_numbers[j+1])
+      endif
+    endloop
+    # Bayesian OLS for models in ranking
+    print &quot;----------------------------------&quot;
+    printf &quot;\nModel: %d, posterior probability: %f&quot;, i, Numerical_Likelihood[i]
+    scalar k_new = k_new_mat[i]
+    if (k_new == 0)
+      printf &quot;\n\n  %s\n&quot;, &quot;None of the variables were significant.&quot;
+      printf &quot;  %s\n&quot;, &quot;Model includes only the intercept term which is simply the average of the dependent variable.&quot;
+    else
+      BMA_matrix_precompute(&amp;Y_mat, &amp;X_new, &amp;k_new, &amp;Ones, &amp;scaling_f, &amp;XtY, &amp;XtXinv, &amp;yMy, null, 0)
+      BMA_ols(&amp;scaling_f, &amp;XtY, &amp;XtXinv, &amp;yMy, &amp;bhat, &amp;bvar)
+      matrix coeffmat = bhat ~ sqrt(bvar)
+      coeffmat = coeffmat[2:k_new+1,]
+      modprint coeffmat Xnames
+    endif
+  endloop
+endif
+print &quot;----------------------------------&quot;
+printf &quot;\n\n&quot;
+# Return
+if (do_joint == 0)
+  return Post_Results
+else
+  Post_Results_new = Post_Results ~ jointness_m
+  title += &quot; &quot;
+  title += X_names
+  colnames(Post_Results_new, title)
+  rownames(Post_Results_new, X_names)
+  return Post_Results_new
+endif
+</code>
+</gretl-function>
+<gretl-function name="BMA_matrix_precompute" type="void" private="1">
+ <params count="10">
+  <param name="Y" type="matrixref" const="true"/>
+  <param name="X" type="matrixref"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="Ones" type="matrixref" const="true"/>
+  <param name="factors" type="matrixref" const="true"/>
+  <param name="XtY" type="matrixref"/>
+  <param name="XtXinv" type="matrixref"/>
+  <param name="yMy" type="scalarref"/>
+  <param name="ZtZinv" type="matrixref" optional="true"/>
+  <param name="h_predict" type="scalar" const="true"/>
+ </params>
+<code># Function computes some linear algebra stuff for further computation
+#
+# *Y		- pointer to the vector of dependent variable
+# *X		- pointer to the matrix of demeanded indenpendent variables
+# *k		- pointer to the scalar holding number of variables in (new) model
+# *Ones		- pointer to the vector of ones (constant)
+# *factors	- pointer to the vector holding earlier computed scaling factors
+# *XtY		- pointer to the matrix for X'Y in OLS
+# *XtXinv	- pointer to the matrix for inverse of X'X in OLS
+# *yMy		- pointer to the scalar for computation of marginal density of vector
+#
+if (k &gt; 0)
+  if (h_predict &gt; 0)
+    ZtZinv = invpd(X'X)
+  endif
+  matrix X = Ones ~ X
+endif
+matrix XtY = X'Y
+matrix XtXinv = invpd(X'X)
+#yMy = factors[7] - Y'X*XtXinv*XtY
+yMy = factors[7] - qform(XtY',XtXinv)
+</code>
+</gretl-function>
+<gretl-function name="BMA_ols" type="scalar" private="1">
+ <params count="6">
+  <param name="factors" type="matrixref" const="true"/>
+  <param name="XtY" type="matrixref"/>
+  <param name="XtXinv" type="matrixref"/>
+  <param name="yMy" type="scalarref"/>
+  <param name="bhat" type="matrixref"/>
+  <param name="bvar" type="matrixref"/>
+ </params>
+<code># Function computes Bayesian OLS (posterior beta vector end covariance matrix)
+#
+# *factors	- pointer to the vector holding earlier computed scaling factors
+# *XtY		- pointer to the matrix for X'Y in OLS
+# *XtXinv		- pointer to the matrix for inverse of X'X in OLS
+# *yMy		- pointer to the scalar for computation of marginal density of vector
+# *bhat		- pointer to the posterior beta vector
+# *bvar		- pointer to the posterior sigma^2 vector
+#
+# Returs: scalar vs2 needed for prediction variance computations
+matrix Vhat = XtXinv/(1+factors[1])
+bhat = Vhat*XtY
+scalar vs2 = factors[3]*yMy + factors[4]
+bvar = diag((vs2/($nobs-2))*Vhat)
+return vs2
+</code>
+</gretl-function>
+<gretl-function name="BMA_jointness_pairs" type="void" private="1">
+ <params count="5">
+  <param name="n_pairs" type="scalarref" const="true"/>
+  <param name="var_numbers" type="matrixref" const="true"/>
+  <param name="shift" type="scalarref"/>
+  <param name="pairs" type="matrixref" const="true"/>
+  <param name="type" type="string"/>
+ </params>
+<code># Function for generating vector holding pairs of hightly releated variables
+# and jointness statistics for these pairs.
+# Note: this function is used only during results printing.
+#
+# *n_pairs		- pointer to the scalar with number of pairs of related variables
+# *var_numbers	- pointer to the matrix holding numbers of variables
+# *shift			- pointer to the scalar holding total number of previous pairs (shift in the &quot;pairs&quot; vector)
+# *pairs			- pointer to the cevtor holding (ordered) pairs of hightly releated variables
+# type			- string with type of relation between variables
+pairs_related = pairs[shift + 1 : shift + n_pairs, ]
+shift += n_pairs
+string pair_names = &quot;&quot;
+loop for i=1..n_pairs --quiet
+  pair_names += &quot; &quot; ~ varname(var_numbers[1+pairs_related[i,2]]) ~ &quot;,&quot; ~ varname(var_numbers[1+pairs_related[i,3]])
+endloop
+pairs_related = pairs_related[,1]
+rownames(pairs_related, pair_names)
+printf &quot;\n&quot;
+print type
+printf &quot;%15f&quot;, pairs_related
+</code>
+</gretl-function>
+<gretl-function name="BMA_new_X_matrix" type="void" private="1">
+ <params count="11">
+  <param name="big_mat_dem" type="matrixref" const="true"/>
+  <param name="Ones" type="matrixref" const="true"/>
+  <param name="k" type="scalarref" const="true"/>
+  <param name="X_new_num" type="matrixref"/>
+  <param name="X_new" type="matrixref"/>
+  <param name="X_list" type="list"/>
+  <param name="k_new" type="scalarref" const="true"/>
+  <param name="var_numbers2" type="matrixref" const="true"/>
+  <param name="big_mat_dem_predict" type="matrixref" optional="true" const="true"/>
+  <param name="X_new_predict" type="matrixref" optional="true"/>
+  <param name="h_predict" type="scalarref" const="true"/>
+ </params>
+<code># Function creates matrix of explanatory variables (demeaned) for current draw
+#
+# *big_mat_dem	- pointer to the matrix with all demeaned variables (including Y)
+# *Ones			- pointer to the matrix (k+1,1) with ones (for constant)
+# *X_new_num		- pointer to the matrix holding numbers of variables in current draw
+# X_list			- list of variables in current draw
+# *k_new			- pointer to the scalar with number of variables in current draw
+# *var_numbers2	- pointer to the matrix holding numbers (in dataset) of given variables and their order on the &quot;big_list&quot;
+# If we have at least one variable we create new X matrix, otherwise it includes only ones.
+if (k_new &gt; 0)
+  matrix X_new_num = X_list
+  X_new_num = BMA_get_variable_position(&amp;X_new_num, &amp;var_numbers2, &amp;k)
+  matrix X_new = big_mat_dem[,X_new_num]
+  if (h_predict &gt; 0)
+    matrix X_new_predict = big_mat_dem_predict[,X_new_num]
+  endif
+else
+  matrix X_new_num = {}
+  matrix X_new = Ones
+  if (h_predict &gt; 0)
+    matrix X_new_predict = {}
+  endif
+endif
+</code>
+</gretl-function>
+<sample-script>
+# Usage:
+open greene9_1.gdt
+include BMA.gfn
+
+list greene = dataset
+
+BMA_main(greene, 1, 1.5, 0.6, 4, 1, 0, 0, 10000, 10, 1)
+
+# The above example consists of three blocks.
+# The first block is just opening of the so called greene9_1 dataset,
+# which is bundled in every standard gretl installation.
+# This dataset contains cross-sectional data on manufacturing
+# of transportation equipment # presented as Table 9.1 in
+# Greene, Econometric Analysis, 4e}.
+
+# The second block is the definition of the green list which
+# contains all variables available in the greene9_1 dataset.
+# The first variable - valadd - will be the dependent variable.
+
+# The third block contains the definition for Bayesian model
+# averaging analysis: binomial prior, prior average model size
+# set to 1.5 (which means that we have uniform model prior),
+# significance level for the initial model set to 0.6,
+# 4 top ranked models, Benchmark g-prior, without jointness analysis,
+# without out-of-sample predictions, 10000 replications with 10%
+# burn-in draws and basic output (verbosity set to 1).
+
+
+# Suppose we want to run the same analysis but following
+# Occam's razor philosophy. The simplest way is setting the prior
+# average model size to 1. The code would be as follows:
+BMA_main(greene, 1, 1, 0.6, 4, 1, 0, 0, 10000, 10, 1)
+
+# Because in the Occam's razor philosophy we penalize large
+# models assigning high probability for small ones, better distribution
+# then binomial is binomial-beta (which is right skewed). In order to
+# use binomial-beta distribution we have to set prior to 2.
+# The code would be as follows:
+BMA_main(greene, 2, 1, 0.6, 4, 1, 0, 0, 10000, 10, 1)
+
+# Suppose we want to set g-prior to Risk Inflation Criterion (g-RIC),
+# uniform model prior, do jointness analysis with Ley-Steel Measure,
+# compute forecasts for 3 observations and print additional information
+# in results (verbosity set to 2). The code would be as follows:
+BMA_main(greene, 1, 1.5, 0.6, 4, 3, 1, 3, 10000, 10, 2)
+
+# Finally, if we want to save results of the above Bayesian model
+# averaging analysis in the matrix results_mat,
+# the code should be as follows:
+results_mat = BMA_main(greene, 1, 1.5, 0.6, 4, 3, 1, 3, 10000, 10, 2)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

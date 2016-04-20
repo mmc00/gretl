@@ -1,0 +1,419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="matrix_perf" ID="1427124137" no-data-ok="true" minver="1.9.91">
+<author email="cottrell@wfu.edu">Allin Cottrell</author>
+<version>0.4</version>
+<date>2014-06-17</date>
+<description>Matrix multiplication performance test</description>
+<label>Matrix speed</label>
+<help>
+matrix_perf performs some tests of performance in respect of dgemm
+(double-precision general matrix multiplication). It is designed to
+help determine what is the fastest method on a given system, from a 
+short list of candidates as follows.
+
+* &quot;vanilla&quot;: this is gretl's native matrix multiplication code in
+  single-threaded mode.
+  
+* &quot;omp&quot;: gretl's native matrix multiplication code running in
+  multi-threaded mode with the help of OpenMP. This is available
+  only if gretl has been built with OpenMP support and the host
+  machine has more than one processor.
+  
+* &quot;sysblas&quot;: system blas, the implementation of the BLAS (Basic 
+  Linear Algebra Subprograms) against which gretl is linked. This
+  may or may not be optimized for the host architecture and may or
+  may not be multi-threaded.
+  
+Each individual test involves multiplying an (m x k) matrix into
+a (k x n) matrix, for a total of 2mnk floating-point operations;
+For smaller matrices the multiplication is repeated many times. 
+The Gflops figure is then derived by dividing the total number
+of floating-point operations by (the elapsed time in seconds
+times 1.0e09). If you see &quot;inf&quot; in any of the results this means
+that the elapsed time was reported as zero, which in effect means
+that the system timer does not have very good resolution, though
+the result can probably be read as &quot;very fast&quot;.  
+  
+The general expectation is that if &quot;sysblas&quot; is optimized it will
+be faster than &quot;vanilla&quot; (except perhaps at small matrix sizes).
+If OpenMP is enabled then &quot;omp&quot; will be probably be faster than
+&quot;vanilla&quot; (at least for large matrices) but will likely be slower
+than an optimized, multi-threaded system blas library. 
+
+Some points to note:
+
+* The tests may take a few minutes to run, depending on your
+  hardware.
+  
+* You may need to run the test script 2 or 3 times to get a good 
+  sense of which results are robust and which may be quirky.
+
+* The public function matrix_perf takes a single (optional) 
+  argument, namely the seed for the random number generator (the 
+  matrices that get multiplied are filled with pseudo-random normal
+  drawings). If you leave this at its default value of zero the 
+  seed is set from the system time.
+</help>
+<gretl-function name="matrix_perf" type="void">
+ <params count="1">
+  <param name="rseed" type="int" default="0">
+<description>seed for RNG</description>
+  </param>
+ </params>
+<code>scalar omp = $sysinfo.omp
+if rseed &gt; 0
+  set seed rseed
+endif
+string blas = $sysinfo.blas
+if blas == &quot;unknown&quot;
+  blas = &quot;sysblas&quot;
+endif
+string cnames
+if omp
+  sprintf cnames &quot;m n k vanilla openmp %s&quot;, blas
+else
+  sprintf cnames &quot;m n k vanilla %s&quot;, blas
+endif
+matrix scorecard = zeros(0, omp ? 3 : 2)
+# dgemm-1: first set of experiments
+scalar m = 128   # rows of A
+scalar n = 128   # cols of B
+scalar k = 128   # cols of A = rows of B
+scalar h = 1     # initial number of iterations
+scalar iters = 5 # number of doublings in multime()
+loop i=1..3 --quiet
+  matrix mm = dgemm_test1(m, n, k, h, iters, i, omp)
+  colnames(mm, cnames)
+  print_dgemm_matrix(&amp;mm, 1, i)
+  analyse_dgemm_matrix(mm, omp, &amp;scorecard)
+  flush
+endloop
+# dgemm-2: second set of experiments
+loop i=1..3 --quiet
+  matrix mm = dgemm_test2(i, omp)
+  colnames(mm, cnames)
+  print_dgemm_matrix(&amp;mm, 2, i)
+  analyse_dgemm_matrix(mm, omp, &amp;scorecard)
+  flush
+endloop
+print_system_info(blas)
+printf &quot;\nPerformance summary:\n&quot;
+colnames(scorecard, cnames + 6)
+analyse_score(scorecard)
+</code>
+</gretl-function>
+<gretl-function name="multime" type="matrix" private="1">
+ <params count="7">
+  <param name="m" type="int"/>
+  <param name="n" type="int"/>
+  <param name="k" type="int"/>
+  <param name="h" type="int"/>
+  <param name="iters" type="int"/>
+  <param name="variant" type="int"/>
+  <param name="szmat" type="matrixref" optional="true"/>
+ </params>
+<code>matrix M = zeros(iters, 1)
+scalar mnk
+scalar gflops, et
+matrix c
+# printf &quot;     mnk    secs     Gflops\n&quot;
+loop i=1..iters --quiet
+  matrix a = mnormal(m,k)
+  matrix b = mnormal(k,n)
+  mnk = m*n*k
+  scalar h1 = h
+  if h*mnk &lt; 1.0e8
+    h1 *= int(1.0e8 / (h*mnk))
+  endif
+  set stopwatch
+  if h1 == 1
+    set stopwatch
+    matrix c = a*b
+    et = $stopwatch
+    gflops = 2*mnk/(1.0e9*et)
+  else
+    set stopwatch
+    loop h1 --quiet
+      matrix c = a*b
+    endloop
+    scalar et = $stopwatch
+    gflops = 2*h1*mnk/(1.0e9*et)
+  endif
+  # printf &quot;%10d %6.3fs %10.5f\n&quot;, mnk, et, gflops
+  if !isnull(szmat)
+    szmat[i,] = {m, n, k}
+  endif
+  M[i] = (et == 0) ? (1/0) : gflops
+  if h &gt; 1
+    m *= 2
+    h /= 2
+  elif variant == 1
+    k *= 2
+  elif variant == 2
+    m *= 2
+    n *= 2
+  elif variant == 3
+    m *= 2
+    n *= 2
+    k *= 2
+  endif
+endloop
+return M
+</code>
+</gretl-function>
+<gretl-function name="dgemm_test1" type="matrix" private="1">
+ <params count="7">
+  <param name="m" type="int"/>
+  <param name="n" type="int"/>
+  <param name="k" type="int"/>
+  <param name="h" type="int"/>
+  <param name="iters" type="int"/>
+  <param name="variant" type="int"/>
+  <param name="omp" type="bool"/>
+ </params>
+<code>matrix M = {}
+matrix szmat = zeros(iters, 3)
+# printf &quot;\nVanilla native code:\n\n&quot;
+set blas_mnk_min -1
+set mp_mnk_min -1
+M ~= multime(m, n, k, h, iters, variant, &amp;szmat)
+if omp
+  # printf &quot;\nNative code with OpenMP:\n\n&quot;
+  set mp_mnk_min 0
+  M ~= multime(m, n, k, h, iters, variant)
+endif
+# printf &quot;\nsystem BLAS:\n\n&quot;
+set blas_mnk_min 0
+M ~= multime(m, n, k, h, iters, variant)
+return szmat ~ M
+</code>
+</gretl-function>
+<gretl-function name="dgemm_test2" type="matrix" private="1">
+ <params count="2">
+  <param name="setup" type="int"/>
+  <param name="omp" type="bool"/>
+ </params>
+<code>scalar m n k h iters
+matrix M = {}
+if setup == 1
+  m = 8      # rows of A
+  n = 8      # cols of B
+  k = 8      # cols of A = rows of B
+  h = 100000 # initial number of iterations
+  iters = 10 # number of doublings in multime()
+elif setup == 2
+  m = 10     # rows of A
+  n = 2      # cols of B
+  k = 1000   # cols of A = rows of B
+  h = 50000  # initial number of iterations
+  iters = 10 # number of doublings in multime()
+else
+  m = 10    # rows of A
+  n = 10    # cols of B
+  k = 1000  # cols of A = rows of B
+  h = 2000  # initial number of iterations
+  iters = 6 # number of doublings in multime()
+endif
+matrix szmat = zeros(iters, 3)
+# printf &quot;\nVanilla native code:\n\n&quot;
+set blas_mnk_min -1
+set mp_mnk_min -1
+M = multime(m, n, k, h, iters, 0, &amp;szmat)
+if omp
+  # printf &quot;\nNative code with OpenMP:\n\n&quot;
+  set mp_mnk_min 0 # 100000
+  M ~= multime(m, n, k, h, iters, 0)
+endif
+# printf &quot;\nsystem BLAS:\n\n&quot;
+set blas_mnk_min 0
+M ~= multime(m, n, k, h, iters, 0)
+return szmat ~ M
+</code>
+</gretl-function>
+<gretl-function name="print_dgemm_matrix" type="void" private="1">
+ <params count="3">
+  <param name="m" type="matrixref"/>
+  <param name="j" type="int"/>
+  <param name="k" type="int"/>
+ </params>
+<code>printf &quot;dgemm experiment %d, variant %d, speed in Gflops\n&quot;, j, k
+printf &quot;\n%#10.5v\n&quot;, m
+</code>
+</gretl-function>
+<gretl-function name="dominant" type="scalar" private="1">
+ <params count="1">
+  <param name="m" type="matrix"/>
+ </params>
+<code>scalar ret = 0
+if minc(m) == maxc(m)
+  ret = minc(m)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="method_string" type="string" private="1">
+ <params count="2">
+  <param name="k" type="int"/>
+  <param name="omp" type="bool"/>
+ </params>
+<code>if k == 1
+  return &quot;vanilla&quot;
+elif !omp
+  return $sysinfo.blas
+elif k == 2
+  return &quot;openmp&quot;
+else
+  return $sysinfo.blas
+endif
+</code>
+</gretl-function>
+<gretl-function name="blas_long_string" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>if s == &quot;netlib&quot;
+  return &quot;Netlib&quot;
+elif s == &quot;atlas&quot;
+  return &quot;ATLAS&quot;
+elif s == &quot;openblas&quot;
+  return &quot;OpenBLAS&quot;
+elif s == &quot;mkl&quot;
+  return &quot;Intel MKL&quot;
+elif s == &quot;veclib&quot;
+  return &quot;Apple VecLib&quot;
+else
+  return s
+endif
+</code>
+</gretl-function>
+<gretl-function name="os_string" type="string" private="1">
+<code>string s = $sysinfo.os
+scalar wlen = $sysinfo.wordlen
+string ws = wlen == 32 ? &quot;32-bit&quot; : &quot;64-bit&quot;
+string os
+if s == &quot;windows&quot;
+  sprintf os &quot;Windows (%s)&quot;, ws
+elif s == &quot;osx&quot;
+  sprintf os &quot;Mac OS X (%s)&quot;, ws
+elif s == &quot;linux&quot;
+  sprintf os &quot;Linux (%s)&quot;, ws
+else
+  sprintf os &quot;other (%s)&quot;, ws
+endif
+return os
+</code>
+</gretl-function>
+<gretl-function name="print_system_info" type="void" private="1">
+ <params count="1">
+  <param name="blas" type="string"/>
+ </params>
+<code>printf &quot;Operating system: %s\n&quot;, os_string()
+printf &quot;BLAS library: %s\n&quot;, blas_long_string(blas)
+printf &quot;Number of processors: %d\n&quot;, $sysinfo.nproc
+printf &quot;OpenMP enabled: %s\n&quot;, $sysinfo.omp ? &quot;yes&quot; : &quot;no&quot;
+</code>
+</gretl-function>
+<gretl-function name="analyse_dgemm_matrix" type="void" private="1">
+ <params count="3">
+  <param name="m" type="matrix" const="true"/>
+  <param name="omp" type="bool"/>
+  <param name="score" type="matrixref"/>
+ </params>
+<code>matrix myscore = zeros(3, cols(score))
+matrix best = imaxr(m[,4:])
+scalar d = dominant(best)
+printf &quot;result: &quot;
+if d &gt; 0
+  printf &quot;%s dominates\n&quot;, method_string(d, omp)
+  myscore[1,d] = 1
+else
+  loop i=2..rows(m) --quiet
+    scalar mnk = m[i,1] * m[i,2] * m[i,3]
+    d = dominant(best[i:])
+    if d &gt; 0
+      printf &quot;%s dominates for mnk &gt;= %d\n&quot;, method_string(d, omp), mnk
+      myscore[2,d] = mnk
+      dsml = dominant(best[1:i-1])
+      if dsml &gt; 0
+        printf &quot;  %s dominates for mnk &lt; %d\n&quot;, method_string(dsml, omp), mnk
+        myscore[3,dsml] = mnk
+      endif
+      break
+    endif
+  endloop
+endif
+score |= myscore
+if d == 0
+  printf &quot;no method dominates\n&quot;
+endif
+printf &quot;\n&quot;
+</code>
+</gretl-function>
+<gretl-function name="printvec" type="void" private="1">
+ <params count="1">
+  <param name="v" type="matrixref"/>
+ </params>
+<code>scalar n = nelem(v)
+if n == 1
+  printf &quot;%d\n&quot;, v[1]
+else
+  printf &quot;(&quot;
+  loop i=1..n --quiet
+    printf &quot;%d&quot;, v[i]
+    if i &lt; n
+      printf &quot;, &quot;
+    endif
+  endloop
+  printf &quot;)\n&quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="analyse_score" type="void" private="1">
+ <params count="1">
+  <param name="score" type="matrix" const="true"/>
+ </params>
+<code>scalar ntests = rows(score) / 3
+scalar hi lo
+loop j=1..cols(score) --quiet
+  printf &quot;\n%s -\n&quot;, colname(score, j)
+  scalar d0 = 0
+  scalar d1 = 0
+  scalar d2 = 0
+  matrix above = {}
+  matrix below = {}
+  scalar i = 1
+  loop k=1..ntests --quiet
+    d0 += score[i,j]
+    hi = score[i+1,j]
+    if hi &gt; 0
+      above ~= {hi}
+      d1++
+    endif
+    lo = score[i+2,j]
+    if lo &gt; 0
+      below ~= {lo}
+      d2++
+    endif
+    i += 3
+  endloop
+  printf &quot;  dominates outright in %d out of %d tests\n&quot;, d0, ntests
+  if d1 &gt; 0
+    printf &quot;  dominates in %d test(s) for mnk &gt;= &quot;, d1
+    printvec(&amp;above)
+  endif
+  if d2 &gt; 0
+    printf &quot;  dominates in %d test(s) for mnk &lt; &quot;, d2
+    printvec(&amp;below)
+  endif
+endloop
+printf &quot;\n&quot;
+</code>
+</gretl-function>
+<sample-script>
+include matrix_perf.gfn
+matrix_perf(1234567)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

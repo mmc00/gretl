@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="ModRS_test" ID="1298636955" needs-time-series-data="true" minver="1.8.4">
+<author>Daniel Ventosa-Santaulària</author>
+<version>1.0</version>
+<date>2011-02-25</date>
+<description>Lo's (1991) modified R/S test</description>
+<help>
+--------------------------------------------------------------------------
+ Lo's (1991) modified R/S test
+              Null Hypothesis: short-range dependence
+              Alternative hypothesis: long-range dependence
+--------------------------------------------------------------------------
+ Input:
+ Variable:    Time-series variable to be studied
+ Q:           # of autocovariances used in the long-run variance 
+ CV:          Choose the level of the test (1-3): (1) 1%; (2) 5%; (3) 10%
+              Default: (2) 5%
+--------------------------------------------------------------------------
+ Output: scalar [b] Modified R/S test statistic
+--------------------------------------------------------------------------
+ Important note: The long-run variance is computed using the built-in
+                 function [Further details: Lo, A.W. (1991)&quot;Long-Term
+                 Memory in Stock Market Prices&quot;; Econometrica, Vol. 59
+                 (5), pp. 1279-1313]
+--------------------------------------------------------------------------
+ Function written by:
+ Daniel Ventosa-Santaulària Universidad de Guanajuato, México, and
+ CREATES, Danmark; internet: www.ventosa-santaularia.com
+--------------------------------------------------------------------------
+</help>
+<gretl-function name="ModRS_test" type="scalar">
+ <params count="3">
+  <param name="y" type="series">
+<description>Variable</description>
+  </param>
+  <param name="Q" type="int" min="0" default="10">
+<description>No of autocov in the LR var)</description>
+  </param>
+  <param name="CV" type="int" min="1" max="3" default="2">
+<description>Level 1=1%, 2=5%, 3=10%</description>
+  </param>
+ </params>
+<code>smpl y --contiguous
+T = $nobs
+R=50
+print &quot;-------------------------------------------------&quot;
+print &quot;      Lo's(1991) Modified R/S (Hurst) Test&quot;
+print &quot;-------------------------------------------------&quot;
+print &quot;Null hypothesis: short-range memory&quot;
+print &quot;Alternative hypothesis: long-range memory&quot;
+print &quot;-------------------------------------------------&quot;
+print &quot;Note: this function uses the built-in function&quot;
+print &quot;lrvar to compute the long-run variance (lrvar)&quot;
+print &quot;-------------------------------------------------&quot;
+scalar Qo = round(T^(1/3))
+if Q &gt; Qo
+  printf &quot;Warning: your choise of Q (%.5g) seems too large\n&quot;, Q
+  print &quot;The test may overaccept the null (see Teverovsky et al, 1999)&quot;
+  printf &quot;Maybe you should use %.5g, instead (T^(1/3))\n&quot;, Qo
+  print &quot;-------------------------------------------------&quot;
+endif
+LrV=lrvar(y,Q)
+series y_tr = cum(y - mean(y))
+scalar St = ((max(y_tr)-min(y_tr)) / LrV) / sqrt(T)
+# Critical Values:
+RScv = {0.721, 0.809, 0.861; 2.098, 1.862, 1.747}
+scalar Cvminu = RScv[1,CV]
+scalar Cvplus = RScv[2,CV]
+CVp = {1, 5, 10}
+CVo = CVp[CV]
+printf &quot;Lo's modified R/S statistic: %.5g\n&quot;, St
+print &quot;-------------------------------------------------&quot;
+printf &quot;Critical values: %.5g and %.5g\n&quot;, Cvminu, Cvplus
+if (St &lt; Cvminu || St &gt; Cvplus)
+  printf &quot;Ho rejected at %.3g percent\n&quot;, CVo
+  print &quot;-------------------------------------------------&quot;
+else
+  printf &quot;Ho not rejected at %.3g percent\n&quot;, CVo
+  print &quot;-------------------------------------------------&quot;
+endif
+b = St
+return b
+</code>
+</gretl-function>
+<sample-script>
+include ModRS_test.gfn
+
+open data9-7
+# the &quot;2&quot; accounts for the level of the test (5% in this case)
+TRIAL = ModRS_test(QNC,2)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

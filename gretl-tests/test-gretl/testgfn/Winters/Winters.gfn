@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="Winters" ID="1445348226" needs-qm-data="true" minver="2015a" lives-in-subdir="true">
+<author email="ignacio.diaz-emparanza@ehu.eus">Ignacio Diaz-Emparanza</author>
+<version>1.1</version>
+<date>2015-11-05</date>
+<description>Smoothing and forecasting method for seasonal time series</description>
+<tags>C53 C22</tags>
+<label>Winters</label>
+<menu-attachment>MAINWIN/Variable/Filter</menu-attachment>
+<help>
+pdfdoc:Winters.pdf
+</help>
+<gretl-function name="Winters" type="bundle" no-print="1" pkg-role="gui-main">
+ <params count="6">
+  <param name="y" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="formu" type="bool" default="1">
+<description>Formulation: (0: Additive, 1: Multiplicative)</description>
+  </param>
+  <param name="delta1" type="scalar" min="0" max="1" default="0.3">
+<description>Level smoothness parameter</description>
+  </param>
+  <param name="delta2" type="scalar" min="0" max="1" default="0.1">
+<description>Slope smoothness parameter</description>
+  </param>
+  <param name="delta3" type="scalar" min="0" max="1" default="0.7">
+<description>Seasonality smoothness parameter</description>
+  </param>
+  <param name="pred" type="int" min="0" max="12" default="0">
+<description>Number of final intra-sample predictions</description>
+  </param>
+ </params>
+<code>if $pd==1
+  funcerr &quot;Annual data. There is no seasonality, the Winters component cannot be computed&quot;
+endif
+catch smpl y --contiguous
+if $error
+  funcerr &quot;There are internal missing values&quot;
+endif
+if pred&gt;0
+  smpl ; -pred
+endif
+string sy = argname(y)
+scalar u1=$t2
+genr time
+#Winters
+series s1 = y
+series b1 = NA*const
+series I1 = NA*const
+#Computing initial values for the seasonals based on 2 years data
+scalar s=$pd
+scalar sm1=firstobs(y)+s
+scalar s2=firstobs(y)+2*s-1
+scalar f=$t1
+series dumvar = (obs&lt;=s2 &amp;&amp; obs&gt;=f)
+scalar lobs=$t2-$t1+1 # Current sample size
+if lobs&lt;s2
+  funcerr &quot;Insuficient data (2 years needed)&quot;
+endif
+#Restrict the sample to two years
+smpl dumvar --dummy
+ols y 0 time --quiet
+series yh=y/$yhat
+scalar b11=0
+scalar s11=0
+scalar denom=0
+scalar fs=firstobs(y)+(s-1)
+loop i=f..fs --quiet
+  scalar j1 = i+s
+  scalar b11 = b11 + y[s+i]-y[i]
+  scalar s11 = s11 + y[i]/s
+endloop
+series Is1 = NA*const
+loop i=f..fs --quiet
+  genr Is1[i]= (formu==0) ? y[i]-s11 : y[i]/s11
+endloop
+scalar b11=b11/(s^2)
+#scalar s11=y[fs]
+#Evaluating the components for the rest of the sample
+smpl --full
+bundle b
+b[&quot;yname&quot;]= &quot;@sy&quot;
+b[&quot;@sy&quot;] = y
+b[&quot;pred&quot;] = pred
+b[&quot;u1&quot;] = u1
+if formu==0 #ADDITIVE FORMULATION
+  #initial values (first obs)
+  genr s1[1] = delta1*(y[1]-Is1[1]) + (1-delta1)*(s11+b11)
+  genr b1[1] = delta2*(s1[1]-s11) + (1-delta2)*b11
+  genr I1[1] = delta3*(y[1]-s1[1]-b1[1])+(1-delta3)*Is1[1]
+  loop i=2..s #initial values (rest of the first year)
+    genr s1[i] = delta1*(y[i]-Is1[i]) + (1-delta1)*(s1[i-1]+b1[i-1])
+    genr b1[i] = delta2*(s1[i]-s1[i-1]) + (1-delta2)*b1[i-1]
+    genr I1[i] = delta3*(y[i]-s1[i]-b1[i])+(1-delta3)*Is1[i]
+  endloop
+  smpl --full
+  #Values from the second year
+  loop i=sm1..lobs --quiet
+    genr s1[i] = delta1*(y[i]-I1[i-s]) + (1-delta1)*(s1[i-1]+b1[i-1])
+    genr b1[i] = delta2*(s1[i]-s1[i-1]) + (1-delta2)*b1[i-1]
+    genr I1[i] = delta3*(y[i]-s1[i]-b1[i])+(1-delta3)*I1[i-s]
+  endloop
+  scalar predh = $t2-u1
+  if predh&gt;0
+    loop i=1..predh --quiet
+      scalar ji=lobs+i
+      genr s1[ji] = s1[ji-1]+b1[ji-1]
+      genr b1[ji] = b1[ji-1]
+      genr I1[ji] = I1[ji-s]
+    endloop
+  endif
+  if pred&gt;0
+    smpl y --contiguous
+    matrix my = { y }
+    matrix calpredW = my[$t2-pred+1:$t2]~zeros(pred,1)
+    loop i=1..pred --quiet
+      scalar ji=lobs+i
+      calpredW[i,2] = y[ji]-(s1[ji]+b1[ji]+I1[ji-s])
+    endloop
+    calpredW = calpredW ~ calpredW[,2].*calpredW[,2] ~ abs(calpredW[,2])
+    scalar ECMW = sum(calpredW[,3])/rows(calpredW)
+    scalar EAMW = sum(calpredW[,4])/rows(calpredW)
+    b[&quot;MSEW&quot;] = ECMW
+    b[&quot;MAEW&quot;] = EAMW
+  endif
+  series @sy_W_add = s1+b1+I1
+  setinfo @sy_W_add -d &quot;Winters' additive prediction component&quot; -n &quot;Winters (Additive)&quot;
+  b[&quot;@sy_W_add&quot;]= @sy_W_add
+  setnote(b, &quot;@sy_W_add&quot;, &quot;Winter's additive smoother&quot;)
+  b[&quot;formu&quot;] = 0
+else  #MULTIPLICATIVE FORMULATION
+  #initial values
+  genr s1[1] = delta1*(y[1]/Is1[1]) + (1-delta1)*(s11+b11)
+  genr b1[1] = delta2*(s1[1]-s11) + (1-delta2)*b11
+  genr I1[1] = delta3*(y[1]/s1[1])+(1-delta3)*Is1[1]
+  loop i=2..s --quiet
+    genr s1[i] = delta1*(y[i]/Is1[i]) + (1-delta1)*(s1[i-1]+b1[i-1])
+    genr b1[i] = delta2*(s1[i]-s1[i-1]) + (1-delta2)*b1[i-1]
+    genr I1[i] = delta3*(y[i]/s1[i])+(1-delta3)*Is1[i]
+  endloop
+  smpl --full
+  #values from the second year
+  loop i=sm1..lobs --quiet
+    genr s1[i] = delta1*(y[i]/I1[i-s]) + (1-delta1)*(s1[i-1]+b1[i-1])
+    genr b1[i] = delta2*(s1[i]-s1[i-1]) + (1-delta2)*b1[i-1]
+    genr I1[i] = delta3*(y[i]/s1[i])+(1-delta3)*I1[i-s]
+  endloop
+  scalar predh = $t2-u1
+  if predh&gt;0
+    loop i=1..predh --quiet
+      scalar ji=lobs+i
+      genr s1[ji] = s1[ji-1]+b1[ji-1]
+      genr b1[ji] = b1[ji-1]
+      genr I1[ji] = I1[ji-s]
+    endloop
+  endif
+  if pred&gt;0
+    smpl y --contiguous
+    matrix my = { y }
+    matrix calpredW = my[$t2-pred+1:$t2]~zeros(pred,1)
+    loop i=1..pred --quiet
+      scalar ji=lobs+i
+      calpredW[i,2] = y[ji]-(s1[ji]+b1[ji])*I1[ji-s]
+    endloop
+    calpredW = calpredW ~ calpredW[,2].*calpredW[,2] ~ abs(calpredW[,2])
+    scalar ECMW = sum(calpredW[,3])/rows(calpredW)
+    scalar EAMW = sum(calpredW[,4])/rows(calpredW)
+    b[&quot;MSEW&quot;] = ECMW
+    b[&quot;MAEW&quot;] = EAMW
+  endif
+  series @sy_W_mul = (s1+b1)*I1
+  setinfo @sy_W_mul -d &quot;Winters' multiplicative prediction component&quot; -n &quot;Winters (multiplicative)&quot;
+  #list salida = @sy_W_mul
+  b[&quot;@sy_W_mul&quot;]= @sy_W_mul
+  b[&quot;formu&quot;] = 1
+  setnote(b, &quot;@sy_W_mul&quot;, &quot;Winter's multiplicative smoother&quot;)
+endif
+b[&quot;@sy_W_trend&quot;] = s1+b1
+b[&quot;@sy_W_seas&quot;] = I1
+setnote(b, &quot;@sy&quot;, &quot;original series&quot;)
+Winters_print(&amp;b)
+return b
+</code>
+</gretl-function>
+<gretl-function name="Winters_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>string sy = b[&quot;yname&quot;]
+#if $version&lt;20154
+catch series @sy = b[&quot;@sy&quot;]
+if $error
+  matrix tmp = b[&quot;@sy&quot;]
+  if rows(tmp) &lt; $nobs
+    tmp |= ones($nobs - rows(tmp), 1) * NA
+    series @sy = tmp
+  endif
+endif
+#else
+#    series @sy = b[&quot;@sy&quot;]
+#endif
+scalar formu = b[&quot;formu&quot;]
+string form = (formu == 0) ? &quot;add&quot; : &quot;mul&quot;
+string formul = (formu == 0) ? &quot;Additive&quot; : &quot;Multiplicative&quot;
+#if $version &lt; 20154
+catch series @sy_W_@form = b[&quot;@sy_W_@form&quot;]
+if $error
+  matrix tmp = b[&quot;@sy_W_@form&quot;]
+  if rows(tmp) &lt; $nobs
+    tmp |= ones($nobs - rows(tmp), 1) * NA
+    series @sy_W_@form = tmp
+  endif
+endif
+#else
+#    series @sy_W_@form = b[&quot;@sy_W_@form&quot;]
+#endif
+scalar pred = b[&quot;pred&quot;]
+scalar u1 = b[&quot;u1&quot;]
+series @sy_W_trend = b[&quot;@sy_W_trend&quot;]
+series @sy_W_seas =  b[&quot;@sy_W_seas&quot;]
+print @sy @sy_W_@form @sy_W_trend @sy_W_seas --byobs
+if pred&gt;0
+  scalar MSE = b[&quot;MSEW&quot;]
+  scalar MAE = b[&quot;MAEW&quot;]
+  printf &quot;\nStatistics for the quality of predictions:\n\n&quot;
+  printf &quot;         Mean Sq. Err. \t Mean. Abs. Err. \n&quot;
+  printf &quot;         --------------\t--------------\n&quot;
+  printf &quot;WINTERS:    %4.4f \t %4.4f\n\n&quot;, MSE, MAE
+  print &quot;(@formul formulation)&quot;
+  printf &quot;\n\nNumber of predictions: %.0f (%s-%s) \n\n&quot;, pred, obslabel(u1+1), obslabel(u1+pred)
+endif
+</code>
+</gretl-function>
+<gretl-function name="Winters_plot" type="void" no-print="1" pkg-role="bundle-plot">
+ <params count="2">
+  <param name="b" type="bundleref"/>
+  <param name="ptype" type="int" min="0" max="1" default="0">
+<description>Plot type</description>
+<labels count="2">
+"Orig + Forecast" "Orig + trend + seas" </labels>
+  </param>
+ </params>
+<code>string sy = b[&quot;yname&quot;]
+series @sy = b[&quot;@sy&quot;]
+scalar formu = b[&quot;formu&quot;]
+string form = (formu == 0) ? &quot;add&quot; : &quot;mul&quot;
+series @sy_W_@form = b[&quot;@sy_W_@form&quot;]
+series @sy_W_trend = b[&quot;@sy_W_trend&quot;]
+series @sy_W_seas =  b[&quot;@sy_W_seas&quot;]
+if ptype == 0
+  gnuplot @sy @sy_W_@form --with-lines --time-series --output=display
+else
+  gnuplot @sy @sy_W_trend @sy_W_seas --with-lines --time-series --output=display
+endif
+</code>
+</gretl-function>
+<sample-script>
+include Winters.gfn
+open data9-3.gdt
+
+# formu=1, delta1=0.5, delta2=0.1, delta3=0.7, intra-sample predictions=4
+bundle BW=Winters(reskwh, 1, 0.5, 0.1, 0.7, 4)
+series reskwh_W_mul = BW.reskwh_W_mul
+
+#Adding space for post-sample predictions
+dataset addobs +4
+#
+#Running the function with formulation additive (formu=0) and default values:
+#delta1=0.3, delta2=0.1, delta3=0.7
+bundle BW2=Winters(reskwh, 0)
+series reskwh_W_add = BW2.reskwh_W_add
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

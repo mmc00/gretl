@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="corresp" ID="1423206675" no-data-ok="true" minver="1.10.0">
+<author email="r.lucchetti@univpm.it">Riccardo &quot;Jack&quot; Lucchetti</author>
+<version>0.11</version>
+<date>2015-02-06</date>
+<description>Simple Correspondence Analysis</description>
+<help>
+Simple Correspondence Analysis
+
+Public functions:
+
+ca_series(series R, series C)
+    generates a CA bundle from series (using labels if available)		 
+
+ca_matrix(matrix X)
+    generates a CA bundle from a contingency table
+
+ca_suprow(bundle *b, matrix X, string label)
+ca_supcol(bundle *b, matrix X, string label)
+    add supplementary rows/columns
+    
+ca_printout(bundle *b)
+    print out the results
+
+ca_gsave(bundle *b, scalar ax, scalar ay, string filename)
+    save a CA plot of axes ax and ay (negative to flip) to filename
+    
+ca_plot(bundle *b, scalar ax, scalar ay, string filename)
+    display a CA plot of axes ax and ay (negative to flip)
+</help>
+<gretl-function name="ca_matrix" type="bundle">
+ <params count="2">
+  <param name="X" type="matrix"/>
+  <param name="do_names" type="bool" default="0"/>
+ </params>
+<code>bundle ret
+# 0: principal, 1: symmetric (default)
+ret[&quot;method&quot;] = 1
+# ret[&quot;print-function&quot;] = &quot;corresp/printout&quot;
+nrows = rows(X)
+ncols = cols(X)
+ret[&quot;nrows&quot;] = nrows
+ret[&quot;ncols&quot;] = ncols
+ret[&quot;xmag&quot;] = 1.15
+ret[&quot;ymag&quot;] = 1.1
+scalar n = sumc(sumr(X))
+matrix r = sumc(X) / n
+matrix c = sumr(X) / n
+ret[&quot;X&quot;] = X
+ret[&quot;n&quot;] = n
+ret[&quot;r&quot;] = r
+ret[&quot;c&quot;] = c
+ret[&quot;suprows&quot;] = {}
+ret[&quot;supcols&quot;] = {}
+ret[&quot;suprlab&quot;] = &quot;&quot;
+ret[&quot;supclab&quot;] = &quot;&quot;
+if do_names
+  ret[&quot;rlabels&quot;] = default_names(&quot;row&quot;, nrows)
+  ret[&quot;clabels&quot;] = default_names(&quot;col&quot;, ncols)
+endif
+matrix P = X/n - c*r
+ret[&quot;P&quot;] = P
+# prepare rescaled P
+matrix sr = sqrt(r)
+matrix sc = sqrt(c)
+P = P ./ (sc*sr)
+# compute inertias
+matrix Ir Ic
+InTot = Inertia(P, &amp;Ir, &amp;Ic)
+ret[&quot;inertia&quot;] = InTot
+ret[&quot;rinertia&quot;] = Ir
+ret[&quot;cinertia&quot;] = Ic
+# do svd and profile coordinates
+matrix A B F G
+d = svd(P, &amp;A, &amp;B)
+ret[&quot;d&quot;] = d
+matrix stdF = A ./sc
+matrix stdG = (B ./sr)'
+ret[&quot;stdF&quot;] = stdF
+ret[&quot;stdG&quot;] = stdG
+matrix F = stdF .* d
+matrix G = stdG .* d
+# FIXME; this could probably be simplified
+ret[&quot;cos2r&quot;] = F.^2 .* c  ./ Ir
+ret[&quot;cos2c&quot;] = G.^2 .* r' ./ Ic'
+return ret
+</code>
+</gretl-function>
+<gretl-function name="ca_supcol" type="void">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="X" type="matrix"/>
+  <param name="label" type="string"/>
+ </params>
+<code># add a supplementary column
+n = b[&quot;nrows&quot;]
+if (rows(X) == n) &amp;&amp; (cols(X) == 1)
+  mtmp = b[&quot;supcols&quot;] ~ (X ./ sumc(X))
+  sprintf stmp &quot;%s%s &quot;, b[&quot;supclab&quot;], label
+  b[&quot;supcols&quot;] = mtmp
+  b[&quot;supclab&quot;] = stmp
+endif
+</code>
+</gretl-function>
+<gretl-function name="ca_gsave" type="void">
+ <params count="4">
+  <param name="b" type="bundleref"/>
+  <param name="ax" type="scalar" default="1">
+<description>x axis</description>
+  </param>
+  <param name="ay" type="scalar" default="2">
+<description>y axis</description>
+  </param>
+  <param name="filename" type="string"/>
+ </params>
+<code>adcgrph(&amp;b, ax, ay, 1, filename)
+</code>
+</gretl-function>
+<gretl-function name="ca_series" type="bundle">
+ <params count="2">
+  <param name="R" type="series">
+<description>series for rows</description>
+  </param>
+  <param name="C" type="series">
+<description>series for columns</description>
+  </param>
+ </params>
+<code>bundle ret = ca_matrix(mxtab(R, C), 0)
+strings s = strvals(R)
+string sname = argname(R)
+if nelem(s) == 0
+  # printf &quot;value labels for %s NOT found\n&quot;, sname
+  ret[&quot;rlabels&quot;] = names_from_series(sname, R)
+else
+  # printf &quot;found value labels for %s\n&quot;, sname
+  ret[&quot;rlabels&quot;] = s
+endif
+strings s = strvals(C)
+string sname = argname(C)
+if nelem(s) == 0
+  # printf &quot;value labels for %s NOT found\n&quot;, sname
+  ret[&quot;clabels&quot;] = names_from_series(sname, C)
+else
+  # printf &quot;found value labels for %s\n&quot;, sname
+  ret[&quot;clabels&quot;] = s
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="ca_suprow" type="void">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="X" type="matrix"/>
+  <param name="label" type="string"/>
+ </params>
+<code># add a supplementary row
+n = b[&quot;ncols&quot;]
+if (rows(X) == 1) &amp;&amp; (cols(X) == n)
+  mtmp = b[&quot;suprows&quot;] | (X ./ sumr(X))
+  sprintf stmp &quot;%s%s &quot;, b[&quot;suprlab&quot;], label
+  b[&quot;suprows&quot;] = mtmp
+  b[&quot;suprlab&quot;] = stmp
+endif
+</code>
+</gretl-function>
+<gretl-function name="ca_printout" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>printf &quot;---------------------------------------------------------\n&quot;
+printf &quot;Rows\n&quot;
+printf &quot;---------------------------------------------------------\n&quot;
+dstat(b[&quot;rlabels&quot;], b[&quot;c&quot;], b[&quot;rinertia&quot;], b[&quot;cos2r&quot;])
+printf &quot;\n&quot;
+printf &quot;---------------------------------------------------------\n&quot;
+printf &quot;Columns\n&quot;
+printf &quot;---------------------------------------------------------\n&quot;
+dstat(b[&quot;clabels&quot;], (b[&quot;r&quot;])', (b[&quot;cinertia&quot;])', b[&quot;cos2c&quot;])
+printf &quot;\n&quot;
+printf &quot;---------------------------------------------------------\n&quot;
+printf &quot;Inertia\n&quot;
+printf &quot;---------------------------------------------------------\n&quot;
+instat(b[&quot;d&quot;])
+</code>
+</gretl-function>
+<gretl-function name="ca_plot" type="void">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="ax" type="scalar" default="1">
+<description>x axis</description>
+  </param>
+  <param name="ay" type="scalar" default="2">
+<description>y axis</description>
+  </param>
+ </params>
+<code>adcgrph(&amp;b, ax, ay, 0, &quot;display&quot;)
+</code>
+</gretl-function>
+<gretl-function name="Inertia" type="scalar" private="1">
+ <params count="3">
+  <param name="P" type="matrix"/>
+  <param name="Ir" type="matrixref"/>
+  <param name="Ic" type="matrixref"/>
+ </params>
+<code>P2 = P .* P
+Ic = sumc(P2)
+Ir = sumr(P2)
+return sumr(Ic)
+</code>
+</gretl-function>
+<gretl-function name="names_from_series" type="strings" private="1">
+ <params count="2">
+  <param name="prefix" type="string"/>
+  <param name="x" type="series"/>
+ </params>
+<code>matrix v = values(x)
+scalar n = rows(v)
+strings ret = array(n)
+loop for i=1..n --quiet
+  s = sprintf(&quot;%s_%d &quot;, prefix, v[i])
+  ret[i] = s
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="dstat" type="void" private="1">
+ <params count="4">
+  <param name="names" type="strings"/>
+  <param name="m" type="matrix"/>
+  <param name="in" type="matrix"/>
+  <param name="c2" type="matrix"/>
+ </params>
+<code>scalar n = rows(m)
+itot = sumc(in)
+printf &quot;                         Mass    Inertia     Perc.\n&quot;
+printf &quot;DESCRIPTIVE STATS:      (x100)     (x100)  Inertia\n\n&quot;
+loop for i=1..n -q
+  perc = 100*in[i]/itot
+  printf &quot;%20s %8.2f %10.4f (%6.2f%%)\n&quot;, names[i], 100*m[i], 100*in[i], perc
+endloop
+printf &quot;\n&quot;
+printf &quot;Cos^2 Index:         &quot;
+axes = cols(c2)-1
+loop for i=1..axes -q
+  printf &quot;  Axis %d&quot;, i
+endloop
+printf &quot;\n&quot;
+loop for i=1..n -q
+  cos2 = 100*c2[i,1:axes]
+  printf &quot;%20s %8.2f&quot;, names[i], cos2
+endloop
+</code>
+</gretl-function>
+<gretl-function name="instat" type="void" private="1">
+ <params count="1">
+  <param name="d" type="matrix"/>
+ </params>
+<code>scalar n = cols(d)
+d2 = d.^2
+itot = sumr(d2)
+printf &quot;Total inertia = %12.8f\n&quot;, itot
+ci = 0
+loop for i=1..(n-1) -q
+  x = d2[i]
+  ci += x
+  printf &quot;axis %2d: %10.4f (%6.2f%%, cum. %6.2f%%)\n&quot;, i, x, 100*x/itot, 100*ci/itot
+endloop
+</code>
+</gretl-function>
+<gretl-function name="get_coordinates" type="matrix" private="1">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="ax" type="scalar"/>
+  <param name="ay" type="scalar"/>
+ </params>
+<code>real_ax = abs(ax)
+flip_x =  ax&lt;0
+real_ay = abs(ay)
+flip_y =  ay&lt;0
+sel = {real_ax, real_ay}
+d = b[&quot;d&quot;]
+if b[&quot;method&quot;] == 0
+  norm = d
+elif b[&quot;method&quot;] == 1
+  norm = sqrt(d)
+endif
+matrix F = b[&quot;stdF&quot;] .* norm
+matrix G = b[&quot;stdG&quot;] .* norm
+if flip_x
+  F[,real_ax] = -F[,real_ax]
+  G[,real_ax] = -G[,real_ax]
+endif
+if flip_y
+  F[,real_ay] = -F[,real_ay]
+  G[,real_ay] = -G[,real_ay]
+endif
+ret = F[,sel] | G[, sel]
+return ret
+</code>
+</gretl-function>
+<gretl-function name="adcgrph" type="void" private="1">
+ <params count="6">
+  <param name="b" type="bundleref"/>
+  <param name="ax" type="scalar"/>
+  <param name="ay" type="scalar"/>
+  <param name="adjust" type="bool"/>
+  <param name="out" type="string"/>
+  <param name="what" type="scalar" min="0" max="2" default="2"/>
+ </params>
+<code>fn = &quot;@dotdir/foo.gp&quot;
+skiprows = (what == 1)
+skipcols = (what == 0)
+scalar xmag = b[&quot;xmag&quot;]
+scalar ymag = b[&quot;ymag&quot;]
+real_ax = abs(ax)
+real_ay = abs(ay)
+TI = b[&quot;inertia&quot;]
+d = b[&quot;d&quot;]
+matrix F G
+coord = get_coordinates(&amp;b, ax, ay)
+mins = minc(coord)
+maxs = maxc(coord)
+nr = b[&quot;nrows&quot;]
+nc = b[&quot;ncols&quot;]
+scalar minx = mins[1] * xmag
+scalar maxx = maxs[1] * xmag
+scalar miny = mins[2] * ymag
+scalar maxy = maxs[2] * ymag
+scalar ratio = (maxy-miny)/(maxx-minx)
+scalar wide = (nc&gt;nr)
+if b[&quot;method&quot;] == 0
+  title = &quot;Principal coordinates&quot;
+elif b[&quot;method&quot;] == 1
+  title = &quot;Symmetric coordinates&quot;
+endif
+set force_decpoint on
+outfile @fn --write
+printf &quot;set title \&quot;%s\&quot;\n&quot;, title
+printf &quot;set xlabel \&quot;Axis %d: %g (%5.2f%%)\n&quot;, real_ax, d[real_ax], 100*d[real_ax]^2/TI
+printf &quot;set ylabel \&quot;Axis %d: %g (%5.2f%%)\n&quot;, real_ay, d[real_ay], 100*d[real_ay]^2/TI
+printf &quot;set xrange [%g:%g]\n&quot;, minx, maxx
+printf &quot;set yrange [%g:%g]\n&quot;, miny, maxy
+if adjust
+  printf &quot;set size ratio %g\n&quot;, ratio
+endif
+printf &quot;unset key\n&quot;
+printf &quot;set xzeroaxis\nset yzeroaxis\n&quot;
+if (!skiprows)
+  F = coord[1:nr,]
+  names = b[&quot;rlabels&quot;]
+  loop for i=1..nr -q
+    printf &quot;set label \&quot;%s\&quot; at %g, %g &quot;, names[i], F[i,1], F[i,2]
+    printf &quot;center tc rgb \&quot;#FF0000\&quot;\n&quot;
+  endloop
+  supp = b[&quot;suprows&quot;]
+  ns = rows(supp)
+  if ns &gt; 0
+    supp = (supp .- b[&quot;r&quot;]) * b[&quot;stdG&quot;]
+    loop for i=1..ns -q
+      x = supp[i,]
+      lab = strsplit(b[&quot;suprlab&quot;], i)
+      printf &quot;set label \&quot;%s\&quot; at %g, %g&quot;, lab, x[real_ax], x[real_ay]
+      printf &quot;center tc rgb \&quot;#FF0000\&quot;\n&quot;
+    endloop
+  endif
+endif
+if (!skipcols)
+  G = coord[nr+1:nr+nc,]
+  names = b[&quot;clabels&quot;]
+  loop for i=1..nc -q
+    string s = names[i]
+    printf &quot;set label \&quot;%s\&quot; at %g, %g center tc rgb \&quot;#0000FF\&quot;\n&quot;, s, G[i,1], G[i,2]
+  endloop
+  supp = b[&quot;supcols&quot;]
+  ns = cols(supp)
+  if ns &gt; 0
+    supp = (supp .- b[&quot;c&quot;]) ' (b[&quot;stdF&quot;])
+    loop for i=1..ns -q
+      x = supp[i,]
+      lab = strsplit(b[&quot;supclab&quot;], i)
+      printf &quot;set label \&quot;%s\&quot; at %g, %g center tc rgb \&quot;#0000FF\&quot;\n&quot;, lab, x[real_ax], x[real_ay]
+    endloop
+  endif
+endif
+printf &quot;plot \&quot;-\&quot; with dots\n&quot;
+if (!skiprows)
+  loop for i=1..nr -q
+    printf &quot;%g, %g\n&quot;, F[i,1], F[i,2]
+  endloop
+endif
+if (!skipcols)
+  loop for i=1..nc -q
+    printf &quot;%g, %g\n&quot;, G[i,1], G[i,2]
+  endloop
+endif
+printf &quot;e\n&quot;
+outfile --close
+gnuplot --input=@fn --output=@out
+</code>
+</gretl-function>
+<sample-script>
+include corresp.gfn
+open http://ricardo.ecn.wfu.edu/pub/gretldata/smoking.gdt
+
+xtab RANK SMOKING
+xtab RANK SMOKING --row
+
+# --- canonical example from Greenacre
+
+bundle uno = ca_series(RANK, SMOKING)
+ca_printout(&amp;uno)
+ca_plot(&amp;uno, -1, -2)
+ca_plot(&amp;uno, 3, -2)
+
+# --- now the same using only matrices and string arrays
+
+matrix X = mxtab(RANK, SMOKING)
+bundle due = ca_matrix(X)
+due[&quot;rlabels&quot;] = strsplit(&quot;sen_mgr jnr_mgr sen_emp jun_emp sec&quot;)
+due[&quot;clabels&quot;] = strsplit(&quot;none light medium heavy&quot;)
+
+ca_printout(&amp;due)
+ca_plot(&amp;due, 1, -2)
+ca_plot(&amp;due, 3, -2)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

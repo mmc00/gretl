@@ -1,0 +1,76 @@
+=== /home/cottrell/stats/test-gretl/testgfn ===
+output/BMA.gfn.out vs newout/BMA.gfn.out:
+137c137
+< Total CPU time: 0.070043 min.
+---
+> Total CPU time: 0.067298 min.
+246c246
+< Total CPU time: 0.069643 min.
+---
+> Total CPU time: 0.067092 min.
+output/felogit.gfn.out vs newout/felogit.gfn.out:
+76c76
+< Generated scalar et = 2.08641
+---
+> Generated scalar et = 1.83963
+78c78
+< Elapsed time = 2.08641 seconds
+---
+> Elapsed time = 1.83963 seconds
+output/GJR-garchm.gfn.out vs newout/GJR-garchm.gfn.out:
+53a54,55
+> In regard to function garchm (package GJR-garchm):
+> Warning: pow: Numerical argument out of domain
+64,65c66,67
+< Function evaluations: 150
+< Evaluations of gradient: 35
+---
+> Function evaluations: 106
+> Evaluations of gradient: 27
+73,78c75,80
+<   theta       0.0518876   0.0189413     2.739    0.0062   ***
+<   omega       0.0485226   0.00549272    8.834    1.01e-18 ***
+<   alpha1      0.0496916   0.0206699     2.404    0.0162   **
+<   alpha2     -0.0142104   0.0204908    -0.6935   0.4880  
+<   gamma1      0.0792290   0.0118694     6.675    2.47e-11 ***
+<   beta1       0.883272    0.0118110    74.78     0.0000   ***
+---
+>   theta       0.0518878   0.0189413     2.739    0.0062   ***
+>   omega       0.0485230   0.00549277    8.834    1.01e-18 ***
+>   alpha1      0.0496904   0.0206698     2.404    0.0162   **
+>   alpha2     -0.0142091   0.0204908    -0.6934   0.4880  
+>   gamma1      0.0792297   0.0118694     6.675    2.47e-11 ***
+>   beta1       0.883271    0.0118111    74.78     0.0000   ***
+118c120
+<     9   0.0406  **    0.0403 **       6.3145  [0.708]
+---
+>     9   0.0406  **    0.0403 **       6.3146  [0.708]
+261a264,265
+> In regard to function garchm (package GJR-garchm):
+> Warning: pow: Numerical argument out of domain
+272,273c276,277
+< Function evaluations: 108
+< Evaluations of gradient: 25
+---
+> Function evaluations: 139
+> Evaluations of gradient: 30
+281,282c285,286
+<   theta      0.0713294   0.0184747      3.861   0.0001    ***
+<   omega      0.0476007   0.00507465     9.380   6.59e-21  ***
+---
+>   theta      0.0713295   0.0184747      3.861   0.0001    ***
+>   omega      0.0476007   0.00507464     9.380   6.59e-21  ***
+output/Threshold_Panel.gfn.out vs newout/Threshold_Panel.gfn.out:
+259c259
+<  This took 21.47 seconds
+---
+>  This took 18.69 seconds
+output/var_chow.gfn.out vs newout/var_chow.gfn.out:
+158c158
+< The procedure took 2.52 seconds
+---
+> The procedure took 2.35 seconds
+398c398
+< The procedure took 2.62 seconds
+---
+> The procedure took 2.41 seconds

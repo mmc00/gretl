@@ -1,0 +1,949 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="ivintreg" ID="1332432612" no-data-ok="true" minver="1.9.7">
+<author>Riccardo &quot;Jack&quot; Lucchetti</author>
+<version>1.0</version>
+<date>2012-03-22</date>
+<description>Instrumental-variable Interval Regression</description>
+<help>
+This function package contains the functions for performing IV
+interval regression, as per Bettin-Lucchetti(forthcoming), Empirical
+Economics (DOI: 10.1007/s00181-011-0493-9).
+
+The public functions you can use in scripts are: 
+
+*----------------------------------
+ivintreg
+
+Parameters: 
+	    series inf (Lower limit), 
+	    series sup (Upper limit), 
+	    list y2 (Endogenous regressors)
+	    list X1 (Exogenous regressors)
+	    list X2 (Instruments)
+	    scalar est_type (Estimator)
+	    	   1: 2-step
+		   2: LIML (default)
+            scalar verbose (Verbosity)
+	           0: print nothing
+		   1: print results (default)
+		   2: print iterations (LIML only)
+            scalar robust (&quot;Robust se&quot;)
+	           0: Hessian
+		   1: Sandwich (default)
+
+Performs estimation and returns a bundle containing the results
+
+*----------------------------------
+ivintreg_print
+
+Parameters: 
+	    bundle *mod
+
+Prints out the results from the bundle; returns nothing
+</help>
+<gretl-function name="ivintreg" type="bundle">
+ <params count="8">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="est_type" type="scalar" min="1" max="2" default="2"/>
+  <param name="verbose" type="scalar" default="0"/>
+  <param name="robust" type="bool" default="1"/>
+ </params>
+<code>/* bundle setup */
+bundle ret
+ret[&quot;k1&quot;]   = nelem(X1)
+ret[&quot;k2&quot;]   = nelem(X2)
+ret[&quot;m&quot;]    = nelem(y2)
+ret[&quot;ylabel0&quot;] = argname(inf)
+ret[&quot;ylabel1&quot;] = argname(sup)
+ret[&quot;y2_names&quot;] = varname(y2)
+ret[&quot;X1_names&quot;] = varname(X1)
+ret[&quot;X2_names&quot;] = varname(X2)
+ret[&quot;est_type&quot;] = est_type
+ret[&quot;robust&quot;] = (est_type == 2) &amp;&amp; robust
+/*
+valid observations: all explanatory + instruments
+and at leas one nonmissing bewtween inf and sup
+*/
+list inst = X1 X2
+list everything = y2 inst
+data_ok = ok(inf) || ok(sup)
+smpl ok(everything) &amp;&amp; data_ok --restrict
+ret[&quot;nobs&quot;] = $nobs
+/* estimation */
+if est_type == 1
+  err = ivinter_ts(&amp;ret, inf, sup, y2, X1, X2, verbose)
+elif est_type == 2
+  err = ivinter_ml(&amp;ret, inf, sup, y2, X1, X2, verbose, robust)
+endif
+/* estimation */
+if verbose&gt;0
+  ivintreg_print(&amp;ret)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="GUI_ivintreg" type="bundle" pkg-role="gui-main">
+ <params count="8">
+  <param name="inf" type="series">
+<description>Lower limit</description>
+  </param>
+  <param name="sup" type="series">
+<description>Upper limit</description>
+  </param>
+  <param name="y2" type="list">
+<description>Endogenous regressors</description>
+  </param>
+  <param name="X1" type="list">
+<description>Exogenous regressors</description>
+  </param>
+  <param name="X2" type="list">
+<description>Instruments</description>
+  </param>
+  <param name="est_type" type="int" min="1" max="2" default="2">
+<description>Estimator</description>
+<labels count="2">
+"2-step" "LIML" </labels>
+  </param>
+  <param name="verbose" type="int" min="0" max="2" default="1">
+<description>Verbosity</description>
+  </param>
+  <param name="robust" type="bool" default="1">
+<description>Robust se</description>
+  </param>
+ </params>
+<code>bundle ret = ivintreg(inf, sup, y2, X1, X2, est_type, verbose, robust)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="ivintreg_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="mod" type="bundleref"/>
+ </params>
+<code>if mod[&quot;est_type&quot;] == 1
+  string est_string = &quot;two-step&quot;
+elif mod[&quot;est_type&quot;] == 2
+  string est_string = &quot;LIML&quot;
+endif
+string y2_names = mod[&quot;y2_names&quot;]
+printf &quot;\n------------------------------------------------------------------&quot;
+printf &quot;\nIV interval estimation (%s)&quot;, est_string
+if mod[&quot;robust&quot;]
+  printf &quot;, robust standard errors&quot;
+endif
+printf &quot;\n------------------------------------------------------------------&quot;
+printf &quot;\nInstrumented: %s&quot;, y2_names
+printf &quot;\nInstruments:  %s&quot;, mod[&quot;X2_names&quot;]
+printf &quot;\n------------------------------------------------------------------\n&quot;
+scalar m  = mod[&quot;m&quot;]
+scalar k1 = mod[&quot;k1&quot;]
+scalar k2 = mod[&quot;k2&quot;]
+scalar k  = k1+k2
+coeff     = mod[&quot;coeff&quot;]
+stderr    = mod[&quot;stderr&quot;]
+order = seq(m+1, m+k1) ~ seq(1,m)
+cfse = coeff[order] ~ stderr[order]
+vnam = mod[&quot;X1_names&quot;] ~ &quot;,&quot; ~ y2_names
+vnam += &quot;,Sample size,sigma&quot;
+matrix adds = mod[&quot;nobs&quot;] | mod[&quot;sigma&quot;]
+scalar loglik = mod[&quot;lnl&quot;]
+if ok(loglik)
+  matrix adds |=  { loglik }
+  vnam += &quot;,Log-likelihood&quot;
+endif
+modprint cfse vnam adds
+WT = mod[&quot;exotest&quot;]
+pv = pvalue(X, m, WT)
+printf &quot;  Wald test for exogeneity: %8.4f (chi^2(%d), pvalue = %8.6f)\n&quot;, WT, m, pv
+if mod[&quot;est_type&quot;] == 2
+  LR = mod[&quot;overid_test&quot;]
+  if (k2&gt;m)
+    printf &quot;  Test for over-identifying restrictions: %8.4f (chi^2(%d), pvalue = %8.6f)\n&quot;, LR, k2-m, pvalue(x, k2-m, LR)
+  else
+    printf &quot;  Model is exactly identified; should be %g == 0\n&quot;, LR
+  endif
+endif
+printf &quot;\n&quot;
+#redform_printout(y2, X1, X2, coeff, V)
+</code>
+</gretl-function>
+<gretl-function name="int_scorebyobs" type="matrix" private="1">
+ <params count="4">
+  <param name="theta" type="matrix"/>
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="X" type="list"/>
+ </params>
+<code>/*
+score matrix (Txk) for the ordinary interval model
+*/
+k = nelem(X)
+beta = theta[1:k]
+sigma = theta[k+1]
+z = lincomb(X,beta)
+e = (inf - z)/sigma
+E = (sup - z)/sigma
+f0 = misszero(dnorm(e))
+f1 = misszero(dnorm(E))
+Df = f0 - f1
+den = ok(sup) ? (ok(inf) ? cnorm(E) + pvalue(z,e) - 1: cnorm(E)) : pvalue(z,e)
+den *= sigma
+ehat = Df / den
+lambda = ok(sup) ? (ok(inf) ? (f0*e - f1*E)/den : ehat*E) :  ehat*e
+score = ({ehat} .* {X}) ~ {lambda}
+return score
+</code>
+</gretl-function>
+<gretl-function name="int_ahess" type="matrix" private="1">
+ <params count="4">
+  <param name="theta" type="matrix"/>
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="X" type="list"/>
+ </params>
+<code>/*
+Hessian matrix (kxk) for the ordinary interval model
+(total loglikelihood)
+*/
+k = nelem(X)
+H = zeros(k+1, k+1)
+beta = theta[1:k]
+sigma = theta[k+1]
+z = lincomb(X,beta)
+e = (inf - z)/sigma
+E = (sup - z)/sigma
+f0 = misszero(dnorm(e))
+f1 = misszero(dnorm(E))
+Df = f0 - f1
+den = ok(sup) ? (ok(inf) ? cnorm(E) + pvalue(z,e) - 1: cnorm(E)) : pvalue(z,e)
+den *= sigma
+ehat = Df / den
+lambda = ok(sup) ? (ok(inf) ? (f0*e - f1*E)/den : ehat*E) :  ehat*e
+w = sqrt(ehat^2 - lambda/sigma)
+mX = {X}
+H1 = mX .* {w}
+H[1:k, 1:k] = -H1'H1
+mu = (f0 * (e^2-1) - f1 * (E^2-1)) / den
+w = (mu/sigma - ehat*lambda)
+H2 = mX' * {w}
+H[k+1, 1:k] = H2'
+H[1:k, k+1] = H2
+w1 = (f0*e*(1-e^2) - f1*E*(1-E^2))/(sigma * den)
+w2 = lambda^2 + lambda/sigma
+sw1 = sum(w1)
+sw2 = sum(w2)
+H[k+1, k+1] = -(sw1 + sw2)
+return H
+</code>
+</gretl-function>
+<gretl-function name="IV_H" type="matrix" private="1">
+ <params count="9">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="Y" type="list"/>
+  <param name="X" type="list"/>
+  <param name="Z" type="list"/>
+  <param name="beta" type="matrix"/>
+  <param name="gamma" type="matrix"/>
+  <param name="sigma" type="scalar"/>
+  <param name="Pi" type="matrix"/>
+ </params>
+<code>/*
+Hessian matrix (k+m+1)x(k+m+1) for the second step
+(total loglikelihood) -- gamma contains the Mills
+adjustements
+*/
+matrix theta = beta | gamma | sigma
+list reg = X || Y
+list inst = X || Z
+mPi = mshape(Pi, nelem(inst), nelem(Y))
+matrix E = {Y} - {inst} * mPi
+k = 1
+loop foreach i Y --quiet
+  series e_$i = E[,k]
+  k++
+  reg += e_$i
+endloop
+matrix H = int_ahess(theta, inf, sup, reg)
+return H
+</code>
+</gretl-function>
+<gretl-function name="mixed_2nd" type="matrix" private="1">
+ <params count="9">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="Y" type="list"/>
+  <param name="X" type="list"/>
+  <param name="Z" type="list"/>
+  <param name="beta" type="matrix"/>
+  <param name="gamma" type="matrix"/>
+  <param name="sigma" type="scalar"/>
+  <param name="vPi" type="matrix"/>
+ </params>
+<code>/*
+Jacobian term: derivatives of the interval score wrt
+the 1st step parameters gamma. It should be
+(k+m+1) x (m*k); gamma contains the Mills
+adjustements
+*/
+list reg = X Y
+scalar k = nelem(reg)
+matrix mY = {Y}
+matrix mZ = {Z}
+matrix Pi = mshape(vPi, cols(mZ), cols(mY))
+matrix U  = mY - mZ*Pi
+matrix mX = {reg} ~ U
+k = nelem(reg)
+series z = mX * (beta | gamma)
+e = (inf - z)/sigma
+E = (sup - z)/sigma
+f0 = misszero(dnorm(e))
+f1 = misszero(dnorm(E))
+Df = f0 - f1
+den = ok(sup) ? (ok(inf) ? cnorm(E) + pvalue(z,e) - 1: cnorm(E)) : pvalue(z,e)
+den *= sigma
+ehat = Df / den
+lambda = ok(sup) ? (ok(inf) ? (f0*e - f1*E)/den : ehat*E) : ehat*e
+w = ehat^2 - lambda/sigma
+matrix F = {}
+matrix Zg = {}
+m = rows(gamma)
+loop for i = 1..m --quiet
+  Zg = Zg ~ ({Z} .* gamma[i])
+endloop
+F = (mX .* {w})'Zg
+# the bit relative to uhat is still uncertain
+# this is just a brief check
+corrfac = sumc({ehat} .* {Z})
+corrfac = I(m) ** corrfac
+F[k+1:,] -= corrfac
+mu = (f0 * (e^2-1) - f1 * (E^2-1)) / den
+w = -(mu/sigma - ehat*lambda)
+F = F | sumc( {w} .* Zg )
+F = F ./ $nobs
+return F
+</code>
+</gretl-function>
+<gretl-function name="step1vcv" type="matrix" private="1">
+ <params count="2">
+  <param name="Y" type="list"/>
+  <param name="Z" type="list"/>
+ </params>
+<code>m = nelem(Y)
+k = nelem(Z)
+mY = {Y}
+mZ = {Z}
+T = $nobs
+iZZ = invpd(mZ'mZ)
+ZY = ( mZ'mY )
+Pi = iZZ * ZY
+V = (mY'mY - ZY'Pi) ./ T
+ret = V ** iZZ
+return ret
+</code>
+</gretl-function>
+<gretl-function name="step1scorebyobs" type="matrix" private="1">
+ <params count="2">
+  <param name="Y" type="list"/>
+  <param name="Z" type="list"/>
+ </params>
+<code>m = nelem(Y)
+k = nelem(Z)
+mY = {Y}
+mZ = {Z}
+T = $nobs
+iZZ = invpd(mZ'mZ)
+ZY = mZ'mY
+Pi = iZZ * ZY
+E = mY - mZ*Pi
+iZZ *= T
+tmp = mZ * iZZ
+matrix ret = {}
+loop for i=1..m --quiet
+  ret ~= tmp .* E[,i]
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="step2correction" type="matrix" private="1">
+ <params count="9">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="Y" type="list"/>
+  <param name="X" type="list"/>
+  <param name="Z" type="list"/>
+  <param name="beta" type="matrix"/>
+  <param name="gamma" type="matrix"/>
+  <param name="sigma" type="scalar"/>
+  <param name="vPi" type="matrix"/>
+ </params>
+<code>list inst = X || Z
+F = mixed_2nd(inf, sup, Y, X, inst, beta, gamma, sigma, vPi)
+H = IV_H(inf, sup, Y, X, inst, beta, gamma, sigma, vPi)
+iH = invpd(-H)
+G1 = step1scorebyobs(Y, inst)
+mPi = mshape(vPi, nelem(inst), nelem(Y))
+matrix E = {Y} - {inst} * mPi
+list reg = X Y
+k = 1
+loop foreach i Y --quiet
+  series e_$i = E[,k]
+  k++
+  reg += e_$i
+endloop
+G2 = int_scorebyobs(beta|gamma|sigma, inf, sup, reg)
+A = G2 + G1*F'
+A = A'A
+ret = qform(iH, A)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="ivinter_ts" type="scalar" private="1">
+ <params count="7">
+  <param name="mod" type="bundleref"/>
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="verbose" type="scalar" default="0"/>
+ </params>
+<code>scalar k1 = nelem(X1)
+scalar k2 = nelem(X2)
+scalar m = nelem(y2)
+list inst = X1 || X2
+matrix mZ  = { inst }
+matrix my2 = { y2 }
+matrix Den = invpd(mZ'mZ)
+matrix Pi  = Den * (mZ'my2)
+matrix E   = my2 - mZ * Pi
+mod[&quot;Pi&quot;]  = Pi
+vPi = mcov(E) ** Den
+mod[&quot;vPi&quot;] = vPi
+list res = null
+j = 1
+loop foreach i y2 -q
+  series e_$i = E[,j]
+  list res += e_$i
+  j++
+endloop
+intreg inf sup X1 y2 res --quiet
+LL1 = $lnl
+nc = k1 + m
+matrix b = $coeff
+matrix delta = b[nc+1:nc+m]
+V0 = $vcv[1:nc,1:nc]
+sigma = $sigma
+mod[&quot;sigma&quot;] = sigma
+twostepcorr = step2correction(inf, sup, y2, X1, X2, b[1:nc], delta, sigma, vec(Pi))
+V0 = twostepcorr[1:nc, 1:nc]
+matrix Vdelta = twostepcorr[nc+1:nc+m, nc+1:nc+m]
+scalar WT = qform(delta' , invpd(Vdelta))
+mod[&quot;exotest&quot;] = WT
+/*
+# I'm not really sure this should work; in fact, it probably shouldn't
+intreg inf sup X1 X2 res --quiet
+LL0 = $lnl
+mod[&quot;overid_test&quot;] = 2*(LL0 - LL1)
+*/
+#    b = $coeff[1:nc]
+# rearrange for compatibility with ivinter
+sel = seq(k1+1,k1+m) ~ seq(1,k1)
+b = b[sel]
+V = V0[sel,sel]
+mod[&quot;ncoeff&quot;] = k1+m
+mod[&quot;coeff&quot;] = b
+mod[&quot;vcv&quot;] = V
+mod[&quot;stderr&quot;] = sqrt(diag(V))
+mod[&quot;lnl&quot;] = NA
+return 0
+</code>
+</gretl-function>
+<gretl-function name="gsdp" type="matrix" private="1">
+ <params count="2">
+  <param name="A" type="matrixref"/>
+  <param name="B" type="matrixref"/>
+ </params>
+<code>/* gauss-style &quot;direct product&quot; */
+matrix ret = {}
+if rows(A) == rows(B)
+  ca = cols(A)
+  loop for i=1..ca --quiet
+    ret ~= A[,i] .* B
+  endloop
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="splitpar" type="void" private="1">
+ <params count="10">
+  <param name="theta" type="matrix"/>
+  <param name="m" type="scalar"/>
+  <param name="k1" type="scalar"/>
+  <param name="k" type="scalar"/>
+  <param name="beta" type="matrixref"/>
+  <param name="gamma" type="matrixref"/>
+  <param name="stilde" type="scalarref"/>
+  <param name="Pi" type="matrixref"/>
+  <param name="psi" type="matrixref"/>
+  <param name="C" type="matrixref"/>
+ </params>
+<code>scalar ini = 1
+scalar fin = ini + m - 1
+matrix beta = theta[ini:fin]
+scalar ini = fin + 1
+scalar fin = ini + k1 - 1
+matrix gamma = theta[ini:fin]
+scalar ini = fin + 1
+scalar fin = ini
+scalar stilde = exp(theta[ini:fin])
+scalar ini = fin + 1
+scalar fin = ini + m*k - 1
+matrix Pi = mshape(theta[ini:fin], m, k)
+scalar ini = fin + 1
+scalar fin = ini + m - 1
+matrix psi = theta[ini:fin]
+scalar ini = fin + 1
+scalar fin = ini + m*(m+1)/2 - 1
+matrix C = lower(unvech(theta[ini:fin]))
+</code>
+</gretl-function>
+<gretl-function name="ivinter_init" type="matrix" private="1">
+ <params count="6">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="ll" type="scalarref"/>
+ </params>
+<code>scalar k1 = nelem(X1)
+scalar k2 = nelem(X2)
+scalar m = nelem(y2)
+list inst = X1 X2
+matrix E
+Pi = mols({y2}, {inst}, &amp;E)
+matrix Sigma = (E'E)/$nobs
+matrix K = cholesky(invpd(Sigma))'
+list res = null
+j = 1
+loop foreach i y2 -q
+  series e_$i = E[,j]
+  list res += e_$i
+  j++
+endloop
+list reg = X1 X2 res
+scalar k = nelem(inst)
+intreg inf sup reg --quiet
+ll = $lnl
+matrix b0 = $coeff[1:k]
+matrix cv = $coeff[k+1:k+m]
+scalar lnsigma = ln($sigma)
+Pi = Pi ~ (I(k1) | zeros(k2,k1))
+GLS = 0
+if GLS == 1
+  /* experimental; not for now */
+  iV = $vcv[1:k,1:k]
+  iV = invpd(iV)
+  gK = cholesky(iV)
+  gb0 = gK'b0
+  gPi = gK'Pi
+  strpar = mols(gb0, gPi, null)
+else
+  strpar = mols(b0, Pi, null)
+endif
+Pi = (Pi[,1:m])
+matrix foo = cv - strpar[1:m]
+cv = inv(K')*foo
+#    scalar tmp = qform(cv', Sigma)
+matrix a = strpar | lnsigma | vec(Pi') | cv | vech(K)
+return a
+</code>
+</gretl-function>
+<gretl-function name="ivinter_init_new" type="matrix" private="1">
+ <params count="6">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="ll" type="scalarref"/>
+ </params>
+<code>/* broken as of now */
+scalar k1 = nelem(X1)
+scalar k2 = nelem(X2)
+scalar m = nelem(y2)
+list inst = X1 X2
+matrix E
+Pi = mols({y2}, {inst}, &amp;E)
+matrix Sigma = (E'E)/$nobs
+matrix K = cholesky(invpd(Sigma))'
+list res = null
+j = 1
+loop foreach i y2 -q
+  series e_$i = E[,j]
+  list res += e_$i
+  j++
+endloop
+intreg inf sup X1 y2 res --quiet
+ll = $lnl
+sel = seq(k1+1,k1+m) ~ seq(1,k1)
+# rearrange
+strpar = $coeff[sel]
+scalar lnsigma = ln($sigma)
+matrix foo = $coeff[k1+m+1:]
+cv = inv(K')*foo
+matrix a = strpar | lnsigma | vec(Pi') | cv | vech(K)
+return a
+</code>
+</gretl-function>
+<gretl-function name="redform" type="void" private="1">
+ <params count="7">
+  <param name="m" type="scalar"/>
+  <param name="k1" type="scalar"/>
+  <param name="k2" type="scalar"/>
+  <param name="theta" type="matrix"/>
+  <param name="V" type="matrix"/>
+  <param name="rfpar" type="matrixref"/>
+  <param name="rfvar" type="matrixref"/>
+ </params>
+<code>scalar k = k1+k2
+scalar ini = 1
+scalar fin = ini + m - 1
+matrix beta = theta[ini:fin]
+scalar ini = fin + 1
+scalar fin = ini + k1 - 1
+matrix gamma = theta[ini:fin]
+tmp = beta | gamma
+scalar ini = fin + 2
+scalar fin = ini + m*k - 1
+matrix Pi = mshape(theta[ini:fin], k, m)
+matrix bigPi = Pi ~ (I(k1) | zeros(k2,k1))
+matrix rfpar = bigPi * tmp
+J = bigPi ~ (beta' ** I(k))
+matrix rfvar = qform(J, V[1:fin,1:fin])
+</code>
+</gretl-function>
+<gretl-function name="redform_printout" type="void" private="1">
+ <params count="5">
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="theta" type="matrix"/>
+  <param name="V" type="matrix"/>
+ </params>
+<code>scalar k1 = nelem(X1)
+scalar k2 = nelem(X2)
+scalar m = nelem(y2)
+list inst = X1 X2
+matrix rfpar
+matrix rfvar
+redform(m, k1, k2, theta, V, &amp;rfpar, &amp;rfvar)
+cfse = rfpar ~ sqrt(diag(rfvar))
+s = varname(inst)
+printf &quot;\n--- reduced form -------------------------------------------------\n&quot;
+modprint cfse s
+printf &quot;------------------------------------------------------------------\n&quot;
+</code>
+</gretl-function>
+<gretl-function name="ivinter_loglik_c" type="series" private="1">
+ <params count="11">
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="yhat" type="series"/>
+  <param name="stilde" type="scalar"/>
+  <param name="k1" type="scalar"/>
+  <param name="my2" type="matrixref"/>
+  <param name="mX" type="matrixref"/>
+  <param name="psi" type="matrix"/>
+  <param name="u" type="matrixref"/>
+  <param name="C" type="matrix"/>
+  <param name="score" type="matrixref" optional="true"/>
+ </params>
+<code>do_score = !isnull(score)
+series e = (inf-yhat)/stilde
+series E = (sup-yhat)/stilde
+series P0 = ok(e) ? cnorm(e) : 0
+series P1 = ok(E) ? cnorm(E) : 1
+series dP = P1 - P0
+series ll = ln(dP)
+if do_score
+  series f0 = ok(e) ? dnorm(e) : 0
+  series f1 = ok(E) ? dnorm(E) : 0
+  matrix mu = (f0 - f1)/(stilde * dP)
+  matrix score = (my2 ~ mX[,1:k1]) .* mu
+  matrix tmps = (f0*e - f1*E)/dP
+  score ~= tmps
+  matrix lambda = C*psi
+  matrix tmps = -mu .* (mX ** lambda')
+  score ~= tmps
+  tmps = mu .* (u*C)
+  score ~= tmps
+  m = rows(C)
+  tmp = vech(mshape(seq(1,m*m),m,m))
+  tmps = mu .* (u ** psi')
+  tmps = tmps[,tmp]
+  score ~= tmps
+endif
+return ll
+</code>
+</gretl-function>
+<gretl-function name="ivinter_loglik_m" type="series" private="1">
+ <params count="4">
+  <param name="u" type="matrixref"/>
+  <param name="C" type="matrix"/>
+  <param name="mX" type="matrixref"/>
+  <param name="score" type="matrixref" optional="true"/>
+ </params>
+<code>do_score = !isnull(score)
+matrix omega = u*C
+scalar Jac = sumc(log(diag(C)))
+series ll = Jac - 0.5*sumr(omega .^ 2)
+if do_score
+  WORKAROUND = ($version == 10907) # hdprod was buggy
+  tmp = omega*C'
+  if WORKAROUND
+    score_pi = gsdp(&amp;mX, &amp;tmp)
+  else
+    score_pi = hdprod(mX, tmp)
+  endif
+  m = rows(C)
+  tmp = zeros(m,m)
+  tmp[diag] = 1./diag(C)
+  matrix tau = vech(tmp)
+  tmp = vech(mshape(seq(1,m*m),m,m)')
+  if WORKAROUND
+    score_c = gsdp(&amp;omega, &amp;u)
+  else
+    score_c = hdprod(omega, u)
+  endif
+  score_c = tau' .- score_c[,tmp]
+  score = score_pi ~ score_c
+endif
+return ll
+</code>
+</gretl-function>
+<gretl-function name="join_scores" type="matrix" private="1">
+ <params count="5">
+  <param name="m" type="scalar"/>
+  <param name="k" type="scalar"/>
+  <param name="k1" type="scalar"/>
+  <param name="sm" type="matrixref"/>
+  <param name="sc" type="matrixref"/>
+ </params>
+<code>npar = cols(sc)
+nc = m*(m+1)/2
+ndx2 = seq(npar-nc+1,npar)
+ndx1 = seq(m + k1 + 2, m + k1 + 1 + (m*k))
+matrix ret = sc
+ret[,ndx1] += sm[,1:m*k]
+ret[,ndx2] += sm[,m*k+1:]
+return ret
+</code>
+</gretl-function>
+<gretl-function name="ivinter_loglik" type="series" private="1">
+ <params count="8">
+  <param name="theta" type="matrix"/>
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="ll1" type="scalarref"/>
+  <param name="score" type="matrixref"/>
+ </params>
+<code>list inst = X1 X2
+scalar k1 = nelem(X1)
+scalar m = nelem(y2)
+scalar k = nelem(inst)
+scalar stilde
+matrix beta gamma Pi psi C
+splitpar(theta, m, k1, k, &amp;beta, &amp;gamma, &amp;stilde, &amp;Pi, &amp;psi, &amp;C)
+scalar test = minc(abs(diag(C)))
+if test &lt; 1.0e-10
+  # S22 is singular
+  series ll = NA
+else
+  matrix my2 = { y2 }
+  matrix mX = { inst }
+  matrix u = my2 - mX*Pi'
+  matrix score_m
+  series ll = ivinter_loglik_m(&amp;u, C, &amp;mX, &amp;score_m)
+  # print theta beta gamma stilde Pi psi C
+  series ndx = mX[,1:k1] * gamma + my2 * beta + u * (C*psi)
+  /*
+  Note: it's assumed that at least one between inf and sup are
+  nonmissing; there is no check for that here. Such a check is
+  now unnecessary because of the smpl command in ivinter, but
+  the lack of it caused BIG trouble in the past.
+  */
+  matrix score_c
+  series tmpser = ivinter_loglik_c(inf, sup, ndx, stilde, k1, &amp;my2, &amp;mX, psi, &amp;u, C, &amp;score_c)
+  score = join_scores(m, k, k1, &amp;score_m, &amp;score_c)
+  #        foo = sumc(score)
+  #        print foo
+  ll1 = sum(tmpser)
+  ll += tmpser
+endif
+return ll
+</code>
+</gretl-function>
+<gretl-function name="ivinter_hessian" type="scalar" private="1">
+ <params count="7">
+  <param name="H" type="matrixref"/>
+  <param name="theta" type="matrix"/>
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+ </params>
+<code>err = 0
+npar = rows(theta)
+th2 = theta
+matrix H = zeros(npar, npar)
+delta = 1.0e-06
+ll1 = 0
+matrix score
+loop for i=1..npar --quiet
+  th2[i] += delta
+  ivinter_loglik(th2, inf, sup, y2, X1, X2, &amp;ll1, &amp;score)
+  splus = sumc(score)
+  th2[i] -= 2*delta
+  ivinter_loglik(th2, inf, sup, y2, X1, X2, &amp;ll1, &amp;score)
+  sminus = sumc(score)
+  th2[i] += delta
+  H[i,] = 0.5*(splus - sminus)/delta
+endloop
+H = -0.5*(H + H')
+return err
+</code>
+</gretl-function>
+<gretl-function name="liml_exo_test" type="scalar" private="1">
+ <params count="5">
+  <param name="fullcoeff" type="matrix"/>
+  <param name="fullvcv" type="matrix"/>
+  <param name="m" type="scalar"/>
+  <param name="k1" type="scalar"/>
+  <param name="k" type="scalar"/>
+ </params>
+<code>ini = m + k1 + m*k + 1 + 1
+fin = ini + m - 1
+matrix s12 = fullcoeff[ini:fin]
+matrix V = fullvcv[ini:fin, ini:fin]
+return qform(s12', invpd(V))
+</code>
+</gretl-function>
+<gretl-function name="ivinter_ml" type="scalar" private="1">
+ <params count="8">
+  <param name="mod" type="bundleref"/>
+  <param name="inf" type="series"/>
+  <param name="sup" type="series"/>
+  <param name="y2" type="list"/>
+  <param name="X1" type="list"/>
+  <param name="X2" type="list"/>
+  <param name="verbose" type="scalar" default="0"/>
+  <param name="robust" type="bool" default="1"/>
+ </params>
+<code>USE_HESS = 0
+matrix H = {}
+/*
+these two scalars control for verbosity and txt vs tex
+so for example 0 = text, quiet, 12 = tex, very verbose etc
+*/
+verb = verbose % 10
+m  = mod[&quot;m&quot;]
+k1 = mod[&quot;k1&quot;]
+k2 = mod[&quot;k2&quot;]
+/*
+initialisation and computation of the unrestricted loglik
+(for overidentification test)
+*/
+scalar ll_unr = NA
+matrix theta = ivinter_init(inf, sup, y2, X1, X2, &amp;ll_unr)
+set warnings off
+if verb = 2
+  string mleopts = &quot;-v&quot;
+elif verb = 1
+  string mleopts = &quot;&quot;
+else
+  string mleopts = &quot;-q&quot;
+endif
+scalar ll_res = 0
+matrix score
+if USE_HESS == 0
+  mle ll = ivinter_loglik(theta, inf, sup, y2, X1, X2, &amp;ll_res, &amp;score)
+    deriv theta = score
+  end mle @mleopts --no-gradient-check
+else
+  set optimizer newton
+  mle ll = ivinter_loglik(theta, inf, sup, y2, X1, X2, &amp;ll_res, &amp;score)
+    deriv theta = score
+    hessian ivinter_hessian(&amp;H, theta, inf, sup, y2, X1, X2)
+  end mle @mleopts --no-gradient-check
+endif
+nc = k1 + m
+mod[&quot;coeff_tot&quot;] = theta
+mod[&quot;coeff&quot;] = theta[1:nc]
+mod[&quot;ncoeff&quot;] = nc
+mod[&quot;sigma&quot;] = exp(theta[nc+1])
+mod[&quot;lnl&quot;] = ll_res
+if robust
+  V = score'score
+  ivinter_hessian(&amp;H, theta, inf, sup, y2, X1, X2)
+  H = invpd(H)
+  V = qform(H, V)
+else
+  V = $vcv
+endif
+mod[&quot;vcv_tot&quot;] = V
+mod[&quot;vcv&quot;] = V[1:nc,1:nc]
+mod[&quot;stderr&quot;] = sqrt(diag(V))
+mod[&quot;exotest&quot;] = liml_exo_test(theta, V, m, k1, k1+k2)
+mod[&quot;overid_test&quot;] = 2*(ll_unr-ll_res)
+return 0
+</code>
+</gretl-function>
+<sample-script>
+/*
+Example file for ivintreg: we use the Mroz(1987) dataset
+to estimate a wage equation for women on the exactly observed 
+log wage; then, we pretend we only observe the log wage in classes
+and re-estimate the wage equation by IV interval regression.
+*/
+
+set echo off
+set messages off
+open mroz87.gdt --quiet
+
+series lwage = ln(WW)
+
+list Y = WE            # endogenous regressors
+list X = const WA AX   # exogenous regressors
+list Z = WFED WMED CIT # instruments
+
+tsls lwage X Y ; X Z
+
+# ---- now construct the interval variables -------------------
+
+lw_inf = lwage &lt; -1.5 ? NA : floor(lwage - 0.5) + 0.5
+lw_sup = lwage &gt; 2.5 ? NA : ceil(lwage - 0.5) + 0.5
+
+# ---- load the function package ------------------------------
+
+include ivintreg.gfn
+
+# ----- perform estimation ------------------------------------
+
+bundle IVint_2s = ivintreg(lw_inf, lw_sup, Y, X, Z, 1)
+bundle IVint_ml = ivintreg(lw_inf, lw_sup, Y, X, Z, 2)
+
+ivintreg_print(&amp;IVint_2s)
+ivintreg_print(&amp;IVint_ml)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

@@ -1,0 +1,7 @@
+include ./logit_burr.gfn
+set echo off
+set messages off
+open http://web.uvic.ca/~dgiles/downloads/binary_choice/Logistic_Burr.wf1 --quiet
+list ylist = Y
+list xlist = X1 X2
+matrix CHECK = logit_burr(ylist,xlist)

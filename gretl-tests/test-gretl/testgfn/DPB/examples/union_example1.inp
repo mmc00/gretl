@@ -1,0 +1,116 @@
+set echo off
+set messages off
+
+include DPB.gfn
+
+# Replication of Stewart (2006) "Maximum simulated likelihood estimation of
+# random-effects dynamic probit models with autocorrelated errors"
+# The Stata Journal, 6, n. 2, pp. 256-272
+
+
+open union_full.gdtb
+
+summary union age grade south not_smsa year --simple
+
+# series valid = 0
+#  
+# smpl year>=78 --restrict
+# smpl year!=83 --restrict
+#  
+# matrix m = aggregate(const,idcode)
+# series nwav = replace(idcode, m[,1], m[,2])
+# smpl nwav==6 --restrict
+# series valid = 1
+#   
+# store union.gdtb
+# open union.gdtb --quiet
+#   
+# smpl full
+# smpl valid --dummy
+setobs idcode year --panel-vars
+
+
+list X = const age grade south
+list Z = X not_smsa
+
+
+#------------ POOLED PROBIT-------------------
+
+probit union union(-1) X --p-values
+
+
+#------------ STATIC RE PROBIT-------------------
+
+probit union union(-1) X --p-values --random-effects
+
+
+
+#------------ RANDOM-EFFECTS MODELS-------------------
+
+
+# DP MODEL: Heckman (1981)
+
+# Replication of Stewart (2006) Table 1, column 3
+# 24 quadpoints 
+# Standard errors based on Hessian
+
+b10 = DPB_setup("DP",union,X,Z)
+err10 = DPB_setoption(&b10,"vcv",2)
+DPB_estimate(&b10)
+DPB_printout(&b10)
+
+# Replication of Stewart, DP MODEL with GHK
+
+nrep = 500
+
+
+b11 = DPB_setup("DP",union,X,Z)
+err11 = DPB_setoption(&b11,"vcv",2)
+err11 = DPB_setoption(&b11,"method",1)
+err11 = DPB_setoption(&b11, "nrep", nrep)
+
+DPB_estimate(&b11)
+DPB_printout(&b11)
+
+
+
+# ADP MODEL: Hyslop (1999)
+
+# Replication of Stewart (2006) Table 1, column 4
+# 500 replications
+# Standard errors based on Hessian
+
+
+b2 = DPB_setup("ADP",union,X,Z)
+err2 = DPB_setoption(&b2,"vcv",2)
+err2 = DPB_setoption(&b2,"nrep", nrep)
+
+DPB_estimate(&b2)
+DPB_printout(&b2)
+
+
+
+
+# GADP MODEL: Keane & Sauer (2009)
+# 500 replications
+# Standard errors based on Hessian
+
+
+b3 = DPB_setup("GADP",union,X,Z)
+err3 = DPB_setoption(&b3,"vcv",2)
+err3 = DPB_setoption(&b3,"nrep",nrep)
+
+
+DPB_estimate(&b3)
+DPB_printout(&b3)
+
+
+
+
+#------------ QUADRATIC EXPONENTIAL MODEL-------------------
+
+b4 = DPB_setup("QE",union,X)
+err4 = DPB_setoption(&b4,"vcv",2)
+DPB_estimate(&b4)
+DPB_printout(&b4)
+

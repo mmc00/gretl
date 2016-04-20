@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="waldTest" ID="1438285240" needs-time-series-data="true" minver="1.9.12">
+<author email="oleg_komashko@ukr.net">Oleh Komashko</author>
+<version>0.1</version>
+<date>2015-07-30</date>
+<description>Wald tests of restrictions in user-specified models</description>
+<help>
+The package is intended to perform a Wald test for (non)linear restrictions on a model coefficients in several cases:
+
+1) For (almost) any user-specified model which outputs coefficients and their covariance matrix *).
+
+2) For limited dependent variable models to test restrictions in terms of marginal effects. It is possible when _mfx function outputs covariance matrix for marginal effects, e.g. tobit_mfx function from tobit_mfx.fgn package.
+
+3) For gretl native models to test multiple nonlinear restrictions.
+
+The package has the only public function nlwaldtest
+
+function matrix nlwaldtest (string restr &quot;restriction(s)&quot;,
+                            matrix beta &quot;model coefficients&quot;,
+                            matrix vcov &quot;coeff. covariance matrix&quot;,
+                            int df[0] &quot;denum. degrees of freedom&quot;,
+                            scalar prn[NA] &quot;allows/suppress printing&quot;)
+
+Ouput is 1x2 matrix with statistic and p-value
+
+df: zero default for the denumerator degree of freedom means that Chi-squared statistic is used
+
+prn: default is to print results; to suppress input any scalar
+
+See also sample script.
+
+This version is intended for script use.
+
+*) Accessibility of coefficients and their covariance matrix are the only technical requirements. Ensuring econometric correctness is up to user.
+</help>
+<gretl-function name="nlwaldtest" type="matrix">
+ <params count="5">
+  <param name="restr" type="string">
+<description>restriction(s)</description>
+  </param>
+  <param name="beta" type="matrix">
+<description>model coefficients</description>
+  </param>
+  <param name="vcov" type="matrix">
+<description>coeff. covariance matrix</description>
+  </param>
+  <param name="df" type="int" default="0">
+<description>denum. degrees of freedom</description>
+  </param>
+  <param name="prn" type="scalar" default="NA">
+<description>allows/suppress printing</description>
+  </param>
+ </params>
+<code>bundle b = makeinput (restr)
+strings fun = b[&quot;lhs&quot;]
+matrix rhs = b[&quot;rhs&quot;]
+scalar r = nelem(fun)
+matrix out = nlwaldtest0 (fun,rhs,beta,vcov,df)
+scalar ff = out[1]
+scalar pval = out[2]
+# do the grammar
+if (r&gt;1)
+  string s = &quot;s&quot;
+  string a = &quot;&quot;
+else
+  string s = &quot;&quot;
+  string a = &quot;a &quot;
+endif
+# prints results
+string s1 = strsub(restr,&quot; &quot;,&quot;&quot;)
+s1 = strsub(s1,&quot;;&quot;,&quot;; &quot;)
+s1 = strsub(s1,&quot;=&quot;,&quot; = &quot;)
+s1 = strsub(s1,&quot;+&quot;,&quot; + &quot;)
+s1 = strsub(s1,&quot;]-&quot;,&quot;] - &quot;)
+s1 = strsub(s1,&quot;)-&quot;,&quot;) - &quot;)
+if missing(prn)
+  if (df==0)
+    printf &quot;\nWald test of %s(non)linear restriction%s:\n&quot;,a,s
+    printf &quot;\n%s\n&quot;,s1
+    printf &quot;\nChi(%d) = %g, with p-value = %g\n\n&quot;, r,  ff, pval
+  else
+    printf &quot;\nWald test of %s(non)linear restriction%s:\n&quot;,a,s
+    printf &quot;\n%s\n&quot;,s1
+    printf &quot;\nF(%g,%g) = %g, with p-value = %g\n\n&quot;, r, df, ff, pval
+  endif
+endif
+return out
+</code>
+</gretl-function>
+<gretl-function name="myx" type="scalar" private="1">
+ <params count="1">
+  <param name="x" type="scalar"/>
+ </params>
+<code>return x
+</code>
+</gretl-function>
+<gretl-function name="makeinput" type="bundle" private="1">
+ <params count="1">
+  <param name="input" type="string"/>
+ </params>
+<code>string s1 = strsub(input,&quot; &quot;,&quot;&quot;)
+string s2 = strsub(s1,&quot;;&quot;,&quot; &quot;)
+strings ss = strsplit(s2)
+ns = nelem(ss)
+strings sss = ss
+matrix x = zeros(ns,1)
+loop i=1..ns -q
+  aa = strsub(ss[i],&quot;=&quot;,&quot; &quot;)
+  bb = strsplit(aa)
+  bb1 = bb[1]
+  bb2 = bb[2]
+  x[i] = atof(bb2)
+  sss[i] = &quot;myx(&quot;~bb1~&quot;)&quot;
+endloop
+bundle b
+b[&quot;lhs&quot;] = sss
+b[&quot;rhs&quot;] = x
+return b
+</code>
+</gretl-function>
+<gretl-function name="nlwaldtest0" type="matrix" private="1">
+ <params count="5">
+  <param name="fun" type="strings">
+<description>left sides of restrictions</description>
+  </param>
+  <param name="rhs" type="matrix">
+<description>right sides of restrictions</description>
+  </param>
+  <param name="beta" type="matrix">
+<description>model coefficients</description>
+  </param>
+  <param name="vcov" type="matrix">
+<description>coeff. covariance matrix</description>
+  </param>
+  <param name="df" type="int" default="0"/>
+ </params>
+<code>set  fdjac_quality 2
+b = beta
+coll = rows(b)
+r = nelem(fun)
+matrix matr = zeros(r,coll)
+matrix matr2 = zeros(r,1)
+loop i=1..r --quiet
+  fu = fun[i]
+  vect = fdjac(b,@fu)
+  matr[i,] = vect
+  matr2[i,] = @fu-rhs[i]
+endloop
+ret = matr*vcov*transp(matr)
+reti = inv(ret)
+ff = transp(matr2)*reti*matr2
+if (df==0)
+  pval = pvalue(X,r,ff)
+  out = {ff,pval}
+  colnames(out, &quot;Chi p-value&quot;)
+else
+  ff = ff/r
+  pval = pvalue(F,r,df,ff)
+  out = {ff,pval}
+  colnames(out, &quot;F p-value&quot;)
+endif
+set  fdjac_quality 0
+return out
+</code>
+</gretl-function>
+<sample-script>
+open denmark.gdt
+ols LRM const LRY
+# default is Chi-squared statistic
+nlwaldtest(&quot;b[2]*b[1]= 0.5; b[1]=0&quot;,$coeff,$vcv)
+# suppress printing
+eval nlwaldtest(&quot;b[2]*b[1]= 0.5;\
+  b[1]=0&quot;,$coeff,$vcv,0,1)  
+
+# one restriction, F statistic  
+nlwaldtest(&quot;b[2]*b[1]=0.5&quot;,$coeff,$vcv,53)
+
+# exotic restrictions; bad input string formatting
+# doesn't matter
+nlwaldtest(&quot;b[2]^(-   b[1])- 2*b[1 ]=- 0.5;\
+ -sin(b[1])=0&quot;,$coeff,$vcv)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

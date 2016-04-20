@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="latextab" ID="1441967878" no-data-ok="true" minver="2.1.10">
+<author email="artur.tarassow@googlemail.com">Artur Tarassow</author>
+<version>0.2</version>
+<date>2015-12-14</date>
+<description>Write matrix as Latex table</description>
+<tags>C10</tags>
+<help>
+This package writes a matrix as a Latex table.
+
+Input:
+	mprint		- matrix (r by c)
+	cnames		- string, space sep. string of columns
+	rnames		- string, space sep. string of rows
+	capt		- string, string holding the table caption
+	lab		- string, string holding the table label
+	note		- string, string holding a note
+	path		- string, path+file name to store tex-file
+    	dec		- int, number of decimal places to print
+
+Output:
+	Tex file
+
+Versions:
+V. 0.2 (Dec. 2015)
+	Add the possibility to determine the number of decimal places
+	Automatic detection and ignoration of nan-values
+</help>
+<gretl-function name="latextab" type="void">
+ <params count="8">
+  <param name="mprint" type="matrix"/>
+  <param name="cnames" type="string">
+<description>Space sep. string of columns</description>
+  </param>
+  <param name="rnames" type="string">
+<description>Space sep. string of rows</description>
+  </param>
+  <param name="capt" type="string"/>
+  <param name="lab" type="string"/>
+  <param name="note" type="string"/>
+  <param name="path" type="string">
+<description>Path for tex-file</description>
+  </param>
+  <param name="dec" type="int" min="0" max="6" default="3">
+<description># of decimal places</description>
+  </param>
+ </params>
+<code>sprintf sdec &quot;%d&quot;, dec
+scalar nc = cols(mprint)
+scalar nr = rows(mprint)
+outfile @path --write --quiet
+printf &quot;\begin{table}[htbp]\n&quot;
+printf &quot;\centering\n&quot;
+if note!=&quot;&quot;
+  printf &quot;\begin{threeparttable} \n&quot;
+endif
+printf &quot;\begin{tabular}{l&quot;
+loop i=1..nc -q
+  printf &quot;c&quot;
+endloop
+printf &quot;}\n&quot;
+printf &quot;\\toprule\n&quot;
+# Print column names
+printf &quot;%s&quot;, strsplit(cnames,1)
+loop i=2..(1+nc) -q
+  printf &quot; &amp; %s&quot;, strsplit(cnames,$i)
+endloop
+printf &quot;\\\ \hline\n&quot;
+# Printf Rows
+loop i=1..nr -q
+  printf &quot;%s&quot;, strsplit(rnames,$i)
+  loop j=1..nc -q
+    if mprint[i,j]&lt;=0 || mprint[i,j]&gt;=0
+      printf &quot; &amp; %.@sdecf&quot;, mprint[i,j]
+    else
+      printf &quot; &amp; &quot;
+    endif
+  endloop
+  printf &quot;\\\ \n&quot;
+endloop
+printf &quot;\bottomrule\n&quot;
+printf &quot;\end{tabular}\n&quot;
+if note!=&quot;&quot;
+  printf &quot;\begin{tablenotes} \n&quot;
+  printf &quot;\footnotesize \n&quot;
+  printf &quot;\item \\textsc{Note:} @note \n&quot;
+  printf &quot;\end{tablenotes} \n&quot;
+  printf &quot;\end{threeparttable} \n&quot;
+endif
+printf &quot;\caption{@capt}\n&quot;
+printf &quot;\label{@lab}\n&quot;
+printf &quot;\end{table}\n&quot;
+outfile --close
+</code>
+</gretl-function>
+<sample-script>
+set echo off
+set messages off
+include latextab.gfn
+
+open denmark.gdt -q
+# Compute some stats and add to matrix
+matrix mstat = zeros(2,3)
+list ylist = LRM LRY
+list dylist = diff(ylist)
+loop foreach i dylist -q
+    mstat[i,] = min($i)~max($i)~mean($i)
+endloop
+
+# Add some strings
+string cnames = &quot;Variable Min Max Mean&quot;
+colnames(mstat, &quot;@cnames&quot;)
+string rnames = strsub(varname(dylist),&quot;,&quot;,&quot; &quot;)
+rnames = strsub(rnames, &quot;_&quot;, &quot;\_&quot;)
+rownames(mstat, &quot;@rnames&quot;)
+string note = &quot;Add a note&quot;
+string caption = &quot;Descriptive Statistics&quot;
+scalar dec = 3
+# Write tex-file
+latextab(mstat, cnames, rnames, &quot;@caption&quot;, &quot;&quot;, &quot;@note&quot;, &quot;@workdir/ltabout.tex&quot;, dec)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

@@ -1,0 +1,134 @@
+set echo off
+set messages off
+
+#---------------------------------------------------
+# Sample script to geneate artificial data
+# Three datasets are saved:
+# RE_ardtata1.gdt for Heckman's model 
+# RE_ardtata2.gdt for Hyslop's model 
+# RE_ardtata3.gdt for Keane & Sauer's model 
+# the function gendata generates the error structure
+# and the dependent variable
+#----------------------------------------------------
+
+
+include DPB.gfn
+
+
+function series gendata(list X, list Z, matrix param, \
+				    matrix Ti, scalar AR1)
+
+    N = rows(Ti)
+    nk = nelem(X)
+    nz = nelem(Z)
+    scalar gamma = param[1]
+    matrix beta  = param[2:nk+1]
+    matrix pivec = param[nk+2:nk+nz+1]
+    scalar theta = param[nk+nz+2]
+    scalar sig   = exp(param[nk+nz+3]) 
+
+    matrix ndx0 = lincomb(Z,pivec)
+    matrix ndx1 = lincomb(X,beta)
+
+
+    TT = maxc(Ti[,2]) + 1
+    matrix vpar = theta | sig
+
+
+    if AR1==1
+	vpar |= tanh(param[nk+nz+4])
+    elif AR1==2
+	vpar |= tanh(param[nk+nz+4]) | param[nk+nz+5]
+    endif	
+
+    scalar err = 0
+    matrix C = C_theta(vpar, TT, AR1, &err)
+    matrix E = mnormal(N,TT)*C'
+
+    ini = 1
+    matrix Y = zeros(sumc(Ti[,2]),1)
+    loop i=1..N --quiet
+        T = Ti[i,2] 
+
+    	if T>0
+            fin = ini + T - 1
+            Y[ini] = (ndx0[ini] + E[i,1])>0
+            loop t=2..T --quiet
+                Y[ini+t-1] = (ndx1[ini+t-1] + E[i,t] + gamma*Y[ini+t-2])>0
+            endloop
+            ini = fin + 1
+        endif
+    endloop
+
+    series ret = Y
+    return ret
+
+end function
+
+
+#--------- GENERATE ARTIFICIAL DATA ---------- 
+
+set seed 1234
+
+scalar N = 4096
+scalar T = 6
+scalar NT = N*T
+nulldata NT --preserve
+setobs T 1:1 --stacked-time-series
+genr time
+series id = $unit
+
+series x = normal()
+series z = uniform()
+
+list X = const x
+list Z = const x z
+
+gamma = 0.6
+matrix beta = ones(nelem(X),1)*0.5
+matrix pivec = ones(nelem(Z),1)
+theta = 1.2
+s2a = 1
+
+Ti = seq(1,N)' ~ ones(N,1)*T
+
+
+# DP: Heckman (1981)
+rho = 0 
+tau = 0 
+
+matrix param = gamma | beta | pivec | theta | ln(sqrt(s2a)) | \
+atanh(rho) | atanh(tau)
+
+AR1 = 0 
+series y = gendata(X, Z, param, Ti, AR1)
+
+store DP_artdata.gdtb
+
+# ADP: Hyslop (1999)
+
+rho = 0.3 
+tau = 1
+
+matrix param = gamma | beta | pivec | theta | ln(sqrt(s2a)) | \
+atanh(rho) | atanh(tau)
+
+AR1 = 1 
+series y = gendata(X, Z, param, Ti, AR1)
+
+store ADP_artdata.gdtb
+
+
+# GADP: Keane and Sauer (2009)
+
+rho = 0.3 
+tau = 0.6
+
+matrix param = gamma | beta | pivec | theta | ln(sqrt(s2a)) | \
+atanh(rho) | atanh(tau)
+
+AR1 = 2 
+series y = gendata(X, Z, param, Ti, AR1)
+
+store GADP_artdata.gdtb
+

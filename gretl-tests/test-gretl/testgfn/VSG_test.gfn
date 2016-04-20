@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="VSG_test" ID="1298285541" needs-time-series-data="true" minver="1.8.4">
+<author>Daniel Ventosa-Santaulària</author>
+<version>1.11</version>
+<date>2011-02-21</date>
+<description>Tests for a drift (and a shift) in a unit-root process</description>
+<help>
+--------------------------------------------------------------------------
+ Ventosa-Santaulària and Gómez-Zaldívar (broken-)drift test under the 
+ assumption that there is a unit-root
+--------------------------------------------------------------------------
+ Input:
+ Variable:    Time-series variable to be studied
+ Bound:       # of obs. omitted at the beginning and the end of the sample
+              Default: 5 (does not apply if you don't look for a break)
+ Level:       Choose the level of the test (1-3):
+                       (1) 1%; (2) 5%; (3) 10%
+              Default: (2) 5%
+ BreakFinder: Decide whether to look for a break or not:
+                       1 -&gt; looks for a single break
+                       0 -&gt; Does not look for a break
+              Default: 1                       
+ Figure:      plots the variable against the selected deterministic 
+              components:
+                       1 -&gt; includes plot
+                       0 -&gt; does not include plot
+              Default: 1
+--------------------------------------------------------------------------
+ Output: bundle containing:
+1) If you decided not to look for a break:
+  Drift?:               Whether the null is rejected [1] or not [0]
+  Drift R2 statistic:   The test-statistic value [R^2]
+  Drift Critical Value: Critical Value [depends on the choosen level]
+2) If you decided to look for a break:
+  Drift?:               Whether the null [drift] is rejected[1] or not[0]
+  Break?:               Whether the null [Break] is rejected[1] or not[0]
+  Drift R2 statistic:   The test-statistic value [R^2]
+  Drift Critical Value: Critical Value (drift) [depends on the level]
+  Break Critical Value: Critical Value (break) [depends on the level]
+  Gamma:                The value of the parameter Gamma
+  Break date:           The observation No where the break is
+  Lambda:               The value of the break fraction
+  Gamma norm. t-ratio:  the t-ratio of Gamma
+--------------------------------------------------------------------------
+ Further details: Ventosa-Santaulària, D. &amp; Gómez-Zaldívar, M. (2010) 
+ &quot;Testing for a deterministic trend when there is evidence of unit root&quot;; 
+ Journal of Time Series Econometrics, Vol. 2 (2), art. 3.
+--------------------------------------------------------------------------
+ Function written (with the aid of Allin Cottrell) by:
+ Daniel Ventosa-Santaulària Universidad de Guanajuato, México, and 
+ CREATES, Aarhus
+ www.ventosa-santaularia.com
+--------------------------------------------------------------------------
+</help>
+<gretl-function name="VSG_test" type="bundle">
+ <params count="5">
+  <param name="y" type="series">
+<description>Variable</description>
+  </param>
+  <param name="Bound" type="int" min="1" default="5">
+<description>Omitted obs at the beginning (end)</description>
+  </param>
+  <param name="CV" type="int" min="1" max="3" default="2">
+<description>Level 1=1%, 2=5%, 3=10%</description>
+  </param>
+  <param name="BreakFinder" type="bool" default="1">
+<description>Search for a Break?</description>
+  </param>
+  <param name="Figure" type="bool" default="1">
+<description>Figure?</description>
+  </param>
+ </params>
+<code>bundle b
+smpl y --contiguous
+if BreakFinder
+  T = $nobs
+  Tbound = T-2*Bound
+  print &quot;------------------------------------------&quot;
+  print &quot;GVS TEST FOR DRIFT AND SHIFT IN A DRIFT&quot;
+  print &quot;NULL HYPOTHESES: (i)  NO DRIFT&quot;
+  print &quot;                 (ii) NO BREAK IN DRIFT&quot;
+  print &quot;------------------------------------------&quot;
+  if Tbound &lt; 5
+    funcerr &quot;Insufficient observations&quot;
+  endif
+  # critical values for R-squared
+  Tvc = {0.88, 0.91, 0.96 ; 0.89, 0.93, 0.96 ; 0.90, 0.93, 0.96 ; 0.90, 0.93, 0.96 ; 0.88, 0.92, 0.96 ; 0.87, 0.91, 0.96}
+  # critical values for t_gamma
+  Tvd = {0.84, 1.00, 1.33 ; 1.22, 1.48, 2.02 ; 1.41, 1.71, 2.39 ; 1.37, 1.66, 2.32 ; 1.11, 1.33, 1.83 ; 0.67, 0.79, 1.04}
+  genr time
+  matrix Trend={time}-$t1+1
+  matrix Param_tb = zeros(1, 2)
+  R2 = 0
+  Break = 0
+  t_gamma = 0
+  gammaP = 0
+  loop i=Bound+1..T-Bound --quiet
+    scalar k = T-Trend[i]
+    series DT = zeros(Trend[i],1) | Trend[1:k]
+    ols y 0 time DT --quiet
+    if $rsq &gt; R2
+      R2 = $rsq
+      Break = Trend[i]
+      Param_tb = $coeff[2:3]'
+      t_gamma = $coeff[3]/$stderr[3]
+      gammaP = $coeff[3]
+      series Deterministic = $yhat
+    endif
+  endloop
+  # the relevant column in crit. values tables
+  Col = 4 - CV
+  # Get row in crit. values table
+  Le = Break/T
+  matrix dif = zeros(6,1)
+  loop j=1..6 --quiet
+    dif[j] = abs(Le-j*0.15)
+  endloop
+  Row = iminc(dif)
+  scalar Dcv = Tvc[Row,Col]
+  scalar Bcv = Tvd[Row,Col]
+  Breakstr = 0
+  Driftstr = 0
+  printf &quot;The R square test statistic (drift) is %.3g\n and the corresponding critical value is %.3g\n&quot;, R2, Dcv
+  if Figure
+    gnuplot y Deterministic --time-series --with-lines
+  endif
+  if R2 &gt; Tvc[Row,Col]
+    Driftstr = 1
+    b[&quot;Drift? (Yes=1 &amp; No=0)&quot;] = 1
+    print &quot;The null hypothesis (no-drift) is rejected&quot;
+    t_gamma = abs(t_gamma/sqrt(T))
+    printf &quot;The normalized Gamma t-ratio (no-break) is %.3g\n and the corresponding critical value is %.3g\n&quot;, t_gamma, Bcv
+    if t_gamma &gt; Tvd[Row,Col]
+      Breakstr = 1
+      b[&quot;Break? (Yes=1 &amp; No=0)&quot;] = Breakstr
+      print &quot;The null hypothesis (no-break) is rejected&quot;
+      printf &quot;The break fraction is %.3g\n (obs. No %g)\n&quot;, Le, Break
+    else
+      Breakstr = 0
+      b[&quot;Break? (Yes=1 &amp; No=0)&quot;] = Breakstr
+      print &quot;The null hypothesis (no-break) is not rejected&quot;
+    endif
+    b[&quot;Gamma normalized t-ratio&quot;] = t_gamma
+  else
+    Driftstr = 0
+    b[&quot;Drift? (Yes=1 &amp; No=0)&quot;] = 0
+    print &quot;The null hypothesis (no-drift) is not rejected&quot;
+    print &quot;The null hypothesis (no-break) is not performed&quot;
+    Breakstr = 0
+    b[&quot;Break? (Yes=1 &amp; No=0)&quot;] = Breakstr
+    b[&quot;Gamma normalized t-ratio&quot;] = t_gamma
+  endif
+  b[&quot;Gamma&quot;] = gammaP
+  b[&quot;Drift R2 statistic&quot;] = R2
+  b[&quot;Drift Critical Value&quot;] = Dcv
+  b[&quot;Break Critical Value&quot;] = Bcv
+  b[&quot;Break date (obs. No)&quot;] = Break
+  b[&quot;Lambda&quot;] = Le
+else
+  print &quot;------------------------------------------&quot;
+  print &quot;GVS TEST FOR DRIFT&quot;
+  print &quot;NULL HYPOTHESIS: NO DRIFT&quot;
+  print &quot;------------------------------------------&quot;
+  # critical values for R-squared
+  CVu = {0.94, 0.89, 0.84}
+  scalar Dcv = CVu[CV]
+  genr time
+  ols y 0 time --quiet
+  scalar R2 = $rsq
+  series Deterministic = $yhat
+  printf &quot;The R square test statistic (drift) is %.3g\n and the corresponding critical value is %.3g\n&quot;, R2, Dcv
+  if Figure
+    gnuplot y Deterministic --time-series --with-lines
+  endif
+  Driftstr = 0
+  if R2 &gt; CVu[CV]
+    Driftstr = 1
+    b[&quot;Drift?&quot;] = 1
+    print &quot;The null hypothesis (no-drift) is rejected&quot;
+  else
+    Driftstr = 0
+    b[&quot;Drift? (Yes=1 &amp; No=0)&quot;] = 0
+    print &quot;The null hypothesis (no-drift) is not rejected&quot;
+  endif
+  b[&quot;Drift R2 statistic&quot;] = R2
+  b[&quot;Drift Critical Value&quot;] = Dcv
+endif
+return b
+</code>
+</gretl-function>
+<sample-script>
+include VSG_test.gfn
+
+open chomage.gdt
+bundle TRIAL = VSG_test(y,10,2,1,0)
+#------------------------------------------------
+# &quot;10&quot; accounts for the omitted observations at 
+# the  beginning (at at the end of the sample); 
+# &quot;2&quot;  chooses the level of the test, 5% in this 
+#      case; 
+# &quot;1&quot;  indicates that you are looking for a break
+# &quot;0&quot;  indicates that you don't want to plot the
+#      variable
+print TRIAL
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

@@ -1,0 +1,55 @@
+include ./heckprobit.gfn
+set echo off
+set messages off
+
+/*
+   Sample script for the heckprobit function
+   (probit with sample selection).
+   
+   In order to illustrate the function, we use the "mroz87"
+   dataset and we set up a model for the variable "Is the woman's
+   wage higher than her husband's?", where clearly the sample 
+   selection is determined by labor force participation.
+*/
+
+open mroz87.gdt
+
+series WA2 = WA^2
+series KIDS = (KL6+K618)>0
+series AX2 = AX * AX
+series AGEDIF = HA - WA
+
+# the dependent variable
+depvar = LFP ? (WW > HW) : NA
+
+# ESTIMATE HECKPROBIT 
+
+
+# main eq. explanatory variables
+list X = const AX AX2 WE HE AGEDIF CIT 
+
+# selection eq. explanatory variables
+list Z = const WA WA2 KIDS WE
+# USING THE WRAPPER FUNCTION
+
+# default settings
+mod1 = heckprobit(depvar,X,LFP,Z)
+
+# options: robust standard errors, verbose mle, optimizer bfgs
+mod2 = heckprobit(depvar,X,LFP,Z,2,2,0)
+
+# USING PUBLIC FUNCTIONS
+
+# default settings
+mod3 = heckprobit_setup(depvar,X,LFP,Z)
+heckprobit_estimate(&mod3)
+heckprobit_printout(&mod3)
+
+# options: robust standard errors, verbose mle, optimizer bfgs
+
+heckprobit_setoption(&mod3, "vcvtype", 2)
+heckprobit_setoption(&mod3, "verbose", 2)
+heckprobit_setoption(&mod3, "newton" , 0)
+
+heckprobit_estimate(&mod3)
+heckprobit_printout(&mod3)

@@ -1,0 +1,6 @@
+include ./DeWallis_test.gfn
+open sw_ch12 --quiet
+series y = EXRUK
+list xlist = const 4 
+bundle results = DeWallis_test(y,xlist,0)
+print results

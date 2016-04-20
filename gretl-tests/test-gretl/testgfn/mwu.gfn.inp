@@ -1,0 +1,5 @@
+include ./mwu.gfn
+nulldata 10
+x1=normal()
+y1=normal()+1
+mwu(x1,y1)

@@ -1,0 +1,192 @@
+=== /home/helio/test-gretl/intreg ===
+output/diaz.out vs newout/diaz.out:
+28,29c28,29
+< Iteration 1: loglikelihood = -185.179289168 (steplength = 1)
+< Parameters:       886.03     -87.290      5.4081
+---
+> Iteration 1: loglikelihood = -185.135259641 (steplength = 1)
+> Parameters:       884.35     -86.964      5.4161
+32,34c32,50
+< Iteration 2: loglikelihood = -180.292748435 (steplength = 1)
+< Parameters:       1030.0     -114.95      5.5419
+< Gradients:     -0.020319    -0.32212      14.733 (norm 6.82e+00)
+---
+> Iteration 2: loglikelihood = -180.360216960 (steplength = 1)
+> Parameters:       1034.1     -115.50      5.5203
+> Gradients:     -0.020727    -0.32528      14.178 (norm 6.76e+00)
+> 
+> Iteration 3: loglikelihood = -179.316599652 (steplength = 1)
+> Parameters:       1135.2     -135.34      5.5950
+> Gradients:    -0.0074464    -0.10964      5.0655 (norm 4.15e+00)
+> 
+> Iteration 4: loglikelihood = -179.232886565 (steplength = 1)
+> Parameters:       1161.1     -140.84      5.6374
+> Gradients:    -0.0015179   -0.020338      1.8356 (norm 2.23e+00)
+> 
+> Iteration 5: loglikelihood = -179.230938062 (steplength = 1)
+> Parameters:       1164.0     -141.53      5.6456
+> Gradients:   -0.00017019  -0.0020012     0.33321 (norm 8.87e-01)
+> 
+> Iteration 6: loglikelihood = -179.230920351 (steplength = 1)
+> Parameters:       1164.1     -141.57      5.6464
+> Gradients:   -4.2787e-06 -4.4171e-05    0.037354 (norm 2.72e-01)
+36,46c52,54
+< Iteration 3: loglikelihood = -179.288716260 (steplength = 1)
+< Parameters:       1135.4     -135.59      5.6109
+< Gradients:    -0.0075389    -0.11117      3.9334 (norm 3.90e+00)
+< 
+< Iteration 4: loglikelihood = -179.231258466 (steplength = 1)
+< Parameters:       1162.0     -141.11      5.6436
+< Gradients:    -0.0015205   -0.020529      1.1161 (norm 1.91e+00)
+< 
+< Iteration 5: loglikelihood = -179.230920218 (steplength = 1)
+< Parameters:       1164.1     -141.57      5.6465
+< Gradients:   -0.00013235  -0.0015897    0.081859 (norm 5.30e-01)
+---
+> Iteration 7: loglikelihood = -179.230920204 (steplength = 1)
+> Parameters:       1164.2     -141.57      5.6465
+> Gradients:   -2.2003e-08 -1.9416e-07   0.0034911 (norm 8.12e-02)
+48c56
+< Iteration 6: loglikelihood = -179.230920203 (steplength = 1)
+---
+> Iteration 8: loglikelihood = -179.230920203 (steplength = 1)
+50c58
+< Gradients:   -1.0222e-06 -1.1220e-05  0.00051608 (norm 4.36e-02)
+---
+> Gradients:   -1.2576e-10 -1.0386e-09  0.00031618 (norm 2.44e-02)
+56c64
+< Gradients:   -5.0174e-11 -5.1651e-10  2.2280e-08 (norm 2.93e-04)
+---
+> Gradients:   -1.0034e-12 -8.2772e-12  2.8586e-05 (norm 7.34e-03)
+58c66
+< Gradient within tolerance (1e-07)
+---
+> Successive criterion values within tolerance (1e-07)
+60c68
+< Convergence achieved after 6 iterations
+---
+> Convergence achieved after 8 iterations
+68,69c76,77
+<   const       1164.16       135.951      8.563   1.10e-17 ***
+<   X           -141.569       21.9110    -6.461   1.04e-10 ***
+---
+>   const       1164.16       135.877      8.568   1.06e-17 ***
+>   X           -141.569       21.8638    -6.475   9.48e-11 ***
+71c79
+< Chi-square(1)        41.74578   p-value              1.04e-10
+---
+> Chi-square(1)        41.92633   p-value              9.48e-11
+75c83
+< sigma = 283.294 (44.1009)
+---
+> sigma = 283.294 (42.0603)
+81,82c89,90
+<   Test statistic: Chi-square(2) = 4.97161
+<   with p-value = 0.0832584
+---
+>   Test statistic: Chi-square(2) = 4.97153
+>   with p-value = 0.083262
+91,92c99,100
+< Iteration 1: loglikelihood = -185.179289168 (steplength = 1)
+< Parameters:       886.03     -87.290      5.4081
+---
+> Iteration 1: loglikelihood = -185.135259641 (steplength = 1)
+> Parameters:       884.35     -86.964      5.4161
+95,97c103,121
+< Iteration 2: loglikelihood = -180.292748435 (steplength = 1)
+< Parameters:       1030.0     -114.95      5.5419
+< Gradients:     -0.020319    -0.32212      14.733 (norm 6.82e+00)
+---
+> Iteration 2: loglikelihood = -180.360216960 (steplength = 1)
+> Parameters:       1034.1     -115.50      5.5203
+> Gradients:     -0.020727    -0.32528      14.178 (norm 6.76e+00)
+> 
+> Iteration 3: loglikelihood = -179.316599652 (steplength = 1)
+> Parameters:       1135.2     -135.34      5.5950
+> Gradients:    -0.0074464    -0.10964      5.0655 (norm 4.15e+00)
+> 
+> Iteration 4: loglikelihood = -179.232886565 (steplength = 1)
+> Parameters:       1161.1     -140.84      5.6374
+> Gradients:    -0.0015179   -0.020338      1.8356 (norm 2.23e+00)
+> 
+> Iteration 5: loglikelihood = -179.230938062 (steplength = 1)
+> Parameters:       1164.0     -141.53      5.6456
+> Gradients:   -0.00017019  -0.0020012     0.33321 (norm 8.87e-01)
+> 
+> Iteration 6: loglikelihood = -179.230920351 (steplength = 1)
+> Parameters:       1164.1     -141.57      5.6464
+> Gradients:   -4.2787e-06 -4.4171e-05    0.037354 (norm 2.72e-01)
+99,109c123,125
+< Iteration 3: loglikelihood = -179.288716260 (steplength = 1)
+< Parameters:       1135.4     -135.59      5.6109
+< Gradients:    -0.0075389    -0.11117      3.9334 (norm 3.90e+00)
+< 
+< Iteration 4: loglikelihood = -179.231258466 (steplength = 1)
+< Parameters:       1162.0     -141.11      5.6436
+< Gradients:    -0.0015205   -0.020529      1.1161 (norm 1.91e+00)
+< 
+< Iteration 5: loglikelihood = -179.230920218 (steplength = 1)
+< Parameters:       1164.1     -141.57      5.6465
+< Gradients:   -0.00013235  -0.0015897    0.081859 (norm 5.30e-01)
+---
+> Iteration 7: loglikelihood = -179.230920204 (steplength = 1)
+> Parameters:       1164.2     -141.57      5.6465
+> Gradients:   -2.2003e-08 -1.9416e-07   0.0034911 (norm 8.12e-02)
+111c127
+< Iteration 6: loglikelihood = -179.230920203 (steplength = 1)
+---
+> Iteration 8: loglikelihood = -179.230920203 (steplength = 1)
+113c129
+< Gradients:   -1.0222e-06 -1.1220e-05  0.00051608 (norm 4.36e-02)
+---
+> Gradients:   -1.2576e-10 -1.0386e-09  0.00031618 (norm 2.44e-02)
+119c135
+< Gradients:   -5.0174e-11 -5.1651e-10  2.2280e-08 (norm 2.93e-04)
+---
+> Gradients:   -1.0034e-12 -8.2772e-12  2.8586e-05 (norm 7.34e-03)
+121c137
+< Gradient within tolerance (1e-07)
+---
+> Successive criterion values within tolerance (1e-07)
+123c139
+< Convergence achieved after 6 iterations
+---
+> Convergence achieved after 8 iterations
+131,132c147,148
+<   const       1164.16       135.951      8.563   1.10e-17 ***
+<   X           -141.569       21.9110    -6.461   1.04e-10 ***
+---
+>   const       1164.16       135.877      8.568   1.06e-17 ***
+>   X           -141.569       21.8638    -6.475   9.48e-11 ***
+134c150
+< Chi-square(1)        41.74578   p-value              1.04e-10
+---
+> Chi-square(1)        41.92633   p-value              9.48e-11
+138c154
+< sigma = 283.294 (44.1009)
+---
+> sigma = 283.294 (42.0603)
+146,147c162,163
+<   Test statistic: Chi-square(2) = 4.97161
+<   with p-value = 0.0832584
+---
+>   Test statistic: Chi-square(2) = 4.97153
+>   with p-value = 0.083262
+output/intregex.out vs newout/intregex.out:
+63c63
+< Convergence achieved after 4 iterations
+---
+> Convergence achieved after 5 iterations
+98c98
+< Convergence achieved after 4 iterations
+---
+> Convergence achieved after 5 iterations
+output/wtp.out vs newout/wtp.out:
+8c8
+< Convergence achieved after 5 iterations
+---
+> Convergence achieved after 6 iterations
+30c30
+<   with p-value = 0.00395227
+---
+>   with p-value = 0.00395229

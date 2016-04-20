@@ -1,0 +1,482 @@
+=== /home/helio/test-gretl/cluster ===
+output/binary-cluster.out vs newout/binary-cluster.out:
+78a79
+> Failed to execute child process "stata" (No such file or directory)
+80,138d80
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (4 vars, 32 obs)
+< 
+< . logit grade gpa tuce psi, vce(cluster psi)
+< 
+< Iteration 0:   log pseudolikelihood =  -20.59173  
+< Iteration 1:   log pseudolikelihood = -13.259768  
+< Iteration 2:   log pseudolikelihood = -12.894606  
+< Iteration 3:   log pseudolikelihood = -12.889639  
+< Iteration 4:   log pseudolikelihood = -12.889633  
+< Iteration 5:   log pseudolikelihood = -12.889633  
+< 
+< Logistic regression                               Number of obs   =         32
+<                                                   Wald chi2(0)    =          .
+<                                                   Prob > chi2     =          .
+< Log pseudolikelihood = -12.889633                 Pseudo R2       =     0.3740
+< 
+<                                     (Std. Err. adjusted for 2 clusters in psi)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<        grade |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<          gpa |   2.826113   1.438617     1.96   0.049     .0064747    5.645751
+<         tuce |   .0951577   .0525054     1.81   0.070     -.007751    .1980663
+<          psi |   2.378688   .4966641     4.79   0.000     1.405244    3.352131
+<        _cons |  -13.02135   6.147353    -2.12   0.034    -25.06994   -.9727569
+< ------------------------------------------------------------------------------
+< 
+< . probit grade gpa tuce psi, vce(cluster psi)
+< 
+< Iteration 0:   log pseudolikelihood =  -20.59173  
+< Iteration 1:   log pseudolikelihood = -12.908126  
+< Iteration 2:   log pseudolikelihood = -12.818963  
+< Iteration 3:   log pseudolikelihood = -12.818803  
+< Iteration 4:   log pseudolikelihood = -12.818803  
+< 
+< Probit regression                                 Number of obs   =         32
+<                                                   Wald chi2(0)    =          .
+<                                                   Prob > chi2     =          .
+< Log pseudolikelihood = -12.818803                 Pseudo R2       =     0.3775
+< 
+<                                     (Std. Err. adjusted for 2 clusters in psi)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<        grade |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<          gpa |    1.62581     .70484     2.31   0.021     .2443493    3.007271
+<         tuce |   .0517289   .0259247     2.00   0.046     .0009175    .1025404
+<          psi |   1.426332   .2106862     6.77   0.000     1.013395     1.83927
+<        _cons |   -7.45232   2.965365    -2.51   0.012    -13.26433   -1.640312
+< ------------------------------------------------------------------------------
+< 
+< . 
+< end of do-file
+< 
+< Done
+output/biprobit-cluster.out vs newout/biprobit-cluster.out:
+39a40
+> Failed to execute child process "stata" (No such file or directory)
+41,102d41
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (11 vars, 95 obs)
+< 
+< . biprobit private vote logptax loginc years, vce(cluster pub12)
+< 
+< Fitting comparison equation 1:
+< 
+< Iteration 0:   log pseudolikelihood = -31.967097  
+< Iteration 1:   log pseudolikelihood = -31.452424  
+< Iteration 2:   log pseudolikelihood = -31.448958  
+< Iteration 3:   log pseudolikelihood = -31.448958  
+< 
+< Fitting comparison equation 2:
+< 
+< Iteration 0:   log pseudolikelihood = -63.036914  
+< Iteration 1:   log pseudolikelihood = -58.534843  
+< Iteration 2:   log pseudolikelihood = -58.497292  
+< Iteration 3:   log pseudolikelihood = -58.497288  
+< 
+< Comparison:    log pseudolikelihood = -89.946246
+< 
+< Fitting full model:
+< 
+< Iteration 0:   log pseudolikelihood = -89.946246  
+< Iteration 1:   log pseudolikelihood = -89.258897  
+< Iteration 2:   log pseudolikelihood = -89.254028  
+< Iteration 3:   log pseudolikelihood = -89.254028  
+< 
+< Bivariate probit regression                       Number of obs   =         95
+<                                                   Wald chi2(0)    =          .
+< Log pseudolikelihood = -89.254028                 Prob > chi2     =          .
+< 
+<                                   (Std. Err. adjusted for 2 clusters in pub12)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<              |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+< private      |
+<      logptax |  -.1066962   .0627831    -1.70   0.089    -.2297488    .0163564
+<       loginc |   .3762037   .0865775     4.35   0.000      .206515    .5458924
+<        years |  -.0118884    .019126    -0.62   0.534    -.0493747    .0255979
+<        _cons |  -4.184694   1.220188    -3.43   0.001    -6.576218    -1.79317
+< -------------+----------------------------------------------------------------
+< vote         |
+<      logptax |  -1.288707   .1304478    -9.88   0.000     -1.54438   -1.033034
+<       loginc |    .998286   .0050324   198.37   0.000     .9884226    1.008149
+<        years |  -.0168561   .0016384   -10.29   0.000    -.0200673   -.0136449
+<        _cons |  -.5360573   1.000745    -0.54   0.592    -2.497481    1.425367
+< -------------+----------------------------------------------------------------
+<      /athrho |  -.2764525   .4975442    -0.56   0.578    -1.251621    .6987163
+< -------------+----------------------------------------------------------------
+<          rho |  -.2696186   .4613757                     -.8487377    .6035523
+< ------------------------------------------------------------------------------
+< Wald test of rho=0:                 chi2(1) =  .308729    Prob > chi2 = 0.5785
+< 
+< . 
+< end of do-file
+< 
+< Done
+output/duration-cluster.out vs newout/duration-cluster.out:
+89a90
+> Failed to execute child process "stata" (No such file or directory)
+91,216d91
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (46 vars, 3343 obs)
+< 
+< . stset spell, failure(censor1)
+< 
+<      failure event:  censor1 != 0 & censor1 < .
+< obs. time interval:  (0, spell]
+<  exit on or before:  failure
+< 
+< ------------------------------------------------------------------------------
+<      3343  total obs.
+<         0  exclusions
+< ------------------------------------------------------------------------------
+<      3343  obs. remaining, representing
+<      1073  failures in single record/single failure data
+<     20887  total analysis time at risk, at risk from t =         0
+<                              earliest observed entry t =         0
+<                                   last observed exit t =        28
+< 
+< . streg reprate disrate ui rrui drui logwage, nohr dist(exp)
+< 
+<          failure _d:  censor1
+<    analysis time _t:  spell
+< 
+< Iteration 0:   log likelihood = -3012.4909  
+< Iteration 1:   log likelihood = -2885.3724  
+< Iteration 2:   log likelihood =   -2835.92  
+< Iteration 3:   log likelihood = -2835.2326  
+< Iteration 4:   log likelihood = -2835.2317  
+< Iteration 5:   log likelihood = -2835.2317  
+< 
+< Exponential regression -- log relative-hazard form 
+< 
+< No. of subjects =         3343                     Number of obs   =      3343
+< No. of failures =         1073
+< Time at risk    =        20887
+<                                                    LR chi2(6)      =    354.52
+< Log likelihood  =   -2835.2317                     Prob > chi2     =    0.0000
+< 
+< ------------------------------------------------------------------------------
+<           _t |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<      reprate |   .9667291   .5161866     1.87   0.061     -.044978    1.978436
+<      disrate |   -1.75916   .6800213    -2.59   0.010    -3.091977   -.4263428
+<           ui |   -1.58866   .2381675    -6.67   0.000     -2.05546    -1.12186
+<         rrui |   1.003701   .5822603     1.72   0.085    -.1375078     2.14491
+<         drui |   .2773934   1.007601     0.28   0.783    -1.697468    2.252255
+<      logwage |   .5508936   .0920424     5.99   0.000     .3704938    .7312934
+<        _cons |  -5.724694   .7030252    -8.14   0.000    -7.102598    -4.34679
+< ------------------------------------------------------------------------------
+< 
+< . streg reprate disrate ui rrui drui logwage, nohr dist(exp) vce(robust)
+< 
+<          failure _d:  censor1
+<    analysis time _t:  spell
+< 
+< Iteration 0:   log pseudolikelihood = -3012.4909  
+< Iteration 1:   log pseudolikelihood = -2885.3724  
+< Iteration 2:   log pseudolikelihood =   -2835.92  
+< Iteration 3:   log pseudolikelihood = -2835.2326  
+< Iteration 4:   log pseudolikelihood = -2835.2317  
+< Iteration 5:   log pseudolikelihood = -2835.2317  
+< 
+< Exponential regression -- log relative-hazard form 
+< 
+< No. of subjects      =         3343                Number of obs   =      3343
+< No. of failures      =         1073
+< Time at risk         =        20887
+<                                                    Wald chi2(6)    =    313.16
+< Log pseudolikelihood =   -2835.2317                Prob > chi2     =    0.0000
+< 
+< ------------------------------------------------------------------------------
+<              |               Robust
+<           _t |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<      reprate |   .9667291   .5655831     1.71   0.087    -.1417933    2.075252
+<      disrate |   -1.75916   .7350116    -2.39   0.017    -3.199756   -.3185637
+<           ui |   -1.58866   .2517797    -6.31   0.000    -2.082139   -1.095181
+<         rrui |   1.003701    .605958     1.66   0.098    -.1839546    2.191357
+<         drui |   .2773934   1.022029     0.27   0.786    -1.725747    2.280533
+<      logwage |   .5508936   .0948248     5.81   0.000     .3650403    .7367469
+<        _cons |  -5.724694   .7256376    -7.89   0.000    -7.146918   -4.302471
+< ------------------------------------------------------------------------------
+< 
+< . streg reprate disrate ui rrui drui logwage, nohr dist(exp) vce(cluster nonwhi
+< > te)
+< 
+<          failure _d:  censor1
+<    analysis time _t:  spell
+< 
+< Iteration 0:   log pseudolikelihood = -3012.4909  
+< Iteration 1:   log pseudolikelihood = -2885.3724  
+< Iteration 2:   log pseudolikelihood =   -2835.92  
+< Iteration 3:   log pseudolikelihood = -2835.2326  
+< Iteration 4:   log pseudolikelihood = -2835.2317  
+< Iteration 5:   log pseudolikelihood = -2835.2317  
+< 
+< Exponential regression -- log relative-hazard form 
+< 
+< No. of subjects      =         3343                Number of obs   =      3343
+< No. of failures      =         1073
+< Time at risk         =        20887
+<                                                    Wald chi2(0)    =         .
+< Log pseudolikelihood =   -2835.2317                Prob > chi2     =         .
+< 
+<                                (Std. Err. adjusted for 2 clusters in nonwhite)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<           _t |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<      reprate |   .9667291   .9696135     1.00   0.319    -.9336784    2.867137
+<      disrate |   -1.75916   .3299484    -5.33   0.000    -2.405847   -1.112473
+<           ui |   -1.58866   .0580176   -27.38   0.000    -1.702372   -1.474947
+<         rrui |   1.003701   .0560262    17.91   0.000      .893892    1.113511
+<         drui |   .2773934   .2502963     1.11   0.268    -.2131784    .7679652
+<      logwage |   .5508936   .3476742     1.58   0.113    -.1305353    1.232322
+<        _cons |  -5.724694   2.603063    -2.20   0.028     -10.8266    -.622784
+< ------------------------------------------------------------------------------
+< 
+< . 
+< end of do-file
+< 
+< Done
+output/mnlogit-cluster.out vs newout/mnlogit-cluster.out:
+41a42
+> Failed to execute child process "stata" (No such file or directory)
+43,88d43
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (18 vars, 1738 obs)
+< 
+< . mlogit status educ exper expersq black, base(1) vce(cluster educ)
+< 
+< Iteration 0:   log pseudolikelihood = -1199.7182  
+< Iteration 1:   log pseudolikelihood = -960.26272  
+< Iteration 2:   log pseudolikelihood =  -908.7673  
+< Iteration 3:   log pseudolikelihood = -907.85992  
+< Iteration 4:   log pseudolikelihood = -907.85723  
+< Iteration 5:   log pseudolikelihood = -907.85723  
+< 
+< Multinomial logistic regression                   Number of obs   =       1717
+<                                                   Wald chi2(8)    =    1653.54
+<                                                   Prob > chi2     =     0.0000
+< Log pseudolikelihood = -907.85723                 Pseudo R2       =     0.2433
+< 
+<                                   (Std. Err. adjusted for 13 clusters in educ)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<       status |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+< 1            |  (base outcome)
+< -------------+----------------------------------------------------------------
+< 2            |
+<         educ |  -.6736313   .1017265    -6.62   0.000    -.8730115    -.474251
+<        exper |  -.1062149   .1891472    -0.56   0.574    -.4769365    .2645067
+<      expersq |  -.0125152    .023973    -0.52   0.602    -.0595014    .0344711
+<        black |   .8130166   .3694621     2.20   0.028     .0888841    1.537149
+<        _cons |   10.27787   1.716199     5.99   0.000     6.914187    13.64156
+< -------------+----------------------------------------------------------------
+< 3            |
+<         educ |  -.3146573   .0751874    -4.18   0.000    -.4620219   -.1672928
+<        exper |   .8487367   .1490553     5.69   0.000     .5565936     1.14088
+<      expersq |  -.0773003   .0240876    -3.21   0.001    -.1245112   -.0300895
+<        black |   .3113612   .2502337     1.24   0.213    -.1790879    .8018103
+<        _cons |   5.543798    1.20398     4.60   0.000     3.184041    7.903555
+< ------------------------------------------------------------------------------
+< 
+< . 
+< end of do-file
+< 
+< Done
+output/ols-cluster.out vs newout/ols-cluster.out:
+39a40
+> Failed to execute child process "stata" (No such file or directory)
+41,85d41
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (4 vars, 14 obs)
+< 
+< . reg price sqft bedrms, vce(cluster bedrms)
+< 
+< Linear regression                                      Number of obs =      14
+<                                                        F(  0,     1) =       .
+<                                                        Prob > F      =       .
+<                                                        R-squared     =  0.8347
+<                                                        Root MSE      =  39.118
+< 
+<                                  (Std. Err. adjusted for 2 clusters in bedrms)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<        price |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<         sqft |   .1483138   .0502929     2.95   0.208     -.490718    .7873456
+<       bedrms |  -23.91061   27.15705    -0.88   0.540    -368.9736    321.1524
+<        _cons |   121.1787   2.823108    42.92   0.015     85.30769    157.0497
+< ------------------------------------------------------------------------------
+< 
+< . matrix vcv = e(V)
+< 
+< . gretl_export vcv "vcv.mat"
+< 
+< . 
+< end of do-file
+< 
+< ? matrix stata_vcv = mread("/home/cottrell/.gretl/vcv.mat")
+< Generated matrix stata_vcv
+< ? stata_se = stata_reorder(sqrt(diag(stata_vcv)))
+< Generated matrix stata_se
+< ? matrix check = se - stata_se
+< Generated matrix check
+< ? print check
+< check (3 x 1)
+< 
+<  -6.1608e-08 
+<  -1.0971e-09 
+<  -5.8513e-07 
+< 
+< Done
+output/ordered-cluster.out vs newout/ordered-cluster.out:
+80a81
+> Failed to execute child process "stata" (No such file or directory)
+82,142d82
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (9 vars, 601 obs)
+< 
+< . oprobit z8 z1 z2, vce(robust)
+< 
+< Iteration 0:   log pseudolikelihood = -817.53762  
+< Iteration 1:   log pseudolikelihood = -804.18673  
+< Iteration 2:   log pseudolikelihood = -804.18548  
+< Iteration 3:   log pseudolikelihood = -804.18548  
+< 
+< Ordered probit regression                         Number of obs   =        601
+<                                                   Wald chi2(2)    =      25.78
+<                                                   Prob > chi2     =     0.0000
+< Log pseudolikelihood = -804.18548                 Pseudo R2       =     0.0163
+< 
+< ------------------------------------------------------------------------------
+<              |               Robust
+<           z8 |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<           z1 |   .0462572   .0894679     0.52   0.605    -.1290965     .221611
+<           z2 |  -.0251171   .0049532    -5.07   0.000    -.0348253   -.0154089
+< -------------+----------------------------------------------------------------
+<        /cut1 |  -2.779324   .1972611                     -3.165949   -2.392699
+<        /cut2 |  -1.915389   .1760727                     -2.260485   -1.570293
+<        /cut3 |  -1.357699   .1727421                     -1.696267    -1.01913
+<        /cut4 |  -.4983583   .1675841                     -.8268171   -.1698995
+< ------------------------------------------------------------------------------
+< 
+< . oprobit z8 z1 z2, vce(cluster z4)
+< 
+< Iteration 0:   log pseudolikelihood = -817.53762  
+< Iteration 1:   log pseudolikelihood = -804.18673  
+< Iteration 2:   log pseudolikelihood = -804.18548  
+< Iteration 3:   log pseudolikelihood = -804.18548  
+< 
+< Ordered probit regression                         Number of obs   =        601
+<                                                   Wald chi2(0)    =          .
+<                                                   Prob > chi2     =          .
+< Log pseudolikelihood = -804.18548                 Pseudo R2       =     0.0163
+< 
+<                                      (Std. Err. adjusted for 2 clusters in z4)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<           z8 |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<           z1 |   .0462572   .1433612     0.32   0.747    -.2347255      .32724
+<           z2 |  -.0251171   .0092774    -2.71   0.007    -.0433005   -.0069336
+< -------------+----------------------------------------------------------------
+<        /cut1 |  -2.779324   .4086716                     -3.580306   -1.978343
+<        /cut2 |  -1.915389   .4935664                     -2.882761   -.9480166
+<        /cut3 |  -1.357699   .4401224                     -2.220323   -.4950746
+<        /cut4 |  -.4983583   .5455047                     -1.567528    .5708113
+< ------------------------------------------------------------------------------
+< 
+< . 
+< end of do-file
+< 
+< Done
+output/tsls-cluster.out vs newout/tsls-cluster.out:
+59a60
+> F(4, 251)            1.11e+15   P-value(F)           0.000000
+94a96
+> Failed to execute child process "stata" (No such file or directory)
+96,147d97
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (10 vars, 256 obs)
+< 
+< . ivreg y x1 x2 (y1 y2 = z1 z2 z3), cluster(cx)
+< 
+< Instrumental variables (2SLS) regression               Number of obs =     256
+<                                                        F(  2,     3) =       .
+<                                                        Prob > F      =  0.0000
+<                                                        R-squared     =       .
+<                                                        Root MSE      =   1.177
+< 
+<                                      (Std. Err. adjusted for 4 clusters in cx)
+< ------------------------------------------------------------------------------
+<              |               Robust
+<            y |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<           y1 |  -.3998673   .8573744    -0.47   0.673    -3.128415    2.328681
+<           y2 |  -.3535222   .5985272    -0.59   0.596    -2.258303    1.551258
+<           x1 |  -.0416443   .0716913    -0.58   0.602    -.2697981    .1865094
+<           x2 |   .0631541   .0657942     0.96   0.408    -.1462325    .2725408
+<        _cons |   .1523734   .1484248     1.03   0.380    -.3199807    .6247274
+< ------------------------------------------------------------------------------
+< Instrumented:  y1 y2
+< Instruments:   x1 x2 z1 z2 z3
+< ------------------------------------------------------------------------------
+< 
+< . matrix vcv = e(V)
+< 
+< . gretl_export vcv "vcv.mat"
+< 
+< . 
+< end of do-file
+< 
+< ? matrix stata_vcv = mread("/home/cottrell/.gretl/vcv.mat")
+< Generated matrix stata_vcv
+< ? stata_se = stata_reorder(sqrt(diag(stata_vcv)))
+< Generated matrix stata_se
+< ? matrix check = se - stata_se
+< Generated matrix check
+< ? print check
+< check (5 x 1)
+< 
+<   7.7152e-09 
+<   5.1412e-08 
+<   1.4276e-08 
+<  -3.2855e-10 
+<   1.7202e-09 
+< 
+< Done

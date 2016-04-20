@@ -1,0 +1,2 @@
+run "/home/cottrell/stats/test-gretl/testgfn/seedcake.inp"
+run seedcake.inp

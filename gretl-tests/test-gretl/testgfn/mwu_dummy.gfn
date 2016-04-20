@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="mwu_dummy" ID="1310312775" minver="1.9.5">
+<author>Yi-Nnung Yang</author>
+<version>0.92</version>
+<date>2013-04-25</date>
+<description>Mann-Whitney U test with group dummy</description>
+<help>
+This is a function package for Mann-Whitney U test WITH &quot;group dummy&quot; variable.
+It is well-known that Mann-Whitney U test is similar to non-parametric Wilcoxon rank sum test and parametric t-test.
+
+Note: This package should be used with gretl 1.9.5cvs built after 2011.07.04 or later.
+Usage:
+   mwu_dummy(x,group)
+   where x is a variable of series to be tested and group is a discrete dummy variable to specify different treatments or groups.
+   H0: The two samples split by the group dummy are not significantly different.
+</help>
+<gretl-function name="mwu_dummy" type="matrix">
+ <params count="2">
+  <param name="x" type="series"/>
+  <param name="dummy" type="series">
+<description>group dummy</description>
+  </param>
+ </params>
+<code>
+matrix vx = values(dummy)
+scalar nx = rows(vx)
+if nx&gt;2
+  funcerr &quot;the dummy variable has greater than 2 distinct values...&quot;
+else
+  if nx=1
+    funcerr &quot;the dummy variable has only 1 distinct values...&quot;
+  endif
+endif
+
+smpl dummy=vx[1] --restrict --replace
+matrix mx = {x}
+smpl dummy=vx[2] --restrict --replace
+matrix my = {x}
+
+smpl full
+n1=rows(mx)
+n2=rows(my)
+if n1&gt;n2
+  N1=n1
+  N2=n2
+else
+  N1=n2
+  N2=n1
+endif
+matrix Z = msortby((mx ~ 1) | (my ~ 0), 1)
+k=selifr(ranking(Z[,1]), Z[,2])
+w1 = sumc(selifr(ranking(Z[,1]), Z[,2]))
+w2=(1+n1+n2)*(n1+n2)/2-w1
+# --- 驗算用 ---
+scalar U1=(n1*n2+n1*(n1+1)/2)-w1
+scalar U2=(n1*n2+n2*(n2+1)/2)-w2
+#   UU=U1+U2
+# --- 加入以下的判斷式, 可使不論 x, y 誰的 rank sum 大, 都得到同樣的 U 值
+if w1&gt;w2
+  #U=(n1*n2+n2*(n2+1)/2)-w2
+  U=xmax(U1,U2)
+else
+  #U=(n1*n2+n1*(n1+1)/2)-w1
+  U=xmax(U1,U2)
+endif
+# --- 和 Wilcox rank sum test 比較
+#   difftest y x --rank-sum --v
+# --- 和 R 中的 Wilcox rank sum test 比較 (事實上 R 的 Wilcox.test 是 Mann-Whitney U)
+#   wilcox.test(y,x,correct=FALSE)
+printf &quot;==============================================================\n&quot;
+printf &quot;      Mann-Whitney U statistic for  %s (grouped by %s):     \n&quot;,argname(x),argname(dummy)
+printf &quot;         sample 1: %s = %d\n            n1=%d,   w1=%.2f,   U1=%.2f\n&quot;,argname(dummy),vx[1],n1,w1,U1
+printf &quot;         sample 2: %s = %d\n            n2=%d,   w2=%.2f,   U2=%.2f\n&quot;,argname(dummy),vx[2],n2,w2,U2
+printf &quot; --------------------------------------------------------------\n&quot;
+printf &quot;	 N1= %d (=max(n1,n2)) 	  U = %.2f = (=max(U1,U2))     \n&quot;, N1,U
+printf &quot;==============================================================\n&quot;
+if N1&lt;=10
+  printf &quot;Critical values of M-W U test:      \n&quot;
+  printf &quot;--------------------------------------------------------------\n&quot;
+  printf &quot;	size1 size2	Percentile	\n&quot;
+  printf &quot;	n1	n2	0.2	0.1	0.05	0.02	0.01	\n&quot;
+  printf &quot;--------------------------------------------------------------\n&quot;
+endif
+if N1=3
+  printf &quot;	3	2	6	 	 	 	 	\n&quot;
+  printf &quot;	3	3	8	9	 	 	 	\n&quot;
+endif
+if N1=4
+  printf &quot;	4	2	8	 	 	 	 	\n&quot;
+  printf &quot;	4	3	11	12	 	 	 	\n&quot;
+  printf &quot;	4	4	13	15	16	 	 	\n&quot;
+endif
+if N1=5
+  printf &quot;	5	2	9	10	 	 	 	\n&quot;
+  printf &quot;	5	3	13	14	15	 	 	\n&quot;
+  printf &quot;	5	4	16	18	19	20	 	\n&quot;
+  printf &quot;	5	5	20	21	23	24	25	\n&quot;
+endif
+if N1=6
+  printf &quot;	6	2	11	12	 	 	 	\n&quot;
+  printf &quot;	6	3	15	16	17	 	 	\n&quot;
+  printf &quot;	6	4	19	21	22	23	24	\n&quot;
+  printf &quot;	6	5	23	25	27	28	29	\n&quot;
+  printf &quot;	6	6	27	29	31	33	34	\n&quot;
+endif
+if N1=7
+  printf &quot;	7	2	13	14	 	 	 	\n&quot;
+  printf &quot;	7	3	17	19	20	21	 	\n&quot;
+  printf &quot;	7	4	22	24	25	27	28	\n&quot;
+  printf &quot;	7	5	27	29	30	32	34	\n&quot;
+  printf &quot;	7	6	31	34	36	38	39	\n&quot;
+  printf &quot;	7	7	36	38	41	43	45	\n&quot;
+endif
+if N1=8
+  printf &quot;	8	2	14	15	16	 	 	\n&quot;
+  printf &quot;	8	3	19	21	22	24	 	\n&quot;
+  printf &quot;	8	4	25	27	28	30	31	\n&quot;
+  printf &quot;	8	5	30	32	34	36	38	\n&quot;
+  printf &quot;	8	6	35	38	40	42	44	\n&quot;
+  printf &quot;	8	7	40	43	46	49	50	\n&quot;
+  printf &quot;	8	8	45	49	51	55	57	\n&quot;
+endif
+if N1=9
+  printf &quot;	9	1	9	 	 	 	 	\n&quot;
+  printf &quot;	9	2	16	17	18	 	 	\n&quot;
+  printf &quot;	9	3	22	23	25	26	27	\n&quot;
+  printf &quot;	9	4	27	30	32	33	35	\n&quot;
+  printf &quot;	9	5	33	36	38	40	42	\n&quot;
+  printf &quot;	9	6	39	42	44	47	49	\n&quot;
+  printf &quot;	9	7	45	48	51	54	56	\n&quot;
+  printf &quot;	9	8	50	54	57	61	63	\n&quot;
+  printf &quot;	9	9	56	60	64	67	70	\n&quot;
+endif
+if N1=10
+  printf &quot;	10	1	10	 	 	 	 	\n&quot;
+  printf &quot;	10	2	17	19	20	 	 	\n&quot;
+  printf &quot;	10	3	24	26	27	29	30	\n&quot;
+  printf &quot;	10	4	30	33	35	37	38	\n&quot;
+  printf &quot;	10	5	37	39	42	44	46	\n&quot;
+  printf &quot;	10	6	43	46	49	52	54	\n&quot;
+  printf &quot;	10	7	49	53	56	59	61	\n&quot;
+  printf &quot;	10	8	56	60	63	67	69	\n&quot;
+  printf &quot;	10	9	62	66	70	74	77	\n&quot;
+  printf &quot;	10	10	68	73	77	81	84	\n&quot;
+endif
+if N1&gt;=10
+  scalar EU=n1*n2/2
+  scalar sigma_U=(n1*n2*(n1+n2+1)/12)^0.5
+  scalar Z1=(U1-EU)/sigma_U
+  scalar Z2=(U2-EU)/sigma_U
+  printf &quot;   --------------------------------------------------------\n&quot;
+  printf &quot;      Normal distribution approximation for n1&gt;=10\n&quot;
+  printf &quot;   --------------------------------------------------------\n&quot;
+  printf &quot;      z1 = (%.2f - %.1f) / %.2f = %.5f\n&quot;,U1,EU,sigma_U,Z1
+  printf &quot;      z2 = (%.2f - %.1f) / %.2f = %.5f\n\n&quot;,U2,EU,sigma_U,Z2
+  scalar pv1=1-pvalue(z,Z1)
+  scalar pv2=1-pvalue(z,Z2)
+  scalar pv2tailed=2*pvalue(z,abs(Z1))
+  printf &quot;      One-tailed p-value:\n&quot;
+  printf &quot;          P(Z &lt; %.5f) = %.5f\n&quot;,Z1,pv1
+  printf &quot;          P(Z &lt; %.5f) = %.5f\n&quot;,Z2,pv2
+  printf &quot;      Two-tailed p-value  = %.5f\n&quot;,pv2tailed
+endif
+printf &quot;==============================================================\n&quot;
+if N1&lt;=10
+  printf &quot;*The above critical-value table is from http://elegans.som.vcu.edu/\n/~leon/core_2002/stats/formulas.htm#utest\n&quot;
+  matrix temp={n1,n2,U}
+else
+  matrix temp={n1,n2,U,pv1,pv2,pv2tailed}
+endif
+return temp
+</code>
+</gretl-function>
+<sample-script>
+nulldata 10
+genr index
+smpl (index % 2 = 0) --restrict --replace
+series x = index
+series group=1
+smpl (index % 2 = 1) --restrict --replace
+series x = index
+series group=2
+smpl full
+include mwu_dummy.gfn
+mwu_dummy(x,group)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

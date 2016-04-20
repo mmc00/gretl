@@ -1,0 +1,44 @@
+include ./gregory_hansen.gfn
+#################
+#	 EXAMPLE: "Residual-based tests for cointegration in models with regime shifts"
+#    by Allan W. Gregory and Bruce E. Hansen	#
+#################
+set echo off
+set messages off
+
+open http://www.wiso.uni-hamburg.de/fileadmin/sozialoekonomie/vwl/fritsche/Tarassow/joe96_data.csv
+rename xx3 ynr			# Net National Product, Billions of 82$
+rename xx2 pp			# Implicit Price Deflator, PI
+rename xx1 m1			# m1/p - M1, Billions of $
+rename xx4 sr			# 3 Month T-Bills
+
+series md = log(m1)
+series ynr = log(ynr)
+
+smpl 1960:1 1990:4		# Sample selected in the original article
+
+matrix y = { md }	# Endogeneous
+matrix x = { ynr } ~ { sr }	# Exogenous
+
+# Setup; main(y,x,model,choice,k)
+
+scalar model = 4		# Select break-type: 2=C, 3=C/T, 4=C/S
+# CHOICE only ADF*-test
+# =1  pre-specified AR lag
+# =2  AIC-chosen AR lag
+# =3  BIC-chosen AR lag
+# =4  downward-t-chosen AR lag
+scalar choice = 2		# only for ADF*-test relevant
+scalar k = 6			# maximum lag for ADF test
+greghans = main(y,x,model,choice,k)
+
+# Plot regime shift
+matrix mplot = greghans.tsadf ~ greghans.tsza ~ greghans.tszt
+colnames(mplot, "adf* z_a z_t date")
+gnuplot 1 2 3 --matrix=mplot --time-series --with-lp --output=display \
+  { set term png font 'Helvetica,13' ; \
+  set title "Regime shifts with ADF*, Za and Zt" ; \
+  set key bottom left ; }
+# Conventional ADF Test
+coint k md ynr sr --test-down --skip-df
+coint k md ynr sr --ct --test-down --skip-df

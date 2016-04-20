@@ -1,0 +1,473 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="felogit" ID="1394056700" needs-panel-data="true" minver="1.9.12">
+<author>Riccardo &quot;Jack&quot; Lucchetti</author>
+<version>1.5</version>
+<date>2014-05-02</date>
+<description>Fixed-effects logit</description>
+<label>Fixed-effects logit</label>
+<menu-attachment>/menubar/Model/LimdepModels/logit</menu-attachment>
+<help>
+Syntax: felogit(series depvar, list X, scalar verbose[0])
+
+  depvar: series, dependent variable (must be binary)
+       X: list, explanatory variables for main equation
+ verbose: 0 to 2, verbosity level
+</help>
+<gretl-function name="felogit" type="bundle" pkg-role="gui-main">
+ <params count="4">
+  <param name="y" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="X" type="list">
+<description>List of explanatory variables</description>
+  </param>
+  <param name="verbose" type="int" min="0" max="2" default="1">
+<description>Verbosity level</description>
+  </param>
+  <param name="time_dummies" type="bool" default="0">
+<description>Time dummies</description>
+  </param>
+ </params>
+<code>
+bundle b = null
+
+b[&quot;yname&quot;] = argname(y)
+
+if !isdummy(y)
+  printf &quot;Variable %s is not binary!\n&quot;, b[&quot;yname&quot;]
+  return b
+endif
+
+if time_dummies
+  X = X || dummify(time)
+endif
+
+panel_acct(&amp;b, y, X)
+generate_Q(&amp;b)
+singularity_check(&amp;b)
+
+k = b[&quot;nparam&quot;]
+matrix beta = zeros(k, 1)
+matrix g = zeros(k, 1)
+matrix Info = zeros(k, k)
+
+if verbose == 2
+  set max_verbose on
+endif
+
+
+scalar LL = NRmax(beta, &quot;felogit_ll(beta, &amp;b)&quot;,   &quot;getScore(&amp;g, &amp;b)&quot;, &quot;getInfo(&amp;Info, &amp;b)&quot;)
+
+scalar nt = b[&quot;NT&quot;]
+b[&quot;coeff&quot;] = beta
+b[&quot;lnl&quot;] = LL
+b[&quot;aic&quot;] = -2*LL + 2*k
+b[&quot;bic&quot;] = -2*LL + k * ln(nt)
+b[&quot;hqc&quot;] = -2*LL + 2* k * ln(ln(nt))
+b[&quot;vcv&quot;] = invpd(Info)
+bundle qmats = null
+b[&quot;Qmats&quot;] = qmats
+
+#add_fitvals(&amp;b)
+
+if verbose &gt; 0
+  felogit_print(&amp;b)
+endif
+
+return b
+</code>
+</gretl-function>
+<gretl-function name="felogit_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>
+Ti = b[&quot;Ti&quot;]
+
+printf &quot;\nFixed effects logit: %d units (out of %d)\n&quot;, b[&quot;N&quot;], b[&quot;Tot_N&quot;]
+printf &quot;                     %d observations (out of %d)\n&quot;, b[&quot;NT&quot;], b[&quot;Tot_NT&quot;]
+printf &quot;                     Tmin = %d, Tmax = %d\n&quot;, minc(Ti), maxc(Ti)
+
+parnames = b[&quot;Xnames&quot;]
+matrix cf = b[&quot;coeff&quot;]
+matrix V = b[&quot;vcv&quot;]
+cs = cf ~ sqrt(diag(V))
+
+modprint cs parnames
+
+printf &quot;  Log-likelihood %14.3f      AIC %14.3f\n&quot;, b[&quot;lnl&quot;], b[&quot;aic&quot;]
+printf &quot;             BIC %14.3f      HQC %14.3f\n&quot;, b[&quot;bic&quot;], b[&quot;hqc&quot;]
+
+scalar chisq = qform(cf', invpd(V))
+scalar df    = rows(cf)
+scalar pv    = pvalue(x, df, chisq)
+printf &quot;\n  Wald test = %g (%d df); p-value = %g\n&quot;, chisq, df, pv
+printf &quot;\n&quot;
+</code>
+</gretl-function>
+<gretl-function name="sq" type="matrix" private="1">
+ <params count="2">
+  <param name="n" type="scalar"/>
+  <param name="k" type="scalar"/>
+ </params>
+<code># returns a binary matrix with n columns
+# with as many rows as possible combinations
+# such that sum by row == k; a recursive algorithm
+# is used
+
+if (k==1)
+  matrix ret = I(n)
+elif (k==n-1)
+  matrix ret = ones(n,n)
+  ret[diag] = 0
+elif (n&lt;0 || k&lt;0 || n&lt;k)
+  matrix ret = {}
+elif (n==k)
+  matrix ret = ones(1,n)
+elif (k==0)
+  matrix ret = zeros(1,n)
+else
+  matrix ret = (0 ~ sq(n-1, k)) | (1 ~ sq(n-1, k-1))
+endif
+return ret
+
+</code>
+</gretl-function>
+<gretl-function name="isdummy" type="scalar" private="1">
+ <params count="1">
+  <param name="y" type="series"/>
+ </params>
+<code>if (max(y)&gt;1 || min(y)&lt;0)
+  return 0
+else
+  return min(y * (1-y))==0
+endif
+</code>
+</gretl-function>
+<gretl-function name="timevar" type="list" private="1">
+ <params count="1">
+  <param name="X" type="list"/>
+ </params>
+<code>list ret = null
+list drop = null
+loop foreach i X --quiet
+  s = max(psd(X.$i))
+  if missing(s)
+    printf &quot;$i: what???\n&quot;
+  else
+    if s &gt; 0
+      ret += X.$i
+    else
+      drop += X.$i
+    endif
+  endif
+endloop
+
+if nelem(drop)==1
+  printf &quot;Variable %s is time-invariant: dropped\n&quot;, varname(drop)
+elif nelem(drop)&gt;1
+  printf &quot;Variables %s are time-invariant: dropped\n&quot;, varname(drop)
+endif
+
+return ret
+</code>
+</gretl-function>
+<gretl-function name="minimal" type="list" private="1">
+ <params count="1">
+  <param name="X" type="list"/>
+ </params>
+<code># drops collinear variables if any
+R = {}
+qrdecomp({X}, &amp;R)
+list ret = null
+k = 1
+loop foreach i X --quiet
+  if abs(R[i,i]) &gt; 1.0e-9
+    ret += X.$i
+  endif
+endloop
+
+return ret
+</code>
+</gretl-function>
+<gretl-function name="drop_excess_X" type="list" private="1">
+ <params count="1">
+  <param name="X" type="list"/>
+ </params>
+<code>list effX = timevar(X)
+list M = minimal(effX)
+list D = effX - M
+if nelem(D) &gt; 0
+  printf &quot;Variables %s dropped for collinearity\n&quot;, varname(D)
+endif
+
+return M
+</code>
+</gretl-function>
+<gretl-function name="panel_acct" type="void" private="1">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+ </params>
+<code>
+list effX = drop_excess_X(X)
+scalar k = nelem(effX)
+b[&quot;Xnames&quot;] = varname(effX)
+
+list ALL = effX || y
+series filt = ok(ALL)
+matrix DATA = { ALL }
+
+series yok  = y &amp;&amp; filt
+list Z = filt yok
+matrix unitdata = aggregate(Z, $unit, sum)
+
+Tot_N = rows(unitdata)
+Tot_NT = sumc(unitdata[,3])
+sel = (unitdata[,3].&gt;unitdata[,4]) &amp;&amp; (unitdata[,4].&gt;0)
+tmp = selifr(unitdata, sel)
+
+N = rows(tmp)
+scalar NT = sumc(tmp[,3])
+mX = zeros(NT, k)
+my = zeros(NT, 1)
+ini = 1
+t0 =  1
+
+loop i=1..Tot_N --quiet
+  ok_obs = unitdata[i,3]
+  fin = ini - 1 + ok_obs
+  if sel[i] == 1
+    t1 = t0 + ok_obs - 1
+    mX[t0:t1,] = DATA[ini:fin,1:k]
+    my[t0:t1] = DATA[ini:fin,k+1]
+    t0 = t1 + 1
+  endif
+  ini = fin + 1
+endloop
+
+b[&quot;Ti&quot;] = tmp[,3]
+b[&quot;Tot_N&quot;] = Tot_N
+b[&quot;Tot_NT&quot;] = Tot_NT
+b[&quot;N&quot;] = N
+b[&quot;NT&quot;] = NT
+
+b[&quot;my&quot;] = my
+b[&quot;mX&quot;] = mX
+b[&quot;nparam&quot;] = k
+b[&quot;sy&quot;] = tmp[,4]
+
+</code>
+</gretl-function>
+<gretl-function name="singularity_check" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>
+scalar k = b.nparam
+matrix beta = zeros(k, 1)
+# new collinearity check
+felogit_ll(beta, &amp;b)
+matrix H eigv l
+getInfo(&amp;H, &amp;b)
+matrix l = eigensym(H, &amp;eigv)
+
+if minc(l) &lt; 1.0e-7
+  matrix sel = l .&lt; 1.0e-7
+  scalar ndrop = sumc(sel)
+  eigv = selifc(eigv, sel')
+  
+  lst = seq(1, rows(eigv))'
+  to_keep = msortby(lst ~ sumr(eigv.^2), 2)
+  to_keep = msortby(to_keep[1:k-ndrop, 1], 1)
+  
+  b.mX = b.mX[,to_keep]
+  b.nparam = b.nparam - ndrop
+  
+  string newpars = &quot;&quot;
+  string dropped = &quot;&quot;
+  string tmp = strsub(b.Xnames,&quot;,&quot;,&quot; &quot;)
+  
+  loop i=1..k --quiet
+    string vn = strsplit(tmp, i)
+    if maxc(to_keep .= i) &gt; 0
+      if strlen(newpars) == 0
+        newpars = vn
+      else
+        newpars = newpars ~ &quot;,&quot; ~ vn
+      endif
+    else
+      if strlen(dropped) == 0
+        dropped = vn
+      else
+        dropped = dropped ~ &quot;,&quot; ~ vn
+      endif
+    endif
+  endloop
+  
+  printf &quot;Variables %s dropped because of singularity\n&quot;, dropped
+  b.Xnames = newpars
+endif
+</code>
+</gretl-function>
+<gretl-function name="generate_Q" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>
+# Qmats is a bundle holding Q matrices
+# for all necessary combinations of sumy and T;
+# il will be generated once and for all during
+# initialisation and stored into the main
+# bundle;
+
+scalar N = b[&quot;N&quot;]
+matrix Ti = b[&quot;Ti&quot;]
+matrix sy = b[&quot;sy&quot;]
+matrix my = b[&quot;my&quot;]
+
+bundle Qmats = null
+t1 = 1
+string s = &quot;&quot;
+matrix which = zeros(N,1)
+
+loop i = 1..N --quiet
+  scalar T = Ti[i]
+  scalar ss = sy[i]
+  t2 = t1 + T - 1
+  matrix y = my[t1:t2]
+  
+  sprintf s &quot;Q%d_%d&quot;, T, ss
+  if !inbundle(Qmats, s)
+    Q = sq(T, ss)
+    Qmats[s] = Q
+  else
+    Q = Qmats[s]
+  endif
+  
+  sel = (Q*y) .= ss
+  which[i] = seq(1, rows(sel)) * sel
+  t1 = t2+1
+endloop
+
+b[&quot;Qmats&quot;] = Qmats
+b[&quot;which&quot;] = which
+
+</code>
+</gretl-function>
+<gretl-function name="felogit_ll" type="scalar" private="1">
+ <params count="2">
+  <param name="beta" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>
+matrix mX = b[&quot;mX&quot;]
+matrix mndx = mX * beta
+N = b[&quot;N&quot;]
+Ti = b[&quot;Ti&quot;]
+my = b[&quot;my&quot;]
+
+scalar LL = 0
+scalar npar = rows(beta)
+matrix g = zeros(npar,1)
+matrix InfoMat = zeros(npar,npar)
+
+string s = &quot;&quot;
+Qmats = b[&quot;Qmats&quot;]
+sumy  = b[&quot;sy&quot;]
+which = b[&quot;which&quot;]
+
+t1 = 1
+loop i=1..N --quiet
+  scalar j = which[i]
+  scalar T = Ti[i]
+  scalar sy = sumy[i]
+  t2 = t1 + T - 1
+  
+  sprintf s &quot;Q%d_%d&quot;, T, sy
+  Q = Qmats[s]
+  p_i = exp(Q * mndx[t1:t2])
+  p_i = p_i ./ sumc(p_i)
+  scalar llt = ln(p_i[j])
+  if !ok(llt)
+    LL = NA
+    break
+  else
+    LL += llt
+  endif
+  
+  matrix x = mX[t1:t2,]
+  e_i = Q'p_i
+  g += x'(my[t1:t2] - e_i)
+  InfoMat += qform(x', Q'(Q.*p_i) - e_i*e_i')
+  
+  t1 = t2+1
+endloop
+
+b[&quot;score&quot;] = g
+b[&quot;InfoMat&quot;] = InfoMat
+return LL
+
+</code>
+</gretl-function>
+<gretl-function name="getScore" type="void" private="1">
+ <params count="2">
+  <param name="g" type="matrixref"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>g = b[&quot;score&quot;]
+</code>
+</gretl-function>
+<gretl-function name="getInfo" type="void" private="1">
+ <params count="2">
+  <param name="H" type="matrixref"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>H = b[&quot;InfoMat&quot;]
+</code>
+</gretl-function>
+<gretl-function name="add_fitvals" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix mX = b[&quot;mX&quot;]
+matrix beta = b[&quot;coeff&quot;]
+matrix mndx = mX * beta
+N = b[&quot;N&quot;]
+Ti = b[&quot;Ti&quot;]
+sumy  = b[&quot;sy&quot;]
+t1 = 1
+matrix ret = zeros(sumc(Ti),1)
+
+loop i=1..N --quiet
+  scalar T = Ti[i]
+  t2 = t1 + T - 1
+  scalar sy = sumy[i]
+  if (sy&lt;T) &amp;&amp; (sy&gt;0)
+    ret[t1:t2] =  mndx[t1:t2]
+  endif
+  t1 = t2+1
+endloop
+
+b[&quot;ndx&quot;] = ret
+</code>
+</gretl-function>
+<sample-script>
+include felogit.gfn
+open http://www.stata-press.com/data/r9/union.dta
+
+setobs idcode year --panel-vars
+
+list X = year age grade not_smsa south
+set stopwatch
+bundle model = felogit(union, X)
+scalar et = $stopwatch
+#felogit_print(&amp;model)
+
+printf &quot;Elapsed time = %g seconds\n&quot;, et
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

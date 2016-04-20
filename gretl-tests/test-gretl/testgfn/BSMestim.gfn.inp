@@ -1,0 +1,4 @@
+include ./BSMestim.gfn
+open data9-3.gdt
+list listavar = BSMestim(reskwh)
+print reskwh listavar -o

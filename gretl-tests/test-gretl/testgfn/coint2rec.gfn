@@ -1,0 +1,559 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="coint2rec" ID="1404834834" needs-time-series-data="true" minver="1.9.12">
+<author>Andreas Noack Jensen and Sven Schreiber</author>
+<version>0.4</version>
+<date>2014-07-04</date>
+<description>Cointegration stability tests (Hansen&amp;Johansen)</description>
+<label>Cointegration stability test</label>
+<menu-attachment>MAINWIN/Model/TSModels/CointMenu</menu-attachment>
+<help>
+This package provides two (or three) stability tests for the cointegrated vector autoregressive model based on recursive estimation. The package also includes the function nyblom to simulate critical values of the test statistic for beta constancy.
+
+Andreas did most of the work, Sven added the joint eigenvalue test, finished the function package build and resolved some gretl-related details.
+
+Distributed under the same license as the gretl program itself (GPL).
+
+-------------------
+
+Prints output (text and plots graphs) and returns a bundle with:
+
+(1) &quot;strT1&quot;: obs string, Starting observation
+(2) &quot;strT2&quot;: obs string, Last observation
+(3) &quot;ynames&quot;: string, Endogenous variables (names)
+(4) &quot;xnames&quot;: string, Unrestricted exog. variables (names)
+(5) &quot;rxnames&quot;: string, Restricted exog. variables (names)
+(6) &quot;nlags&quot;: int, Number of lags (levels) in VAR
+(7) &quot;dtrm&quot;: int, coded deterministic spec
+(8) &quot;receig_ksi1&quot; through &quot;receig_ksi&lt;rk&gt;&quot;, series, each log odds
+(9) &quot;receig_stat1&quot; through &quot;receig_stat&lt;rk&gt;&quot;, series related to the receig_ksi&lt;i&gt;
+(10) &quot;receig_critvals&quot;: matrix with relevant critical values from Ploberger et al. &lt;fixme&gt;. 10%/5%/1% in columns. First row related to univariate Brownian bridge for all tests except the max-sup-test, second row related to the rk-dimensional Brownian bridge for the max-sup-test (if applicable, i.e. rk&gt;1).
+(11) &quot;receig_supstats&quot;: 1- or (rk+2)-dim vector with the sup-test statistics; for rank 1 there is only one relevant test, for rk&gt;1 the first rk elements are for the individual eigenvalues, followed by the sum statistic, and finally the max-sup-statistic (using the infinity norm).
+(12) &quot;receig_msg&quot;: string with textual output to be printed by another function
+(13) &quot;recbeta_stat&quot;: series, beta coeff. fluctutation stat
+(14) &quot;recbeta_critval5pct&quot;: scalar, critical value for sup of recbeta_stat 
+
+If the rank rk is above 1, then in addition:
+(15) &quot;receig_sum_ksi&quot;, series, the fluctuating sum of eigenvalues' log odds 
+(16) &quot;receig_sum_stat&quot;: series, recursive test stats related to sum_ksi
+(17) &quot;receig_multi_stat&quot;, series, from the max-sup-test
+
+--------------
+Arguments (ordering of the first three as in gretl's coint2 command, all others have default values and can be omitted in principle):
+
+(1) int nlags[1::2] &quot;Number of lags in the (levels) VAR&quot;
+(2) int rk[1::1] &quot;Assumed cointegration rank&quot;
+(3) list ylist &quot;List of endogenous variables&quot;
+(4) int dtrm[1:3:2] &quot;Deterministics&quot; {&quot;No const&quot;, &quot;Restr. const&quot;, &quot;Restr. trend&quot;}
+(5) int initobs[1::1] &quot;Number of obs in base sample (leave at 1 for first half)&quot;
+(6) list xlist[null] &quot;List of unrestricted variables&quot;
+(7) list rxlist[null] &quot;List of restricted exogenous variables&quot;)
+(8) int nyreps[1::500] &quot;nyblom func replications (only w/ exog. vars)&quot;
+-------------------
+
+These functions are implementations of
+Hansen, H. and Johansen, S. (1999), Econometrics Journal ...&lt;fixme&gt;
+</help>
+<gretl-function name="nyblom" type="matrix">
+ <params count="4">
+  <param name="ip" type="int">
+<description>Number of variables</description>
+  </param>
+  <param name="rk" type="int">
+<description>Cointegration rank</description>
+  </param>
+  <param name="rexo" type="matrix">
+<description>Restricted exogenous variables including deterministic terms</description>
+  </param>
+  <param name="reps" type="scalar">
+<description>Number of simulations</description>
+  </param>
+ </params>
+<code>T = rows(rexo)
+matrix supQmat = zeros(reps, 1)
+loop i = 1..reps --quiet
+  matrix B1 = cum(mnormal(T, ip - rk)) / sqrt(T) ~ rexo
+  if cols(rexo) &gt; 0
+    matrix dexo = diff(rexo)
+    matrix B11 = B1[1:T-1,] - dexo[2:T,] * (ginv(dexo[2:T,]) * B1[1:T-1,])
+  else
+    matrix B11 = B1[1:T-1,]
+  endif
+  matrix E2 = mnormal(T-1, rk) / sqrt(T)
+  matrix J1 = B11'B11 / T
+  matrix S1 = B11'E2
+  matrix Ss = zeros(cols(B11), rk)
+  matrix Js = zeros(cols(B11), cols(B11))
+  matrix J1S1 = J1 \ S1
+  scalar supQ = 0.0
+  loop s = 1..T-1 --quiet
+    Ss += B11[s,]'E2[s,]
+    Js += B11[s,]'B11[s,] / T
+    matrix Sstars = Ss - Js * J1S1
+    scalar Qs = tr(Sstars'*(J1\Sstars))
+    if Qs &gt; supQ
+      supQ = Qs
+    endif
+  endloop
+  supQmat[i] = supQ
+endloop
+return supQmat
+</code>
+</gretl-function>
+<gretl-function name="print_coint2recur" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="bdriver" type="bundleref"/>
+ </params>
+<code>printf &quot;Hansen-Johansen cointegration stability tests\n\n&quot;
+
+if strlen(bdriver.xnames) || strlen(bdriver.rxnames)	# list of unrestr. exog. not empty
+  print &quot;(You used exogenous variables and hopefully know what you're doing&quot;
+  printf &quot;You probably should interpret the results with caution.)\n\n&quot;
+endif
+
+string receig_msg = bdriver.receig_msg
+string recbeta_msg = bdriver.recbeta_msg
+
+print &quot;(1) Fluctuation tests of recursive eigenvalues:&quot;
+print receig_msg
+print &quot;(2) Fluctuation test of beta coefficients:&quot;
+print recbeta_msg
+
+</code>
+</gretl-function>
+<gretl-function name="driver_coint2recur" type="bundle" pkg-role="gui-main">
+ <params count="8">
+  <param name="nlags" type="int" min="1" default="2">
+<description>Number of lags in the (levels) VAR</description>
+  </param>
+  <param name="rk" type="int" min="1" default="1">
+<description>Assumed cointegration rank</description>
+  </param>
+  <param name="ylist" type="list" const="true">
+<description>List of endogenous variables</description>
+  </param>
+  <param name="dtrm" type="int" min="1" max="3" default="2">
+<description>Deterministics</description>
+<labels count="3">
+"No const" "Restr. const" "Restr. trend" </labels>
+  </param>
+  <param name="initobs" type="int" min="1" default="1">
+<description>Number of obs in base sample (leave at 1 for first half)</description>
+  </param>
+  <param name="xlist" type="list" optional="true" const="true">
+<description>List of unrestricted variables</description>
+  </param>
+  <param name="rxlist" type="list" optional="true" const="true">
+<description>List of restricted exogenous variables</description>
+  </param>
+  <param name="nyreps" type="int" min="1" default="500">
+<description>nyblom func replications (only w/ exog. vars)</description>
+  </param>
+ </params>
+<code>
+bundle beig = coint2receig(nlags, rk, ylist, dtrm, initobs, xlist, rxlist)
+bundle bbeta = coint2recbeta(nlags, rk, ylist, dtrm, initobs, xlist, rxlist, nyreps)
+bundle bdriver = beig + bbeta	# union
+
+# invoke the printing
+print_coint2recur(&amp;bdriver)
+
+# output
+return bdriver
+</code>
+</gretl-function>
+<gretl-function name="coint2receig" type="bundle">
+ <params count="7">
+  <param name="nlags" type="int" min="1" default="2">
+<description>Number of lags in the (levels) VAR</description>
+  </param>
+  <param name="rk" type="int" min="1" default="1">
+<description>Assumed cointegration rank</description>
+  </param>
+  <param name="ylist" type="list" const="true">
+<description>List of endogenous variables</description>
+  </param>
+  <param name="dtrm" type="int" min="1" max="3" default="2">
+<description>Deterministics</description>
+<labels count="3">
+"No const" "Restr. const" "Restr. trend" </labels>
+  </param>
+  <param name="initobs" type="int" min="1" default="1">
+<description>Number of obs in base sample (leave at 1 for first half)</description>
+  </param>
+  <param name="xlist" type="list" optional="true" const="true">
+<description>List of unrestricted variables</description>
+  </param>
+  <param name="rxlist" type="list" optional="true" const="true">
+<description>List of restricted exogenous variables</description>
+  </param>
+ </params>
+<code>
+# This is table 1 from Ploberger/Krämer/Kontrus 1989:
+# (Rows beyond the first should only be needed if we had used the maximum fluctuation
+#  across all eigenvalues, which we haven't...)
+# columns: 10%, 5%, 1% significance level
+# rows: K=1..10
+matrix mPlobetal = {1.22, 1.36, 1.63; 1.35, 1.48, 1.73; 1.42, 1.54, 1.79; 1.47, 1.59, 1.83; 1.51, 1.62, 1.86; 1.54, 1.65, 1.88; 1.57, 1.67, 1.90; 1.59, 1.69, 1.92; 1.61, 1.71, 1.94; 1.62, 1.73, 1.95}
+
+bundle b	# for output
+# add standard stuff for printing etc.
+strT1 = obslabel($t1)
+strT2 = obslabel($t2)
+b.strT1 = strT1		# string
+setnote(b, &quot;strT1&quot;, &quot;Starting observation&quot;)
+b.strT2 = strT2		# string
+setnote(b, &quot;strT2&quot;, &quot;Last observation&quot;)
+b.ynames = varname(ylist)		# string
+setnote(b, &quot;ynames&quot;, &quot;Endogenous variables (names)&quot;)
+b.xnames = varname(xlist)		# string
+setnote(b, &quot;xnames&quot;, &quot;Unrestricted exog. variables (names)&quot;)
+b.rxnames = varname(rxlist)	# string
+setnote(b, &quot;rxnames&quot;, &quot;Restricted exog. variables (names)&quot;)
+b.nlags = nlags		# int
+setnote(b, &quot;nlags&quot;, &quot;Number of lags (levels) in VAR&quot;)
+b.dtrm = dtrm		# int
+setnote(b, &quot;dtrm&quot;, &quot;Integer-coded deterministic spec&quot;)
+
+# apply default for base sample if not otherwise chosen
+initobs = initobs==1 ? floor(($t2 - $t1) / 2) : initobs
+
+# Some sample and specification parameters
+ip = nelem(ylist)
+iT = $t2 - $t1 - nlags + 1
+t2old = $t2
+iT0 = initobs + $t1 + nlags
+recurT = $t2 - iT0 + 1	# how many different (recursive) samples
+
+# some input/error checking
+if (ip * nlags &gt;= initobs)
+  funcerr &quot;Not enough observations&quot;
+endif
+
+# full-sample estimate the system, under the spec'ed rank
+set vecm_norm none
+if  dtrm == 1	# no const
+  vecm nlags rk ylist; xlist; rxlist --nc --silent
+elif dtrm == 2
+  vecm nlags rk ylist; xlist; rxlist --rc --silent
+elif dtrm == 3	# restr. trend
+  vecm nlags rk ylist; xlist; rxlist --crt --silent
+else
+  funcerr &quot;Deterministic spec. not supported!&quot;
+endif
+
+# construct some stuff of the companion AR(1) model
+if nlags == 1
+  matrix A = $jbeta[1:ip,]'$jalpha + I(rk)
+  matrix Omega = qform($jbeta[1:ip,]', $sigma)
+else
+  matrix A = (($jbeta[1:ip,]'$jalpha + I(rk)) ~ $jbeta[1:ip,]'$vecGamma) | ($jalpha~$vecGamma) | (zeros((nlags-2) * ip, rk) ~ I((nlags-2) * ip) ~ zeros((nlags-2) * ip, ip))
+  matrix Omega = qform(($jbeta[1:ip,] ~ I(ip) ~ zeros(ip, ip * (nlags-2)))', $sigma)
+endif
+
+if maxc(sumr(eigengen(A).^2)) &gt;= 1	# why the sum of squares here?
+  print A
+  matrix mtemp = eigengen(A)
+  print mtemp
+  funcerr &quot;System roots not well-behaved&quot;
+endif
+
+# solve for $\tilde{\Sigma}}$ by recursion (eq 10)
+matrix Sigma = I(ip*(nlags-1) + rk) # old: ip*nlags
+matrix SigmaInit = Sigma
+loop i = 1..10000 --quiet
+  matrix Sigma = qform(A, SigmaInit) + Omega
+  if sumc(sumr(abs(Sigma - SigmaInit))) &lt; 1e-7
+    break
+  endif
+  matrix SigmaInit = Sigma
+endloop
+
+# construct the stuff related to Theorem 1, but already for the log-odds transform
+matrix SigmaI = inv(Sigma)
+matrix Yps = (SigmaI ** SigmaI) / (I((ip*(nlags-1) + rk)^2) - A**A)
+matrix YpsYps = Yps + Yps'
+matrix VarEigvalsLogodds = zeros(rk,1) # old: eigvarlogodds
+matrix matSigma0 = zeros(rk,rk)	# will have the prev. vec on diag.
+loop i = 1..rk --quiet
+  itilde = i + (i-1) * (rk + ip *(nlags-1))
+  VarEigvalsLogodds[i] = 2 * YpsYps[itilde, itilde] / iT	# note the iT division
+  loop j = 1..rk --quiet
+    jtilde = j + (j-1) * (rk + ip *(nlags-1))
+    matSigma0[i,j] = 2 * YpsYps[itilde,jtilde] / iT	# also iT division
+  endloop
+endloop
+
+# initializations for the fluctuation series
+matrix eigvalslogodds = zeros(recurT, rk) # evals in columns, each row is an obs
+# now loop over the growing sample
+loop n = iT0..$t2 --quiet
+  smpl $t1 n
+  if dtrm == 1
+    vecm nlags rk ylist; xlist; rxlist --nc --silent
+  elif dtrm == 2
+    vecm nlags rk ylist; xlist; rxlist --rc --silent
+  else	# restr. trend
+    vecm nlags rk ylist; xlist; rxlist --crt --silent
+  endif
+  # store the fluctuating evals
+  matrix eigvalslogodds[n - iT0 + 1,] = log($evals[,1] ./ (1-$evals[,1]))'
+endloop
+
+# a helpful fractional sequence
+matrix tT = mshape(seq(iT0, iT), recurT, rk) / iT
+
+# apply corollary 1 (eq. 16) to do the tests for the individual evals
+matrix fluctlogodds = eigvalslogodds - mshape(eigvalslogodds[recurT,], rk, recurT)'
+matrix eigtest = tT .* abs(fluctlogodds ./ sqrt(mshape(VarEigvalsLogodds, rk, recurT)'))
+
+# and then also for the sum of the fluctuating log odds
+if rk &gt; 1
+  matrix mSumKsi = sumr(eigvalslogodds)
+  VarSumKsi = sum(matSigma0)
+  matrix mSumeigtest = tT[,1] .* abs( (mSumKsi - mshape(mSumKsi[recurT],1,recurT)') / sqrt(VarSumKsi) )
+  
+  # finally for the multivariate version (apply eq 16)
+  # prepare the max-sup-test, need to get the square root of Sigma0
+  # (we just assume it really is pos-def.)
+  matrix evecs
+  matrix rootSigma0 = zeros(rk,rk)
+  rootSigma0[diag] = eigensym(matSigma0, &amp;evecs)	# holds eigenvalues
+  matrix rootSigma0I = inv(inv(evecs) * sqrt(rootSigma0) * evecs)	# inverse
+  matrix mMultieigtest = tT[,1] .* maxr(abs(fluctlogodds * rootSigma0I))
+  
+endif
+
+string msg # for output/messages
+sprintf msg &quot;%s\nFluctuation tests on the individual eigenvalues:\n---\n&quot;, msg
+sprintf msg &quot;%sCritical value at 10pct level: \t%.2f\n&quot;, msg, mPlobetal[1,1]
+sprintf msg &quot;%sCritical value at 5pct level: \t%.2f\n&quot;, msg, mPlobetal[1,2]
+sprintf msg &quot;%sCritical value at 1pct level: \t%.2f\n---\n&quot;, msg, mPlobetal[1,3]
+
+matrix supeigstats = maxc(eigtest)
+
+loop i = 1..rk --quiet
+  sprintf msg &quot;%sStatistic for ksi%d: \t%.2f\n&quot;, msg, i, supeigstats[i]
+endloop
+
+if rk &gt; 1
+  sprintf msg &quot;%s---\nFluctuation test on the sum of the non-zero eigenvalues:\n&quot;, msg
+  sprintf msg &quot;%s(Critical values as before)\n&quot;, msg
+  tmp1 = max(mSumeigtest)
+  sprintf msg &quot;%sStatistic for sum(ksi): \t%.2f\n------\n&quot;, msg, tmp1
+  sprintf msg &quot;%sFluctuation test on the per-obs-max of the (log odds of) eigenvalues (experimental!):\n---\n&quot;, msg
+  sprintf msg &quot;%sCritical value at 10pct level: \t%.2f\n&quot;, msg, mPlobetal[rk,1]
+  sprintf msg &quot;%sCritical value at 5pct level: \t%.2f\n&quot;, msg, mPlobetal[rk,2]
+  sprintf msg &quot;%sCritical value at 1pct level: \t%.2f\n---\n&quot;, msg, mPlobetal[rk,3]
+  tmp2 = max(mMultieigtest)
+  sprintf msg &quot;%sStatistic for max(ksi): \t\t%.2f\n&quot;, msg, tmp2
+  matrix supeigstats ~= (tmp1 ~ tmp2)
+endif
+
+## Output of the results
+smpl iT0 $t2
+# Plotting the log odds fluctuations themselves
+loop i = 1..rk --quiet
+  series ksi$i = eigvalslogodds[,i]
+  series up = ksi$i + 1.96*sqrt(VarEigvalsLogodds[i])
+  series low = ksi$i - 1.96*sqrt(VarEigvalsLogodds[i])
+  gnuplot ksi$i up low --time-series --with-lines --single-yaxis {set title 'Log-odds of eigenvalues';}
+endloop
+
+if rk &gt; 1
+  series sum_ksi = mSumKsi
+  series up = sum_ksi + 1.96*sqrt(VarSumKsi)
+  series low = sum_ksi - 1.96*sqrt(VarSumKsi)
+  gnuplot sum_ksi up low --time-series --with-lines --single-yaxis {set title 'Log-odds of sum of eigenvalues';}
+endif
+
+# Plotting the recursive test statistics, individuals and sum
+series cval10 = ones(rows(eigtest), 1) * mPlobetal[1,1]
+series cval5 = ones(rows(eigtest), 1) * mPlobetal[1,2]
+series cval1 = ones(rows(eigtest), 1) * mPlobetal[1,3]
+if rk &gt; 1
+  series sumeigtest = mSumeigtest
+  list lTeststats = cval10 cval5 cval1 sumeigtest
+else
+  list lTeststats = cval10 cval5 cval1
+endif
+
+string sname = &quot;eigtest&quot;
+loop i = 1..rk --quiet
+  series @sname$i = eigtest[, i]
+  list lTeststats += @sname$i
+endloop
+
+gnuplot lTeststats --time-series --with-lines --single-yaxis {set title 'Stability tests for eigenvalues';}
+
+# Plotting the recursive test statistics, max-sup
+if rk &gt; 1
+  series cval10 = ones(rows(eigtest), 1) * mPlobetal[rk,1]
+  series cval5 = ones(rows(eigtest), 1) * mPlobetal[rk,2]
+  series cval1 = ones(rows(eigtest), 1) * mPlobetal[rk,3]
+  series multieigtest = mMultieigtest
+  list lTeststats = cval10 cval5 cval1 multieigtest
+  gnuplot lTeststats --time-series --with-lines --single-yaxis {set title 'Stability test, based on maximum fluctuation of all eigenvalues';}
+endif
+
+# transfer some stuff to the bundle
+b.receig_msg = msg	# string output to print
+setnote(b, &quot;msg_receig&quot;, &quot;textual output to be printed&quot;)
+if rk &gt; 1
+  b.receig_sum_ksi = sum_ksi	# series
+  setnote(b, &quot;receig_sum_ksi&quot;, &quot;fluctuating sum of eigenvalues' log odds&quot;)
+  b.receig_sum_stat = sumeigtest
+  setnote(b, &quot;receig_sum_stat&quot;, &quot;recursive test stats related to sum_ksi&quot;)
+  b.receig_multi_stat = multieigtest
+  setnote(b, &quot;receig_multi_stat&quot;, &quot;recursive test stats from the max-sup-test&quot;)
+endif
+
+loop i = 1..rk --quiet
+  b.receig_ksi$i = ksi$i	# series
+  setnote(b, &quot;receig_ksi$i&quot;, &quot;each eigenvalue's log odds&quot;)
+  b.receig_stat$i = @sname$i # series
+  setnote(b, &quot;receig_stat$i&quot;, &quot;test stat related to the receig_ksi&lt;i&gt;&quot;)
+endloop
+
+b.receig_critvals = mPlobetal[{1,rk},]	# pick the relevant ones
+setnote(b, &quot;receig_critvals&quot;, &quot;relevant critical values from Ploberger et al.&quot;)
+b.receig_supstats = supeigstats
+setnote(b, &quot;receig_supstats&quot;, &quot;the sup-test statistics&quot;)
+
+return b
+</code>
+</gretl-function>
+<gretl-function name="coint2recbeta" type="bundle">
+ <params count="8">
+  <param name="nlags" type="int" min="1" default="2">
+<description>Number of lags in the (levels) VAR</description>
+  </param>
+  <param name="rk" type="int" min="1" default="1">
+<description>Assumed cointegration rank</description>
+  </param>
+  <param name="ylist" type="list" const="true">
+<description>List of endogenous variables</description>
+  </param>
+  <param name="dtrm" type="int" min="1" max="3" default="2">
+<description>Deterministics</description>
+<labels count="3">
+"No const" "Restr. const" "Restr. trend" </labels>
+  </param>
+  <param name="initobs" type="int" min="1" default="1">
+<description>Number of obs in base sample (leave at 1 for first half)</description>
+  </param>
+  <param name="xlist" type="list" optional="true" const="true">
+<description>List of unrestricted variables</description>
+  </param>
+  <param name="rxlist" type="list" optional="true" const="true">
+<description>List of restricted exogenous variables</description>
+  </param>
+  <param name="nyreps" type="int" min="1" default="500">
+<description>Simulation replications for the nyblom function</description>
+  </param>
+ </params>
+<code>
+set vecm_norm none
+string msg	# will collect all output/messages
+
+# where are the following values from?
+matrix crit_rc = {2.19834 , 2.44378 , 2.66184 , 2.90862 , 3.11476 , 3.32348 , 3.52817 , 3.72403 , 3.91977;  0.0 , 2.98989 , 3.36325 , 3.72305 , 4.06042 , 4.42394 , 4.80114 , 5.1467  , 5.49865; 0.0     , 0.0     , 3.67508 , 4.14344 , 4.64005 , 5.11345 , 5.63928 , 6.1658  , 6.65459; 0.0     , 0.0     , 0.0     , 4.32754 , 4.93183 , 5.4923  , 6.12964 , 6.79311 , 7.47895; 0.0     , 0.0     , 0.0     , 0.0     , 4.9316  , 5.62943 , 6.33753 , 7.10723 , 7.90266; 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 5.47749 , 6.3289  , 7.17898 , 8.05468; 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 6.05764 , 7.03178 , 7.97132; 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 6.68513 , 7.71374; 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 0.0     , 7.23763}
+matrix crit_crt = {2.27521 , 2.61726 , 2.91155 , 3.1901 , 3.44105 , 3.66172 , 3.90144 , 4.10119 , 4.29395; 0.0 , 3.17401 , 3.71672 , 4.23119 , 4.67765 , 5.11017 , 5.49471 , 5.92019 , 6.27148; 0.0 , 0.0 , 3.91483 , 4.71182 , 5.40456 , 6.02376 , 6.61932 , 7.18774 , 7.75205; 0.0 , 0.0 , 0.0 , 4.66306 , 5.62478 , 6.52326 , 7.36171 , 8.09105 , 8.80242; 0.0 , 0.0 , 0.0 , 0.0 , 5.34383 , 6.53851 , 7.60197 , 8.5902 , 9.49841; 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 5.96961 , 7.3846 , 8.66471 , 9.7829 ; 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 6.65896 , 8.27433 , 9.68133; 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 7.32555 , 9.07503; 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 7.91839}
+
+# apply default for base sample if not otherwise chosen
+initobs = initobs==1 ? floor(($t2 - $t1) / 2) : initobs
+
+ip = nelem(ylist)
+iT = $t2 - $t1 - nlags + 1
+t2old = $t2
+iT0 = initobs + $t1 + nlags
+if rk == ip
+  funcerr &quot;Model must have reduced rank&quot;
+endif
+if dtrm = 1
+  vecm nlags rk ylist; xlist; rxlist --nc --silent
+elif dtrm = 2
+  vecm nlags rk ylist; xlist; rxlist --rc --silent
+elif dtrm = 3
+  vecm nlags rk ylist; xlist; rxlist --crt --silent
+else
+  funcerr &quot;Determ. type not supported!&quot;
+endif
+
+betaT = $jbeta
+c = $jbeta[1:ip,] | zeros(rows($jbeta) - ip, rk)
+cort = nullspace(c')
+alphacT = $jalpha * (ginv(c)*$jbeta)'
+VT = alphacT'($sigma\alphacT)
+MT = qform(cort', $s11) / iT
+Omega = $sigma
+Qt = zeros($t2 - iT0 + 1, 1)
+eindex = 0
+loop n = iT0..$t2 --quiet
+  eindex += 1
+  smpl $t1 n
+  
+  if dtrm = 1
+    vecm nlags rk ylist; xlist; rxlist --nc --silent
+  elif dtrm = 2
+    vecm nlags rk ylist; xlist; rxlist --rc --silent
+  else
+    vecm nlags rk ylist; xlist; rxlist --crt --silent
+  endif
+  St = (($s01 - alphacT*betaT'$s11)*cort)'(Omega\alphacT)
+  Qt[eindex] = ((n/iT)^2) * tr(VT\St'(MT\St))
+endloop
+if nelem(xlist) == 0 &amp;&amp; nelem(rxlist) == 0
+  if dtrm = 2	# restr. constant
+    critval = crit_rc[rk, ip - 1]
+  elif dtrm = 3	# restr. trend
+    critval = crit_crt[rk, ip - 1]
+  endif
+else
+  critval = NA
+  sprintf msg &quot;%sDeterm. type not covered. &quot;, msg
+  sprintf msg &quot;%sWill try to simulate critical value with nyblom (%d runs)...\n&quot;, msg, nyreps
+  catch matrix simdist = nyblom(ip,rk,{rxlist},nyreps)
+  if $error
+    sprintf msg &quot;%s...but that failed somehow, sorry.\n&quot;, msg
+  else
+    sprintf msg &quot;%s...which produced the following result.\n&quot;, msg
+    critval = quantile(simdist, 0.95)	# hardcoded 5pct level
+  endif
+endif
+sprintf msg &quot;%s(Critical value at 5pct level: \t%.2f)\n&quot;, msg, critval
+sprintf msg &quot;%sValue of test statistic: \t%.2f\n&quot;, msg, maxc(Qt)
+
+smpl iT0 $t2
+series critval5pct = ones(rows(Qt), 1) * critval
+series betatest = Qt
+gnuplot critval5pct betatest --time-series --with-lines --single-yaxis {set title 'Test of beta constancy';}
+
+# transfer output
+bundle b
+b.recbeta_critval5pct = critval	# scalar
+setnote(b, &quot;recbeta_critval5pct&quot;, &quot;critical 5pct value of the recursive beta coeff. test&quot;)
+b.recbeta_stat = betatest # series
+setnote(b, &quot;recbeta_teststat&quot;, &quot;recursive beta coeff. test stat&quot;)
+b.recbeta_msg = msg	# string
+
+return b
+</code>
+</gretl-function>
+<sample-script>
+include coint2rec.gfn
+open australia
+list endo = ius2 iau2 e2
+coint2receig(2, 2, endo, 3, 15, null, null)
+coint2recbeta(2, 2, endo, 3, 1, null, null)
+lags lpus
+diff lpus
+lags d_lpus
+list rexo = lpus_1
+list exo = d_lpus d_lpus_1
+coint2recbeta(2, 2, endo, 2, 15, exo, rexo)
+eval quantile(nyblom(3, 2, ones(rows({rexo}), 1)~{rexo}, 500), 0.95)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

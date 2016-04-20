@@ -1,0 +1,19 @@
+include ./PPtest.gfn
+
+nulldata 169
+setobs 4 1947:1
+open fedstl.bin
+data gdpc96
+series y = 100*log(gdpc96)
+
+scalar c = 1  # constant
+scalar ct = 2 # constant + trend
+
+# Bartlett bandwidth
+scalar m = 0  # use the default
+
+# Test:
+ptest = PPtest(y, ct, m, 0) # no printed output
+print ptest
+PPtest(y, ct, m, 1)         # prints the PP test
+PPtest(y, ct, m, 2)         # prints the test + the regression

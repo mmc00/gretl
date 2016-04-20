@@ -1,0 +1,5 @@
+include ./pmbb.gfn
+open greene14_1.gdt
+logs C Q PF LF
+list X = l_Q l_PF l_LF
+bundle bb = pmbb(l_C,X,3,1000)

@@ -1,0 +1,24 @@
+include ./DST_test.gfn
+open http://www.uni.torun.pl/~tkufel/DST/natural_gas.gdt
+
+list DET = time s1 c1 s2 c2
+
+# If we want to replicate results of Dickey's Natural Gas exmaple we just
+# have to run DST_test package with following parameters. We then can see t-statistic
+# -25.14 (which is slightly higher than Dickey's -26.25), value of this statistic
+# corrected to N(0,1) and its p-value.
+DST_test(Total, 2, 1, DET, 52, 1)
+
+# If we just want to know p-value, we can run the procedure like this:
+printf "p-val: %f\n", DST_test(Total, 2, 1, DET, 52, 0)
+##########################################################################################
+
+# In the above examples we filtered the series by AR(2) filter. If we don't know which exactly
+# AR(p) filter to use, however we know that p should be i.e. 1<= p <= 10, then we can run
+# the procedure as below. All possible ARIMA(p,0,0) models will be estimated and for further
+# analysis specification with the lowest BIC criterion will we selected (this order will be
+# printed in summary).
+DST_test(Total, 10, 0, DET, 52, 1)
+
+# List of deterministic elements is not mandatory, so we can run the procedure with "null":
+DST_test(Total, 10, 0, null, 52, 1)

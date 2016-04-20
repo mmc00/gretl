@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="FEPoisson" ID="1452720708" needs-panel-data="true" minver="1.10.0">
+<author email="r.lucchetti@univpm.it">Riccardo &quot;Jack&quot; Lucchetti</author>
+<version>1.1</version>
+<date>2016-01-13</date>
+<description>Fixed-Effects Poisson</description>
+<tags>C23 C25</tags>
+<label>FE Poisson</label>
+<menu-attachment>MAINWIN/Model/PanelModels</menu-attachment>
+<help>
+Fixed-Effects Poisson regression
+--------------------------------
+
+This package provides 2 functions:
+
+fep_estimate(series y, list X, series &amp;offset)
+
+This is the main function: y is the dependent variable (which must be
+integer and non-negative); X is the list of explanatory variables
+(time-invariant regressors will be dropped automatically). Optionally,
+one can set an &quot;offset&quot; variable (population at risk in
+epidemiological terms). It returns a bundle.
+
+Estimation is carried out by MLE via Newton-Raphson optimisation with
+analytical first and second derivatives.
+
+Note that we compute the log-likelihood with a different logic than
+other packages, so the Log-likelihood itself may not be
+comparable. However, the difference is merely a scale factor, so LR
+tests can be used without problems.
+
+fep_print(bundle &amp;mod)
+
+Prints out the bundle returned by fep_estimate()
+</help>
+<gretl-function name="fep_estimate" type="bundle">
+ <params count="3">
+  <param name="dep" type="series"/>
+  <param name="X" type="list"/>
+  <param name="offset" type="seriesref" optional="true"/>
+ </params>
+<code>bundle Mod = null
+if $datatype &lt; 3
+  printf(&quot;Dataset is not a panel, aborting\n&quot;)
+  return Mod
+endif
+# dependent variable check
+scalar err = depcheck(dep)
+if err == 1
+  printf(&quot;Dependent variable has negative values, aborting\n&quot;)
+  return Mod
+elif err == 2
+  printf(&quot;Dependent variable has noninteger values, aborting\n&quot;)
+  return Mod
+endif
+Mod.depname = argname(dep)
+# explanatory variables check
+list TI = null
+loop foreach v X --quiet
+  if isconst(X.$v, 0)
+    TI += X.$v
+  endif
+endloop
+if nelem(TI) &gt; 1
+  printf &quot;Series %s time-invariant, dropped\n&quot;, varname(TI)
+endif
+list L = X - TI
+Mod.parnames = varname(L)
+# offset
+Mod.HasOffset = exists(offset)
+if Mod.HasOffset
+  Mod.offset = 1
+  Mod.offsetname = argname(offset)
+else
+  Mod.offset = 0
+endif
+Mod.NT0 = sum(ok(dep))
+smpl psum(ok(dep))&gt;1 --restrict
+Mod.NT1 = sum(ok(dep))
+smpl psum(dep)&gt;0 --restrict
+smpl dep L --no-missing --balanced
+Mod.T = $pd
+Mod.N = rows(values($unit))
+Mod.NT2 = sum(ok(dep))
+if Mod.offset # initialise via pooled
+  poisson dep const L ; offset --quiet
+else
+  poisson dep const L --quiet
+endif
+Mod.LL0 = $lnl
+b = $coeff[2:]
+Mod.ncoeff = rows(b)
+Mod.inicoeff = b
+setopt mle --hessian --no-gradient-check --quiet
+matrix G H
+series ll
+set optimizer newton
+set stopwatch
+if Mod.offset
+  mle LL = err ? NA : ll
+    scalar err = fe_llik(dep, L, b, &amp;offset, &amp;ll, &amp;G, &amp;H)
+    deriv b = G
+    hessian Hessian(&amp;H)
+  end mle
+else
+  mle LL = err ? NA : ll
+    scalar err = fe_llik(dep, L, b, null, &amp;ll, &amp;G, &amp;H)
+    deriv b = G
+    hessian Hessian(&amp;H)
+  end mle
+endif
+Mod.ET = $stopwatch
+Mod.coeff = b
+Mod.vcv = invpd(H)
+Mod.stderr = sqrt(diag(Mod.vcv))
+Mod.lnl = $lnl - sum(lngamma(dep+1))
+return Mod
+</code>
+</gretl-function>
+<gretl-function name="fep_print" type="void">
+ <params count="1">
+  <param name="Mod" type="bundleref"/>
+ </params>
+<code>if nelem(Mod) &gt; 0
+  loop foreach i NT0 NT1 NT2 --quiet
+    scalar $i = Mod.$i
+  endloop
+  printf &quot;\n\nFixed effects Poisson Model\n&quot;
+  printf &quot;Dependent variable: %s\n&quot;, Mod.depname
+  if Mod.offset
+    printf &quot;Offset variable: %s\n&quot;, Mod.offsetname
+  endif
+  printf &quot;Sample size = %d, (%d units)\n&quot;, NT2, Mod.N
+  if NT0 &gt; NT2
+    NT1 = Mod.NT1
+    printf &quot;Originally: %d;\n&quot;, NT0
+    if NT1&lt;NT0
+      printf &quot;\t%d dropped because T_i = 1\n&quot;, NT0-NT1
+    endif
+    if NT2&lt;NT1
+      printf &quot;\t%d dropped because y_ti = 0 for all t\n&quot;, NT1-NT2
+    endif
+  endif
+  cs = Mod.coeff ~ Mod.stderr
+  pn = Mod.parnames
+  modprint cs pn
+  printf &quot;\tLLik = %d\n&quot;, Mod.lnl
+  W = qform(Mod.coeff', invpd(Mod.vcv))
+  df = Mod.ncoeff
+  printf &quot;\tWald chi^2 test(%d) = %g (pvalue = %g)\n&quot;, df, W, pvalue(x, df, W)
+  # printf &quot;\tElapsed time = %g\n&quot;, Mod.ET
+endif
+</code>
+</gretl-function>
+<gretl-function name="GUI_FEPoisson" type="bundle" menu-only="1" pkg-role="gui-main">
+ <params count="3">
+  <param name="depvar" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="explvar" type="list">
+<description>Explanatory variables</description>
+  </param>
+  <param name="offset" type="seriesref" optional="true">
+<description>Offset (optional)</description>
+  </param>
+ </params>
+<code>if exists(offset)
+  bundle Model = fep_estimate(depvar, explvar, &amp;offset)
+  Model.depname = argname(depvar)
+  Model.offsetname = argname(offset)
+else
+  bundle Model = fep_estimate(depvar, explvar)
+endif
+if nelem(Model) &gt; 0
+  fep_print(&amp;Model)
+else
+  printf &quot;Error!&quot;
+endif
+return Model
+</code>
+</gretl-function>
+<gretl-function name="fe_llik" type="scalar" private="1">
+ <params count="7">
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+  <param name="b" type="matrix"/>
+  <param name="offset" type="seriesref" optional="true"/>
+  <param name="llik" type="seriesref"/>
+  <param name="G" type="matrixref" optional="true"/>
+  <param name="H" type="matrixref" optional="true"/>
+ </params>
+<code>set skip_missing off
+set warnings off
+series ybar = pmean(y)
+series w = lincomb(X, b)
+if max(w) &gt; 300
+  series llik = NA
+  matrix G = zeros(1, nelem(X))
+  return 1
+endif
+series w = isnull(offset) ? exp(w) : offset * exp(w)
+series w /= pmean(w)
+# series C = y * ybar - lngamma(y + 1)
+series ret = y * ln(w) - ybar * w # + C
+llik = misszero(ret)
+if !isnull(G)
+  series u = (y - ybar*w)
+  k = nelem(X)
+  matrix mX = {X}
+  matrix wX = mX .* {w}
+  G = mX
+  #        printf &quot;rows(wX) = %d, $nobs = %d\n&quot;, rows(wX), $nobs
+  loop i=1..k --quiet
+    series tmp = wX[,i]
+    G[,i] -= pmean(tmp)
+  endloop
+  if !isnull(H)
+    matrix H = hdprod(wX, G)
+    matrix H = (ok(H) ? H: 0)'{ybar}
+    matrix H = mshape(H, k, k)
+  endif
+  matrix G = (ok(G) ? G.* {u} : 0)
+endif
+return 0
+</code>
+</gretl-function>
+<gretl-function name="Hessian" type="void" private="1">
+ <params count="1">
+  <param name="H" type="matrixref"/>
+ </params>
+<code>matrix H = 0.5*(H+H')
+</code>
+</gretl-function>
+<gretl-function name="depcheck" type="scalar" private="1">
+ <params count="1">
+  <param name="y" type="series"/>
+ </params>
+<code>depcheck = min(y) &lt; 0
+if depcheck
+  depccheck = 2 * (max(y - floor(y)) &gt; 0)
+endif
+return depcheck
+</code>
+</gretl-function>
+<sample-script>
+set echo off
+set messages off
+
+include FEPoisson.gfn
+open rwm.gdt --quiet
+
+# ensure we have a panel structure in place
+setobs id year --panel-vars
+
+# reproduce column 2 of Table 18.17 (p. 822) of
+# Greene &quot;Econometric Analysis&quot;, 7th ed
+series income = hhninc/1000
+list X = age educ hhkids income public
+bundle Model = fep_estimate(docvis, X)
+fep_print(&amp;Model)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

@@ -1,0 +1,5 @@
+include ./Wilcoxon/Wilcoxon.gfn
+# Data taken from http://vassarstats.net/textbook/ch12a.html
+open WSRT_example.gdt  --quiet --frompkg=Wilcoxon
+scalar wt = Wilcoxon(x,y)
+print wt

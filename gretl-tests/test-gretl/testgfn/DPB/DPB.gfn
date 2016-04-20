@@ -1,0 +1,1661 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="DPB" ID="1429346745" needs-panel-data="true" minver="1.10.0" lives-in-subdir="true">
+<author email="c.pigini@gmail.com">Riccardo &quot;Jack&quot; Lucchetti and Claudia Pigini</author>
+<version>1.01</version>
+<date>2015-04-17</date>
+<description>Dynamic Panel Binary models</description>
+<help>
+pdfdoc:DPB.pdf
+</help>
+<data-files count="1">
+examples </data-files>
+<gretl-function name="DPB_setup" type="bundle">
+ <params count="4">
+  <param name="mod" type="string"/>
+  <param name="depvar" type="series"/>
+  <param name="X" type="list"/>
+  <param name="Z" type="list" optional="true"/>
+ </params>
+<code>/* Check for panel data structure */
+bundle bun = null
+if $datatype&lt;3
+  printf &quot;The dataset must have a panel structure; aborting\n&quot;
+  return bun
+endif
+if !isdummy(depvar)
+  printf &quot;Variable %s is not binary!\n&quot;, argname(depvar)
+  return bun
+endif
+/* Strings for explanatory variables are managed separately
+as CQUAD_EXT_setup needs to drop time-invariant covariates */
+/* Subsamples: different procedures for model 1-3 and 4 */
+/* mod=&quot;DP&quot;  : Heckman (1981)
+mod=&quot;ADP&quot; : Hyslop  (1999)
+mod=&quot;GADP&quot;: Keane &amp; Sauer (2009)
+mod=&quot;QE&quot;  : Bart  &amp; Nigro (2010) */
+if mod!=&quot;QE&quot;
+  if nelem(Z)==0
+    Z = X
+  endif
+  scalar AR1 = (mod==&quot;ADP&quot;) ? 1 : (mod==&quot;GADP&quot;) ? 2 : 0
+  bun = HPDP_setup(depvar, X, Z, AR1)
+elif mod==&quot;QE&quot;
+  bun = CQUAD_EXT_setup(depvar,X)
+endif
+/* Covariance matrix estimation: defaults settings */
+bun[&quot;vcvmeth&quot;] = 0
+/* Draws for GHK method: default Halton  */
+bun[&quot;draws&quot;] = 0
+/* Verbosity: default settings   */
+/* verbosity = 0 : no print-out  */
+bun[&quot;verbose&quot;] = 1
+bun[&quot;feedback&quot;] = 1
+bun[&quot;yname&quot;] = argname(depvar)
+bun[&quot;model&quot;] = mod
+return bun
+</code>
+</gretl-function>
+<gretl-function name="DPB_estimate" type="void">
+ <params count="2">
+  <param name="bun" type="bundleref"/>
+  <param name="par" type="matrixref" optional="true"/>
+ </params>
+<code>string mod = bun[&quot;model&quot;]
+#---- Initial values for parameter vector----
+# if not supplied by the user:
+# mod DP, ADP, GADP: handled by HPDP_initpar
+# mod QE : vector of zeros
+#--------------------------------------------
+scalar npar = bun[&quot;npar&quot;]
+if isnull(par)
+  if mod==&quot;QE&quot;
+    par = zeros(npar,1)
+    bun[&quot;inipar&quot;] = par
+  else
+    HPDP_initpar(&amp;bun)
+    par = bun[&quot;inipar&quot;]
+  endif
+endif
+#---- Verbosity level
+# default option is quiet, present in set-up
+verbose = bun[&quot;verbose&quot;]
+if verbose == 2
+  set max_verbose on
+  bun[&quot;feedback&quot;] = 0
+elif verbose == 0
+  bun[&quot;feedback&quot;] = 0
+endif
+set warnings off
+if mod!=&quot;QE&quot;
+  method = bun[&quot;method&quot;]
+  if method == 0
+    matrix grad = {}
+    catch ll = BFGSmax(par, &quot;HPDP_loglik_GHQ(par, &amp;bun)&quot;,    &quot;HPDP_sumscore_GHQ(&amp;grad, par, &amp;bun)&quot;)
+    error = $error
+  elif method == 1
+    matrix grad = zeros(npar, 1)
+    catch ll = BFGSmax(par, &quot;HPDP_loglik_GHK(par, &amp;bun)&quot;,    &quot;HPDP_sumscore_GHK(&amp;grad, par, &amp;bun)&quot;)
+    error = $error
+  endif
+elif mod==&quot;QE&quot;
+  matrix grad = zeros(npar, 1)
+  matrix Info = zeros(npar, npar)
+  generate_Q(&amp;bun)
+  catch ll = NRmax(par, &quot;CQUAD_EXT_cml(par, &amp;bun)&quot;,    &quot;getScore(&amp;grad, &amp;bun)&quot;, &quot;getInfo(&amp;Info, &amp;bun)&quot;)
+  error = $error
+  delete bun[&quot;Qmats&quot;]
+endif
+if error
+  ll = NA
+  V = {}
+  printf &quot;error %d (%s)\n&quot;, error, errmsg(error)
+endif
+if mod!=&quot;QE&quot;
+  V = HPDP_VCV(par, &amp;bun)
+  par = par_transform(par, bun.AR1)
+elif mod==&quot;QE&quot;
+  V = CQUAD_EXT_VCV(par, &amp;bun)
+endif
+bun[&quot;coeff&quot;] = par
+bun[&quot;vcv&quot;]   = V
+bun[&quot;ll&quot;]    = ll
+scalar nt = bun[&quot;NT&quot;]
+bun[&quot;aic&quot;] = -2*ll + 2*npar
+bun[&quot;bic&quot;] = -2*ll + npar * ln(nt)
+bun[&quot;hqc&quot;] = -2*ll + 2* npar * ln(ln(nt))
+#---- Results-----------------
+# default option is quiet
+# no call to printout
+#-----------------------------
+</code>
+</gretl-function>
+<gretl-function name="DPB_printout" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>string mod   = b[&quot;model&quot;]
+matrix coeff = b[&quot;coeff&quot;]
+matrix V	 = b[&quot;vcv&quot;]
+scalar npar  = b[&quot;npar&quot;]
+scalar nk    = b[&quot;nk&quot;] # number of main equation regressors (s.d excluded)
+scalar nz    = mod!=&quot;QE&quot; ? b[&quot;nz&quot;] : NA
+matrix Ti    = b[&quot;Ti&quot;]
+cs = coeff ~ sqrt(diag(V))
+if mod==&quot;QE&quot;
+  printf &quot;\n \nQuadratic Exponential model\n&quot;
+else
+  if b[&quot;AR1&quot;] == 0
+    printf &quot;\n \nDynamic Probit model\n&quot;
+  elif b[&quot;AR1&quot;]==1
+    printf &quot;\n \nAR(1) Dynamic Probit model\n&quot;
+  elif b[&quot;AR1&quot;]==2
+    printf &quot;\n \nGeneralised AR(1) Dynamic Probit model\n&quot;
+  endif
+endif
+printf &quot;Dependent variable: %s\n&quot;, b[&quot;yname&quot;]
+printf &quot;Units: %d (observations: %d)\n&quot;, b[&quot;N&quot;], b[&quot;NT&quot;]
+if mod==&quot;QE&quot;
+  printf &quot;Total units: %d (total observations: %d)\n&quot;,  b[&quot;Tot_N&quot;], b[&quot;Tot_NT&quot;]
+endif
+if b.vcvmeth == 0
+  s = &quot;Sandwich&quot;
+elif b.vcvmeth == 1
+  s = &quot;OPG&quot;
+else
+  s = &quot;Hessian&quot;
+endif
+printf &quot;Covariance matrix: %s\n&quot;, s
+if mod!=&quot;QE&quot;
+  if b.method == 0
+    printf &quot;Method: Gaussian quadrature with %d quadrature points\n&quot;,  b.nrep
+  elif b.method == 1
+    printf &quot;Method: GHK with %d Halton points\n&quot;, b.nrep
+  endif
+endif
+/* -------- State dependence ---------------------*/
+sprintf parnames &quot;%s(-1),&quot;, b[&quot;yname&quot;]
+csy = (mod==&quot;QE&quot;) ? cs[npar,] : cs[1,]
+modprint csy parnames
+/* ----- Main equation regressors --------------- */
+parnames = b[&quot;Xnames&quot;]
+matrix sel = b[&quot;sel&quot;]
+tot = rows(sel)
+matrix csx = zeros(tot,2)
+matrix tmp = selifr(seq(1,tot)',sel)
+if mod==&quot;QE&quot;
+  csx[tmp,] = cs[1:nk,]
+else
+  csx[tmp,] =  cs[2:nk+1,]
+endif
+modprint csx parnames
+/* ----- Second set ---------------------------- */
+matrix sel = b[&quot;sel_aux&quot;]
+tot = rows(sel)
+csz = zeros(tot,2)
+matrix tmp = selifr(seq(1,tot)',sel)
+if mod!=&quot;QE&quot;
+  parnames = b[&quot;Znames&quot;]
+  csz[tmp,] = cs[nk+2:nk+nz+1,]
+else
+  sprintf parnames &quot;const,%s&quot;, b[&quot;Xnames&quot;]
+  csz[tmp,] = cs[nk+1:(npar-1),]
+endif
+modprint csz parnames
+/* ---- Covariance matrix parameters ------------*/
+if mod!=&quot;QE&quot;
+  csv = cs[nk+nz+2:,]
+  parnames = &quot;theta,sigma&quot;
+  if b[&quot;AR1&quot;]==1
+    parnames += &quot;,rho&quot;
+  elif b[&quot;AR1&quot;]==2
+    parnames += &quot;,rho,tau&quot;
+  endif
+  modprint csv parnames
+endif
+printf &quot;  Log-likelihood %14.3f      AIC %14.3f\n&quot;, b[&quot;ll&quot;], b[&quot;aic&quot;]
+printf &quot;             BIC %14.3f      HQC %14.3f\n&quot;, b[&quot;bic&quot;], b[&quot;hqc&quot;]
+if mod==&quot;QE&quot;
+  sel = seq(1,nk)'
+else
+  sel = seq(3,nk+1)'
+endif
+scalar chisq = qform(coeff[sel]', invpd(V[sel,sel]))
+scalar df    = rows(sel)
+scalar pv    = pvalue(x, df, chisq)
+printf &quot;\n  Wald test = %g (%d df); p-value = %g\n&quot;, chisq, df, pv
+printf &quot;\n&quot;
+</code>
+</gretl-function>
+<gretl-function name="DPB_setoption" type="scalar">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="opt" type="string"/>
+  <param name="value" type="scalar"/>
+ </params>
+<code>err = 0
+string mod = b[&quot;model&quot;]
+if opt==&quot;verbose&quot;
+  if value&gt;2
+    err = 3
+  else
+    b[&quot;verbose&quot;] = value
+  endif
+elif opt==&quot;vcv&quot;
+  if value&gt;2
+    err = 3
+  else
+    b[&quot;vcvmeth&quot;] = value
+  endif
+elif opt==&quot;nrep&quot;
+  if mod==&quot;QE&quot;
+    err=2
+  else
+    b[&quot;nrep&quot;] = value
+  endif
+elif opt==&quot;method&quot;
+  if mod==&quot;QE&quot;
+    err = 2
+  else
+    if value&gt;1
+      err = 3
+    else
+      if (value==0 &amp;&amp; b.AR1&gt;0)
+        err = 1
+      else
+        b[&quot;method&quot;] = value
+        if (value==1 &amp;&amp; b.nrep==24)
+          b.nrep=128
+        endif
+      endif
+    endif
+  endif
+elif opt==&quot;draws&quot;
+  if mod==&quot;QE&quot;
+    err = 2
+  elif mod!=&quot;QE&quot; &amp;&amp; b[&quot;method&quot;]==0
+    err = 4
+  else
+    if value&gt;1
+      err = 3
+    else
+      set seed 31415927
+      b[&quot;draws&quot;] = value
+    endif
+  endif
+else
+  err = 5
+endif
+if err&gt;0
+  printf &quot;Warning in DPB_setoption\n&quot;
+  if err==1
+    printf &quot;method = 0 and AR1 = %d incompatible options. Switching to GHK (method = 1)\n&quot;, b.AR1
+  elif err==2
+    printf &quot;Option %s not allowed with Conditional Maximum Likelihood\n&quot;, opt
+  elif err==3
+    printf &quot;%s = %d unrecognised option. Switching to default settings\n&quot;, opt, value
+  elif err==4
+    printf &quot;%s = %d and method = 0 (GHQ) incompatible options. Ignoring setting \n&quot;, opt, value
+  elif err==5
+    printf &quot;%s unrecognised option\n&quot;, opt
+  endif
+endif
+return err
+</code>
+</gretl-function>
+<gretl-function name="CQUAD_EXT_setup" type="bundle" private="1">
+ <params count="2">
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+ </params>
+<code>bundle bun
+panel_acct(&amp;bun, y, X)
+dynamize_bundle(&amp;bun)
+return bun
+</code>
+</gretl-function>
+<gretl-function name="panel_acct" type="void" private="1">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+ </params>
+<code>list effX = null
+loop foreach i X -q
+  if !isconst(X.$i,0)
+    effX += X.$i
+  endif
+endloop
+b[&quot;Xnames&quot;] = varname(effX)
+scalar k = nelem(effX)
+list ALL = effX || y || y(-1)
+series filt = ok(ALL)
+set skip_missing on
+matrix DATA = { ALL }
+series yok  = y &amp;&amp; filt
+series consecutive  = yok &amp;&amp; y(-1)
+list Z = filt yok consecutive
+AGG = 0
+if AGG == 1
+  matrix unitdata = aggregate(Z, $unit, sum)
+else #much faster; investigate!!!
+  set skip_missing off
+  matrix sel = {time == min(time)}
+  series u = $unit
+  list W = u const
+  loop foreach i Z --quiet
+    ps_$i = psum($i)
+    W += ps_$i
+  endloop
+  matrix unitdata = selifr({ W }, sel)
+endif
+# cols unitdata: label id; max(T); Ti; y+ = k; y*
+Tot_N = rows(unitdata)
+Tot_NT = sumc(unitdata[,3])
+sel = (unitdata[,3].&gt;(unitdata[,4])) &amp;&amp; (unitdata[,4].&gt;0)
+# tmp: usable obs for QE
+tmp = selifr(unitdata, sel)
+scalar N = rows(tmp)
+scalar NT = sumc(tmp[,3])
+matrix mX = zeros(NT, k)
+matrix my = zeros(NT, 1)
+matrix y0 = zeros(N, 1)
+ini = 1
+t0 =  1
+j = 1
+loop i=1..Tot_N --quiet
+  Ti = unitdata[i,3]
+  fin = ini - 1 + Ti
+  if sel[i] == 1
+    t1 = t0 + Ti - 1
+    mX[t0:t1,] = DATA[ini:fin,1:k]
+    my[t0:t1] = DATA[ini:fin,k+1]
+    y0[j] = DATA[ini,k+2]
+    j++
+    t0 = t1 + 1
+  endif
+  ini = fin + 1
+endloop
+#   sel = {}
+#   mX = drop_collinear(mX, &amp;sel)
+#   b[&quot;sel_main&quot;] = sel
+#   print sel
+b[&quot;id&quot;] = tmp[,1]
+b[&quot;Ti&quot;] = tmp[,3]
+b[&quot;Tot_N&quot;] = Tot_N
+b[&quot;Tot_NT&quot;] = Tot_NT
+b[&quot;N&quot;] = N
+b[&quot;NT&quot;] = NT
+b[&quot;my&quot;] = my
+b[&quot;mX&quot;] = mX
+k = cols(mX)
+b[&quot;nk&quot;]   = k
+b[&quot;npar&quot;] = 2*(k+1)
+b[&quot;sumy&quot;] = tmp[,4]
+b[&quot;consec&quot;] = tmp[,5]
+b[&quot;y0&quot;] = y0
+</code>
+</gretl-function>
+<gretl-function name="drop_collinear" type="matrix" private="1">
+ <params count="2">
+  <param name="mX" type="matrix"/>
+  <param name="sel" type="matrixref"/>
+ </params>
+<code># Rank check
+ret = mX
+R = {}
+matrix Q = qrdecomp(ret, &amp;R)
+matrix sel = abs(R[diag]) .&gt; 1.0e-10
+scalar nkeep = sumc(sel)
+if nkeep&lt;cols(ret)
+  ret = Q*selifc(R,sel')
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="dynamize_bundle" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>/*
+substitute inside the bundle the plain felogit (y,X)
+with the corresponding Bartolucci-Nigro matrices; note
+that the &quot;consecutive&quot; scalar \sum_{t=1}^{T_i} y_t y_{t-1}
+is appended at the end of y_i.
+*/
+id = b[&quot;id&quot;]
+Ti = b[&quot;Ti&quot;]
+N  = b[&quot;N&quot;]
+nt = sumc(Ti)
+my = b[&quot;my&quot;]
+mX = b[&quot;mX&quot;]
+consec = b[&quot;consec&quot;]
+scalar npar = b[&quot;npar&quot;]
+scalar nk   = b[&quot;nk&quot;]
+d_y = zeros(nt + N, 1)
+d_X = zeros(nt + N, npar)
+scalar t1  = 1
+scalar ini = 1
+loop i=1..N --quiet
+  scalar T = Ti[i]
+  t2  = t1 + T - 1
+  fin = ini + T
+  matrix tmpy = (my[t1:t2] | consec[i])
+  matrix tmpX = diagcat(diagcat(mX[t1:t2-1,], 1 ~ mX[t2,]), 1)
+  d_y[ini:fin]  = tmpy
+  d_X[ini:fin,] = tmpX
+  t1  = t2+1
+  ini = fin + 1
+endloop
+Mcov = d_X[,1:nk]
+sel = {}
+Mcov = drop_collinear(Mcov, &amp;sel)
+b[&quot;sel&quot;] = sel
+b[&quot;nk&quot;] = cols(Mcov)
+Mqe  = d_X[,nk+1:]
+sel = {}
+Mqe = drop_collinear(Mqe, &amp;sel)
+b[&quot;sel_aux&quot;] = sel[1:rows(sel)-1]
+d_X = Mcov ~ Mqe
+b[&quot;npar&quot;] = cols(d_X)
+b[&quot;my&quot;] = d_y
+b[&quot;mX&quot;] = d_X
+</code>
+</gretl-function>
+<gretl-function name="pos" type="scalar" private="1">
+ <params count="4">
+  <param name="M" type="scalar"/>
+  <param name="T" type="scalar"/>
+  <param name="ss" type="scalar"/>
+  <param name="y0" type="scalar"/>
+ </params>
+<code>return y0*M*M + ss*M + T
+</code>
+</gretl-function>
+<gretl-function name="unpack" type="void" private="1">
+ <params count="5">
+  <param name="n" type="scalar"/>
+  <param name="M" type="scalar"/>
+  <param name="T" type="scalarref"/>
+  <param name="ss" type="scalarref"/>
+  <param name="y0" type="scalarref"/>
+ </params>
+<code>loop foreach i T ss y0
+  scalar $i = n % M
+  n = floor(n/M)
+endloop
+</code>
+</gretl-function>
+<gretl-function name="Qmat" type="matrix" private="1">
+ <params count="2">
+  <param name="T" type="scalar"/>
+  <param name="ss" type="scalar"/>
+ </params>
+<code>if T==ss
+  matrix ret = ones(1, T)
+elif ss==0
+  matrix ret = zeros(1, T)
+elif ss==1
+  matrix ret = I(T)
+elif ss==T-1
+  matrix ret = !I(T)
+else
+  matrix ret = (Qmat(T-1, ss-1) ~ 1) | (Qmat(T-1, ss) ~ 0)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="make_array_tmp" type="matrices" private="1">
+ <params count="1">
+  <param name="Tssi" type="matrix" const="true"/>
+ </params>
+<code>/*
+The matrix Tssi contans n rows and two columns (T and ss by
+individual)
+*/
+matrix sorted = msortby(Tssi, 1)
+scalar M = maxc(Tssi[,1]) + 1
+matrices ret = array(M^2)
+/* let's begin with a few simple cases, that we do &quot;by hand&quot; so we
+can use recursion later
+*/
+# T = 1, k = 1
+i = pos(M, 1, 1, 0)
+ret[i] = {1}
+# T = 1, k = 0
+i = pos(M, 1, 0, 0)
+ret[i] = {0}
+# T = 2, k = 2
+i = pos(M, 2, 2, 0)
+ret[i] = {1, 1}
+# T = 2, k = 1
+i = pos(M, 2, 1, 0)
+ret[i] = I(2)
+# T = 2, k = 0
+i = pos(M, 2, 0, 0)
+ret[i] = {0, 0}
+# ok, now let's go for the real thing
+loop i = 1 .. rows(sorted) -q
+  Ti = sorted[i,1]
+  ssi = sorted[i,2]
+  ni = pos(M, Ti, ssi, 0)
+  if rows(ret[ni]) == 0
+    n1 = pos(M, Ti-1, ssi-1, 0)
+    n2 = pos(M, Ti-1, ssi, 0)
+    if (rows(ret[n1]) * rows(ret[n2])) &gt; 0
+      Q = (ret[n1] ~ 1) | (ret[n2] ~ 0)
+      ret[ni] = Q
+    else
+      ret[ni] = Qmat(Ti, ssi)
+    endif
+  endif
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="generate_Q" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>scalar N = b[&quot;N&quot;]
+matrix id = b[&quot;id&quot;]
+matrix Ti = b[&quot;Ti&quot;]
+matrix my = b[&quot;my&quot;]
+matrix sumy = b[&quot;sumy&quot;]
+matrix Tssi = Ti ~ sumy
+matrices tmp = make_array_tmp(Tssi)
+matrix my0 = b[&quot;y0&quot;]
+t1 = 1
+scalar nt = 0
+matrix which = zeros(N,1)
+matrix POS = zeros(N,1)
+scalar M = maxc(Tssi[,1]) + 1
+matrices Qmats = array(2*M^2)
+loop i=1..N --quiet
+  scalar T = Ti[i]
+  scalar ss = sumy[i]
+  t2 = t1 + T - 1
+  ini = t1+i-1
+  fin = t2+i
+  matrix y = my[ini:fin]
+  scalar y0 = my0[i]
+  scalar pos_i = pos(M,T,ss,y0)
+  POS[i] = pos_i
+  if rows(Qmats[pos_i])==0
+    scalar p = pos(M,T,ss,0)
+    Q = tmp[p]
+    Q ~= sumr(Q &amp;&amp; (y0 ~ Q[,1:T-1]))
+    Qmats[pos_i] = Q
+  else
+    Q = Qmats[pos_i]
+  endif
+  sel = (Q[,1:T]*y[1:T]) .= ss
+  j = seq(1, rows(sel)) * sel
+  if (j&gt;0) &amp;&amp; (j&lt;=rows(Q))
+    which[i] = j
+  else
+    # shouldn't happen
+    printf &quot;generate_Q: selection no good\n&quot;
+    printf &quot;\ty: %3.0f&quot;, y'
+    printf &quot;\t%3d\n&quot;, sel'
+    printf &quot;\t%3d\n&quot;, j
+    which[i] = NA
+  endif
+  t1 = t2+1
+endloop
+delete tmp
+b[&quot;POS&quot;] = POS
+b[&quot;Qmats&quot;] = Qmats
+b[&quot;which&quot;] = which
+</code>
+</gretl-function>
+<gretl-function name="CQUAD_EXT_cml" type="scalar" private="1">
+ <params count="2">
+  <param name="beta" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>scalar feedback = b[&quot;feedback&quot;]
+matrix id = b[&quot;id&quot;]
+matrix mX = b[&quot;mX&quot;]
+matrix mndx = mX * beta
+N = b[&quot;N&quot;]
+Ti = b[&quot;Ti&quot;]
+my = b[&quot;my&quot;]
+scalar LL = 0
+scalar npar = rows(beta)
+matrix G = zeros(N,npar)
+matrix InfoMat = zeros(npar,npar)
+POS    = b[&quot;POS&quot;]
+Qmats  = b[&quot;Qmats&quot;]
+sumy   = b[&quot;sumy&quot;]
+which  = b[&quot;which&quot;]
+my0 = b[&quot;y0&quot;]
+t1 = 1
+loop i=1..N --quiet
+  scalar T = Ti[i]
+  scalar sy = sumy[i]
+  scalar j = which[i]
+  scalar pos_i = POS[i]
+  t2 = t1 + T - 1
+  ini = t1+i-1
+  fin = t2+i
+  Q = Qmats[pos_i]
+  p_i = exp(Q * mndx[ini:fin])
+  p_i = p_i ./ sumc(p_i)
+  scalar llt = ln(p_i[j])
+  LL += llt
+  matrix y = my[ini:fin]
+  matrix x = mX[ini:fin,]
+  e_i = Q'p_i
+  g_i = x'(Q[j,]' - e_i)
+  G[i,] = g_i'
+  InfoMat += qform(x', Q'(Q.*p_i) - e_i*e_i')
+  t1 = t2+1
+endloop
+b[&quot;G&quot;] = G
+b[&quot;InfoMat&quot;] = InfoMat
+if feedback
+  printf &quot;Log-likelihood = %16.6f\n&quot;, LL
+  flush
+endif
+return LL
+</code>
+</gretl-function>
+<gretl-function name="CQUAD_EXT_VCV" type="matrix" private="1">
+ <params count="2">
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>if (b.vcvmeth==0 || b.vcvmeth==1)
+  GG = b.G'b.G
+endif
+if b.vcvmeth==0
+  Info = b.InfoMat
+  V = invpd(Info)*GG*invpd(Info)
+elif b.vcvmeth==1
+  V = invpd(GG)
+elif b.vcvmeth==2
+  V = invpd(b[&quot;InfoMat&quot;])
+endif
+return V
+</code>
+</gretl-function>
+<gretl-function name="getScore" type="void" private="1">
+ <params count="2">
+  <param name="g" type="matrixref"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>g = sumc(b[&quot;G&quot;])
+flush
+</code>
+</gretl-function>
+<gretl-function name="getInfo" type="void" private="1">
+ <params count="2">
+  <param name="H" type="matrixref"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>H = b[&quot;InfoMat&quot;]
+</code>
+</gretl-function>
+<gretl-function name="HPDP_setmethod" type="void" private="1">
+ <params count="3">
+  <param name="bun" type="bundleref"/>
+  <param name="method" type="scalar"/>
+  <param name="nrep" type="scalar"/>
+ </params>
+<code>/*
+this is for choosing what method to use for computing
+the loglikelihood; 0 = Gauss-Hermite Quadrature, 1 = GHK.
+nrep holds the quadrature points for ghq, or the number of
+halton numbers for ghk
+*/
+if method==1 || bun[&quot;AR1&quot;]==0
+  bun[&quot;method&quot;] = method
+  bun[&quot;nrep&quot;] = nrep
+else
+  printf &quot;Incompatible options\n&quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="HPDP_setup" type="bundle" private="1">
+ <params count="4">
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+  <param name="Z" type="list"/>
+  <param name="AR1" type="scalar" min="0" max="2" default="0"/>
+ </params>
+<code>#  HPDP_setup no longer gets options
+#  (scalar vcvmeth[0], scalar initmeth[0:2:0])
+#  they are handled via DPB_set_opt
+#  AR1 remains via scalar model (1 default Heckman)
+#  handled in DPB_setup
+bundle bun
+matrix Ti = {}
+series valid = UsableObs(y, Z, X, &amp;Ti)
+series tmp = cum(valid)
+series sel_ini = (tmp == 1) &amp;&amp; pmax(tmp)&gt;1
+series sel_succ = (tmp &gt; 1) &amp;&amp; valid
+matrix DATA = {sel_ini, y, Z}
+DATA = selifr(DATA[,2:], DATA[,1])
+bun[&quot;y0&quot;] = DATA[,1]
+Z0 = DATA[,2:]
+# check for collinearity in initial condition
+sel = {}
+Z0 = drop_collinear(Z0, &amp;sel)
+bun[&quot;sel_aux&quot;] = sel
+nz = cols(Z0)
+bun[&quot;Z0&quot;] = Z0
+DATA = {sel_succ, y, X}
+DATA = selifr(DATA[,2:], DATA[,1])
+bun[&quot;y1&quot;] = DATA[,1]
+sel = {}
+X1 = DATA[,2:]
+X1 = drop_collinear(X1, &amp;sel)
+bun[&quot;sel&quot;] = sel
+nk = cols(X1)
+bun[&quot;X1&quot;] = X1
+scalar N  = rows(Ti)
+scalar NT = sumc(Ti[,2]) + N
+if 0
+  print valid y X -o
+  printf &quot;======================================\n&quot;
+  printf &quot;Sanity check\n&quot;
+  printf &quot;======================================\n&quot;
+  printf &quot;Ti (%d rows)\n%6d&quot;, rows(Ti), Ti
+  printf &quot;sumc(Ti)\n%6d&quot;, sumc(Ti)
+  loop foreach m y0 Z0 y1 X1 -q
+    printf &quot;$m: %6d x %6d\n&quot;, rows(bun.$m), cols(bun.$m)
+  endloop
+  printf &quot;=====================================\n&quot;
+endif
+bun[&quot;Ti&quot;]  = Ti
+bun[&quot;N&quot;]   = N
+bun[&quot;NT&quot;]  = NT
+bun[&quot;valid&quot;] = valid
+bun[&quot;Xnames&quot;] = varname(X)
+bun[&quot;Znames&quot;] = varname(Z)
+bun[&quot;nk&quot;] = nk
+bun[&quot;nz&quot;] = nz
+bun[&quot;npar&quot;] = nk + 1 + nz + 1 + 1
+npar = bun[&quot;npar&quot;]
+bun[&quot;AR1&quot;]  = AR1
+# Call to HPDP_setmethod for default options.
+# User supplied options are set later with a call to HPDP_setmethod
+if AR1&gt;0
+  HPDP_setmethod(&amp;bun, 1, 128)
+else
+  HPDP_setmethod(&amp;bun, 0, 24)
+endif
+#    if initmeth == 0 # LPM
+# 	HPDP_initpar(&amp;bun)
+#    elif initmeth == 1 # User supplied
+# 	bun[&quot;inipar&quot;] = {}
+#    elif initmeth == 2 # Smart -- experimental
+# 	bun[&quot;inipar&quot;] = smart_init(y, valid, X, Z, AR1)
+#    endif
+return bun
+</code>
+</gretl-function>
+<gretl-function name="HPDP_initpar" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix y1 = b[&quot;y1&quot;]
+matrix u = {}
+matrix pivec = mols(b[&quot;y0&quot;], b[&quot;Z0&quot;], &amp;u)
+pivec = pivec ./ sdc(u)
+matrix beta  = mols(y1, mlag(y1, 1) ~ b[&quot;X1&quot;], &amp;u)
+beta = beta ./ sdc(u)
+b[&quot;inipar&quot;] = beta | pivec | 0 | 0
+if b[&quot;AR1&quot;]==1
+  b[&quot;inipar&quot;] = b[&quot;inipar&quot;] | 0
+elif b[&quot;AR1&quot;]==2
+  b[&quot;inipar&quot;] = b[&quot;inipar&quot;] | 0 | 0
+endif
+</code>
+</gretl-function>
+<gretl-function name="toughcase" type="matrix" private="1">
+ <params count="2">
+  <param name="OK0" type="matrix"/>
+  <param name="OK1" type="matrix"/>
+ </params>
+<code>/* this function should return, for an individual,
+a 0/1 vector corresponding to the longest span
+of consecutive observations suitable for estimation;
+if there are more than one sequences of the same
+  length, the latest should be used.
+  */
+  scalar n = rows(OK0)
+  matrix s = seq(1,n-1)'
+  matrix lead = OK1[2:n] | 1
+  pstart  = OK0 .* lead       # possible starts
+  matrix consbody = lower(OK1 .* lead')
+  matrix ret = {}
+  bstart = 0
+  blen = 0
+  matrix pstarts = selifr(s, pstart[1:n-1])
+  scalar m = rows(pstarts)
+  # printf &quot;m = %d\n&quot;, m
+  loop i=1..m --quiet
+    c = pstarts[i]
+    r = c+1
+    l = 1
+    scalar x = consbody[r, c]
+    loop while x &amp;&amp; (r&lt;=n) --quiet
+      x = consbody[r, c]
+      r++
+      l+=x
+    endloop
+    if l&gt;=blen
+      bstart = c
+      blen = l
+    endif
+  endloop
+  if (blen&gt;1)
+    ret = {bstart, bstart+blen-1}
+  endif
+  return ret
+</code>
+</gretl-function>
+<gretl-function name="HPDP_SampleSummary" type="void" private="1">
+ <params count="4">
+  <param name="y" type="series" const="true"/>
+  <param name="valid" type="series" const="true"/>
+  <param name="Z" type="list"/>
+  <param name="X" type="list"/>
+ </params>
+<code>series earliest = pmin(valid ? time : NA) == time
+summary valid earliest
+series len = psum(valid)
+smpl earliest --dummy
+freq len
+freq time
+smpl full --balanced
+</code>
+</gretl-function>
+<gretl-function name="UsableObs" type="series" private="1">
+ <params count="4">
+  <param name="y" type="series"/>
+  <param name="Z" type="list"/>
+  <param name="X" type="list"/>
+  <param name="GoodUnits" type="matrixref"/>
+ </params>
+<code>/*
+here we assume that the dataset is already endowed
+with the appropriate panel structure
+*/
+matrix okStart = ok(y || Z)
+matrix okBody  = ok(y(0)) &amp;&amp; ok(y(-1)) &amp;&amp; ok(X)
+scalar maxT = $pd
+scalar N    = $nobs / maxT
+matrix Usable = zeros(N*maxT, 1)
+scalar t0 = 1
+matrix OK_i = zeros(maxT, 1)
+matrix SEQ = seq(1, maxT)'
+matrix GoodUnits = {}
+scalar NOK = 0
+scalar r0 = 0
+scalar r1 = 0
+scalar Ni = NA
+scalar Ntot = 0
+scalar Nlucky = 0
+scalar Nbad   = 0
+loop i=1..N --quiet
+  t1 = t0 + maxT - 1
+  dg = okBody[t0+1:t1] .* okStart[t0:t1-1]
+  if (minc(dg) == 1)
+    r0 = 1
+    r1 = maxT
+    OK_i .= 1
+    Ni = maxT - 1
+    Nlucky++
+    Ntot++
+  elif (maxc(dg) == 0)
+    r0 = 0
+    r1 = 0
+    OK_i .= 0
+    Ni = 0
+    Nbad++
+  else
+    matrix r01 = toughcase(okStart[t0:t1], okBody[t0:t1])
+    OK_i .= 0
+    if cols(r01) &gt; 0
+      scalar r0 = r01[1]
+      scalar r1 = r01[2]
+      Ni = r1 - r0
+      OK_i[r0:r1] = 1
+      Ntot++
+    endif
+  endif
+  if Ni&gt;0
+    NOK++
+    GoodUnits |= {i, Ni, r0, r1}
+  endif
+  Usable[t0:t1] = OK_i
+  t0 = t1+1
+endloop
+printf &quot;%d usable units (%d lucky), %d bad\n&quot;, Ntot, Nlucky, Nbad
+series ret = Usable
+return ret
+</code>
+</gretl-function>
+<gretl-function name="smart_init" type="matrix" private="1">
+ <params count="5">
+  <param name="y" type="series"/>
+  <param name="valid" type="series"/>
+  <param name="X" type="list"/>
+  <param name="Z" type="list"/>
+  <param name="AR1" type="scalar" min="0" max="2" default="0"/>
+ </params>
+<code>/* Smart initialisation method: use pooled probit for
+y0 and RE probit for the main equation; seems to
+work quite well in practice, but more testing is
+needed.
+It could be improved by retrieving the alphas from
+the RE residuals and plugging them into the probit
+eq for y0. Testing needed.
+*/
+series tv = cum(valid) * valid
+# ----- initial condition ------------------------
+smpl tv==1 --restrict
+probit y Z --quiet
+b0 = $coeff
+smpl full
+# ----- main equation ----------------------------
+smpl valid==1 --restrict --replace --balanced
+probit y X y(-1) --quiet --random
+scalar nb = rows($coeff)
+matrix b = $coeff[1:nb-2]
+scalar g = $coeff[nb-1]
+scalar lsig = 0.5*$coeff[nb]
+smpl full
+ret =  g | b | b0 | lsig | 0
+if AR1==2
+  ret |= zeros(2,1)
+elif AR1==1
+  ret |= 0
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="HPDP_loglik_GHQ" type="scalar" private="1">
+ <params count="2">
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>param = vec(par)
+quadpoints = b[&quot;nrep&quot;]
+loop foreach i nk nz npar N --quiet
+  scalar $i = b[&quot;$i&quot;]
+endloop
+scalar gamma = param[1]
+matrix beta  = param[2:nk+1]
+matrix pivec = param[nk+2:nk+nz+1]
+scalar theta = param[nk+nz+2]
+scalar lnsig = param[nk+nz+3]
+if abs(lnsig) &gt; 300
+  #printf &quot;lnsig = %g, stopped\n&quot;, lnsig
+  return NA
+endif
+matrix h = quadtable(quadpoints, 1, 0, 1)
+loop foreach i y0 y1 Ti --quiet
+  matrix $i = b[&quot;$i&quot;]
+endloop
+matrix X = b[&quot;X1&quot;]
+matrix Z = b[&quot;Z0&quot;]
+matrix ndx = X * beta
+matrix ndx_0 = Z * pivec
+scalar sig_a = exp(lnsig)
+matrix alphas = h[,1] .* sig_a
+scalar LL = 0
+ini = 1
+scalar err = 0
+loop i=1..N --quiet
+  T = Ti[i,2]
+  if T&gt;0
+    fin = ini + T - 1
+    # printf &quot;%4d: %d-%d (%d)\n&quot;, i, ini, fin, T
+    scalar Y0 = y0[i]
+    matrix Y1 = y1[ini:fin]
+    scalar Ones = sumc(Y1)
+    if Ones&gt;0
+      matrix swap = selifr(seq(1,T)', Y1)
+    endif
+    matrix ndx_i = ndx[ini:fin,]
+    matrix Z_i = Z[i,]
+    if Y0
+      ndx_i[1] += gamma
+    endif
+    if T&gt;1
+      matrix X_i = (Y0 | Y1[1:T-1]) ~ X[ini:fin,]
+      ndx_i[2:T] += gamma * Y1[1:T-1]
+    else
+      matrix X_i = Y0 ~ X[ini,]
+    endif
+    ndx_i = -(ndx_i .+ alphas')
+    if Ones&gt;0
+      ndx_i[swap,] = -ndx_i[swap,]
+    endif
+    check = maxr(maxc(abs(ndx_i)))
+    if check &gt; 2000
+      #printf &quot;check[%4d] = %g, stopped\n&quot;, i, check
+      err = 1
+      break
+    endif
+    matrix ini_ndx = ndx_0[i] + (theta .* alphas')
+    matrix tmp = (Y0 ? ini_ndx : -ini_ndx) | ndx_i
+    matrix Prod = prodc(cnorm(ndx_i)) # 1 x quadpoints
+    Prob_0 = cnorm(Y0 ? ini_ndx : -ini_ndx)
+    Prob_ij = Prod .* Prob_0
+    scalar Prob_i = Prob_ij * h[,2]
+    LL += ln(Prob_i)
+    ini = fin + 1
+  endif
+endloop
+scalar u = muniform(1,1)
+return err ? NA : LL
+</code>
+</gretl-function>
+<gretl-function name="HPDP_score_GHQ" type="matrix" private="1">
+ <params count="3">
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+  <param name="feedback" type="bool"/>
+ </params>
+<code>param = vec(par)
+quadpoints = b[&quot;nrep&quot;]
+loop foreach i nk nz npar N --quiet
+  scalar $i = b[&quot;$i&quot;]
+endloop
+scalar gamma = param[1]
+matrix beta  = param[2:nk+1]
+matrix pivec = param[nk+2:nk+nz+1]
+scalar theta = param[nk+nz+2]
+scalar lnsig = param[nk+nz+3]
+if abs(lnsig) &gt; 300
+  #printf &quot;lnsig = %g, stopped\n&quot;, lnsig
+  return NA
+endif
+matrix h = quadtable(quadpoints, 1, 0, 1)
+loop foreach i y0 y1 Ti --quiet
+  matrix $i = b[&quot;$i&quot;]
+endloop
+matrix X = b[&quot;X1&quot;]
+matrix Z = b[&quot;Z0&quot;]
+matrix ndx = X * beta
+matrix ndx_0 = Z * pivec
+scalar sig_a = exp(lnsig)
+matrix alphas = h[,1] .* sig_a
+scalar LL = 0
+ini = 1
+scalar err = 0
+matrix scoremat = zeros(N, 1+nk+nz+2)
+loop i=1..N --quiet
+  T = Ti[i,2]
+  if T&gt;0
+    fin = ini + T - 1
+    # printf &quot;%4d: %d-%d (%d)\n&quot;, i, ini, fin, T
+    scalar Y0 = y0[i]
+    matrix Y1 = y1[ini:fin]
+    scalar Ones = sumc(Y1)
+    if Ones&gt;0
+      matrix swap = selifr(seq(1,T)', Y1)
+    endif
+    matrix ndx_i = ndx[ini:fin,]
+    matrix Z_i = Z[i,]
+    if Y0
+      ndx_i[1] += gamma
+    endif
+    if T&gt;1
+      matrix X_i = (Y0 | Y1[1:T-1]) ~ X[ini:fin,]
+      ndx_i[2:T] += gamma * Y1[1:T-1]
+    else
+      matrix X_i = Y0 ~ X[ini,]
+    endif
+    ndx_i = -(ndx_i .+ alphas')
+    if Ones&gt;0
+      ndx_i[swap,] = -ndx_i[swap,]
+    endif
+    check = maxr(maxc(abs(ndx_i)))
+    if check &gt; 2000
+      #printf &quot;check[%4d] = %g, stopped\n&quot;, i, check
+      err = 1
+      break
+    endif
+    matrix ini_ndx = ndx_0[i] + (theta .* alphas')
+    matrix tmp = (Y0 ? ini_ndx : -ini_ndx) | ndx_i
+    matrix Prod = prodc(cnorm(ndx_i)) # 1 x quadpoints
+    matrix mills_1 = -invmills(-ndx_i)
+    if Ones&gt;0
+      matrix mills_1[swap,] = -mills_1[swap,]
+    endif
+    matrix f0 = Y0 ? dnorm(ini_ndx) : -dnorm(ini_ndx)
+    matrix ggg_0 = Z_i' .* (f0 .* Prod)  # nk x quadpoints
+    matrix ggg_1 = X_i' mills_1  # (nx+1) x quadpoints
+    Prob_0 = cnorm(Y0 ? ini_ndx : -ini_ndx)
+    Prob_ij = Prod .* Prob_0
+    ggg_1 = ggg_1 .* Prob_ij
+    matrix g_t = (f0 .* Prod) .* alphas'
+    matrix g_sa = g_t * theta .+  ggg_1[2,] .* alphas'
+    matrix ggg_0 = (ggg_0*h[,2])'
+    matrix ggg_1 = (ggg_1*h[,2])'
+    matrix g_t = (g_t*h[,2])'
+    matrix g_sa = (g_sa*h[,2])'
+    scalar Prob_i = Prob_ij * h[,2]
+    scoremat[i,] = (ggg_1 ~ ggg_0 ~ g_t ~ g_sa) ./ Prob_i
+    ini = fin + 1
+    LL += ln(Prob_i)
+  endif
+endloop
+if err
+  matrix scoremat = ones(1, 1+nk+nz+2) * NA
+endif
+if feedback
+  printf &quot;Log-likelihood = %16.6f\n&quot;, LL
+  flush
+endif
+return scoremat
+</code>
+</gretl-function>
+<gretl-function name="HPDP_sumscore_GHQ" type="void" private="1">
+ <params count="3">
+  <param name="g" type="matrixref"/>
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>scalar feedback = b[&quot;feedback&quot;]
+G = HPDP_score_GHQ(par, &amp;b, feedback)
+g = sumc(G)'
+</code>
+</gretl-function>
+<gretl-function name="C_theta_stewart" type="matrix" private="1">
+ <params count="3">
+  <param name="par" type="matrix" const="true"/>
+  <param name="T" type="scalar"/>
+  <param name="err" type="scalarref"/>
+ </params>
+<code>scalar th = par[1]
+scalar ls = par[2]
+scalar arho = (rows(par) == 3) ? par[3] : 0
+err = 0
+scalar sig2  = exp(2*ls)
+matrix S = unvech((1 + th^2*sig2 | th*sig2*ones(T-1,1) |   vech(I(T-1) + sig2)))
+if arho != 0
+  scalar rho = tanh(arho)
+  matrix s = seq(0,T-1)'
+  matrix R = rho .^ abs(s .- s')
+  R[diag] = 0
+  S += R
+endif
+catch C = cholesky(S)
+if $error
+  err = 1
+  C = {}
+endif
+return C
+</code>
+</gretl-function>
+<gretl-function name="C_theta" type="matrix" private="1">
+ <params count="4">
+  <param name="par" type="matrix" const="true"/>
+  <param name="T" type="scalar"/>
+  <param name="AR1" type="scalar"/>
+  <param name="err" type="scalarref"/>
+ </params>
+<code>scalar theta = par[1]
+scalar sa   = par[2]
+matrix C = {}
+matrix s     = sa * (theta | ones(T-1, 1))
+matrix S     = s*s' + I(T)
+scalar err = 0
+if AR1&gt;0 # hyslop
+  scalar rho = par[3]
+  s = seq(1, T-1)'
+  matrix r = rho .^ abs(s .- s')
+  r[diag] = 0
+  S[2:,2:] += r
+  # printf &quot;At [1], r = \n%6.2f&quot;, r
+  tau = (AR1==1) ? 1 : par[4]
+  r = rho .^ s
+  # printf &quot;At [2], r = \n%6.2f&quot;, r
+  S[2:,1] +=  tau*r
+  S[1,2:] +=  tau*r'
+endif
+if !err
+  catch C = cholesky(S)
+  if $error
+    err = 2
+  endif
+endif
+return C
+</code>
+</gretl-function>
+<gretl-function name="HPDP_loglik_GHK" type="scalar" private="1">
+ <params count="2">
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>set warnings off
+param = vec(par)
+nrep = b[&quot;nrep&quot;]
+loop foreach i nk nz npar N AR1 --quiet
+  scalar $i = b[&quot;$i&quot;]
+endloop
+scalar gamma = param[1]
+matrix beta  = param[2:nk+1]
+matrix pivec = param[nk+2:nk+nz+1]
+scalar theta = param[nk+nz+2]
+scalar sig   = exp(param[nk+nz+3])
+loop foreach i y0 y1 Ti --quiet
+  matrix $i = b[&quot;$i&quot;]
+endloop
+TT = maxc(Ti[,2]) + 1
+scalar err = 0
+matrix vpar = theta | sig
+if AR1==1
+  vpar |= tanh(param[nk+nz+4])
+elif AR1==2
+  vpar |= tanh(param[nk+nz+4])
+  if (abs(param[nk+nz+5])&gt;=1)
+    return NA
+  else
+    vpar |= param[nk+nz+5] #(1-exp(-param[nk+nz+5])) #change
+  endif
+endif
+matrix C = C_theta(vpar, TT, AR1, &amp;err)
+if err
+  return NA
+endif
+if b[&quot;draws&quot;] == 0
+  U = halton(TT, nrep)
+elif b[&quot;draws&quot;] == 1
+  U = muniform(TT, nrep)
+endif
+matrix ndx = b[&quot;X1&quot;] * beta
+matrix ndx_0 = b[&quot;Z0&quot;] * pivec
+scalar LL = 0
+scalar inf = $huge
+ini = 1
+loop i=1..N --quiet
+  T = Ti[i,2] + 1
+  if T&gt;0
+    fin = ini + T - 2
+    scalar Y0 = y0[i]
+    matrix Y1 = y1[ini:fin]
+    matrix ndx_i = ndx[ini:fin,]
+    if Y0
+      ndx_i[1] += gamma
+    endif
+    if T&gt;2
+      ndx_i[2:] += gamma * Y1[1:T-2]
+    endif
+    Y = Y0 | Y1
+    tndx_i = ndx_0[i] | ndx_i
+    top_i = (inf .* Y - tndx_i .* (!Y))'
+    bot_i = (-tndx_i .* Y - inf .* (!Y))'
+    check = maxr(maxc(abs(ndx_i)))
+    if check &gt; 200
+      LL = NA
+      break
+    endif
+    P_i = ghk(C[1:T,1:T],bot_i,top_i,U[1:T,])
+    scalar LL_i = ln(P_i)
+    LL += LL_i
+    ini = fin + 1
+  endif
+endloop
+return LL
+</code>
+</gretl-function>
+<gretl-function name="Cvec" type="matrix" private="1">
+ <params count="4">
+  <param name="par" type="matrix" const="true"/>
+  <param name="T" type="scalar"/>
+  <param name="AR1" type="scalar"/>
+  <param name="err" type="scalarref"/>
+ </params>
+<code>err = 0
+matrix vc = vech(C_theta(par, T, AR1, &amp;err)')
+if err
+  vc = {}
+endif
+return vc
+</code>
+</gretl-function>
+<gretl-function name="Jac" type="matrix" private="1">
+ <params count="1">
+  <param name="C" type="matrix"/>
+ </params>
+<code>scalar n = rows(C)
+scalar n2 = n*n
+matrix Q = mshape(seq(1,n2),n,n)
+matrix ea = vech(Q')
+matrix eb = vech(Q)
+matrix ret = I(n) ** C
+ret = ret[ea,] + ret[eb,]
+ret = ret[,eb]
+return inv(ret)
+</code>
+</gretl-function>
+<gretl-function name="d_rho_pwr" type="matrix" private="1">
+ <params count="2">
+  <param name="rho" type="scalar"/>
+  <param name="T" type="scalar"/>
+ </params>
+<code>matrix s = seq(0,T-1)
+if rho==0
+  return vech(s' .= (s-1))
+endif
+matrix r = (s) .* (rho.^(s-1))
+matrix tmp = mshape(r~0, T, T)
+return vech(tmp')
+</code>
+</gretl-function>
+<gretl-function name="dSa" type="matrix" private="1">
+ <params count="3">
+  <param name="par" type="matrix" const="true"/>
+  <param name="T" type="scalar"/>
+  <param name="AR1" type="scalar"/>
+ </params>
+<code>scalar theta = par[1]
+scalar sa   = par[2]
+matrix LHB = (2*theta | ones(T-1,1)) .* sa^2
+matrix LHB ~= (theta | ones(T-1,1)) .* (theta * 2 * sa)
+matrix LHB |= mshape((0|2*sa), 2, (T-1)*T/2)'
+if AR1&gt;0
+  scalar rho = par[3]
+  tau = (AR1==1) ? 1 : par[4]
+  matrix RHB = d_rho_pwr(rho, T)
+  RHB[1:T,] = RHB[1:T,] * tau
+  if AR1==2
+    a = 0 ~ rho .^ seq(1,T-1)
+    RHB ~=  a' | zeros((T-1)*(T)/2,1)
+  endif
+  LHB ~= RHB
+endif
+return LHB
+</code>
+</gretl-function>
+<gretl-function name="HPDP_score_GHK" type="matrix" private="1">
+ <params count="3">
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+  <param name="feedback" type="bool"/>
+ </params>
+<code>param = vec(par)
+nrep = b[&quot;nrep&quot;]
+loop foreach i nk nz npar N AR1 --quiet
+  scalar $i = b[&quot;$i&quot;]
+endloop
+scalar gamma = param[1]
+matrix beta  = param[2:nk+1]
+matrix pivec = param[nk+2:nk+nz+1]
+scalar theta = param[nk+nz+2]
+scalar sig   = exp(param[nk+nz+3])
+loop foreach i y0 y1 Ti --quiet
+  matrix $i = b[&quot;$i&quot;]
+endloop
+TT = maxc(Ti[,2]) + 1
+scalar err = 0
+matrix vpar = theta | sig
+if AR1==1
+  vpar |= tanh(param[nk+nz+4])
+elif AR1==2
+  vpar |= tanh(param[nk+nz+4])
+  vpar |= param[nk+nz+5]  #change
+endif
+matrix C = C_theta(vpar, TT, AR1, &amp;err)
+#    print C
+#    matrix S = C*C'
+#    print S
+if err
+  return zeros(1, npar)
+endif
+if b[&quot;draws&quot;] == 0
+  U = halton(TT, nrep)
+elif b[&quot;draws&quot;] == 1
+  U = muniform(TT, nrep)
+endif
+matrix mX = b[&quot;X1&quot;]
+matrix mZ = b[&quot;Z0&quot;]
+matrix ndx = mX * beta
+matrix ndx_0 = mZ * pivec
+scalar LL = 0
+scalar inf =  $huge
+ini = 1
+# J = fdjac(vpar, &quot;Cvec(vpar, TT, AR1, &amp;err)&quot;)
+J1 = Jac(C)
+J2 = dSa(vpar, TT, AR1)
+J = J1 * J2
+#    print J1 J2 J
+#    if AR1==0
+# 	J = J[,1:2]
+#    elif AR1==1
+# 	J = J[,1:3]
+#    endif
+matrix S_i = {}
+matrix ret = zeros(N, rows(param))
+loop i=1..N --quiet
+  T = Ti[i,2] + 1
+  if T&gt;0
+    m = T * (T+1) / 2
+    sel = zeros(TT,TT)
+    sel[1:T, 1:T] = upper(ones(T,T))
+    J_i = selifr(J, vech(sel))
+    fin = ini + T - 2
+    Y0 = y0[i]
+    Y1 = y1[ini:fin]
+    matrix ndx_i = ndx[ini:fin,]
+    if Y0
+      ndx_i[1] += gamma
+    endif
+    if T&gt;2
+      ndx_i[2:] += gamma * Y1[1:T-2]
+    endif
+    Y = Y0 | Y1
+    tndx_i = ndx_0[i] | ndx_i
+    top_i = (inf .* Y - tndx_i .* (!Y))'
+    bot_i = (-tndx_i .* Y - inf .* (!Y))'
+    check = maxr(maxc(abs(ndx_i)))
+    if check &gt; 200
+      LL = NA
+      break
+    endif
+    P_i = ghk(C[1:T,1:T],bot_i,top_i,U[1:T,], &amp;S_i)
+    if minc(minr(isnan(S_i)))
+      ret |= zeros(T, cols(ret))
+    else
+      S_i = S_i ./ P_i
+      # printf &quot;I: %6d (T_i = %d)\n&quot;, i, T
+      # printf &quot;%8.3f&quot;, mX[ini:fin, ]
+      matrix X_i = Y[1:T-1] ~ mX[ini:fin,]
+      G_i  = -(S_i[2:T] + S_i[T+2:2*T]) * X_i
+      G_i ~= -(S_i[1] + S_i[T+1]) * mZ[i,]
+      ret[i,] = G_i ~ (S_i[2*T+1:] * J_i)
+    endif
+    ini = fin + 1
+    LL += ln(P_i)
+  endif
+endloop
+if feedback
+  printf &quot;Log-likelihood = %16.6f\n&quot;, LL
+  flush
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="HPDP_sumscore_GHK" type="void" private="1">
+ <params count="3">
+  <param name="g" type="matrixref"/>
+  <param name="par" type="matrix"/>
+  <param name="b" type="bundleref"/>
+ </params>
+<code>scalar feedback = b[&quot;feedback&quot;]
+G = HPDP_score_GHK(par, &amp;b, feedback)
+g = sumc(G)'
+</code>
+</gretl-function>
+<gretl-function name="Score" type="matrix" private="1">
+ <params count="2">
+  <param name="p" type="matrix"/>
+  <param name="M" type="bundleref"/>
+ </params>
+<code>x = {}
+if M.method == 0
+  HPDP_sumscore_GHQ(&amp;x, p, &amp;M)
+elif M.method == 1
+  HPDP_sumscore_GHK(&amp;x, p, &amp;M)
+endif
+return x
+</code>
+</gretl-function>
+<gretl-function name="NumHessian" type="matrix" private="1">
+ <params count="3">
+  <param name="p" type="matrix"/>
+  <param name="M" type="bundleref"/>
+  <param name="forcepd" type="bool"/>
+ </params>
+<code>set fdjac_quality 1
+a = fdjac(p, &quot;Score(p, &amp;M)&quot;)
+a = -0.5*(a+a')
+if forcepd # force positive definitness
+  matrix V
+  l = eigensym(a, &amp;V)
+  #	print l
+  if minc(l) &lt; 1.0e-3
+    printf &quot;warning: Hessian non negative definite, switching to OPG\n&quot;
+    a = {}
+    return a
+    #	    s = l .&lt; 1.e-03
+    # 	    printf &quot;warning: troublesome eigenvalues\n%12.3f\n&quot;, \
+    # 	       selifc(l, s)
+    #	    printf &quot;Forcing\n&quot;
+    #	    print l V
+    #	    l = s ? 1.0e-3 : l
+    #	    a = (V .* abs(l)') * V'
+  endif
+endif
+return a
+</code>
+</gretl-function>
+<gretl-function name="par_transform" type="matrix" private="1">
+ <params count="3">
+  <param name="par" type="matrix"/>
+  <param name="AR1" type="scalar"/>
+  <param name="J" type="matrixref" optional="true"/>
+ </params>
+<code># transformation from optimization to statistical parameters
+# (eg arho-&gt;rho); also compute Jacobian if needed; AR1 is 0/1/2
+ntrpar  = (AR1==2) ? 3 : (AR1==1) ? 2 : 1
+ini     = rows(par) - ntrpar + 1 # start with lnsigma
+v0 = par[1:ini-1] # regression pars
+scalar s = exp(par[ini]) # lnsigma -&gt; sigma
+matrix v = v0 | s
+if AR1==1
+  matrix cc = par[ini+1:]
+  v |= tanh(cc)
+elif AR1==2
+  matrix cc = par[ini+1:]
+  v |= (tanh(cc[1]) | cc[2]) # change
+endif
+if !isnull(J)
+  if (AR1&gt;0)
+    J = zeros(rows(cc)+1,rows(cc)+1)
+    J[diag] =  s | cosh(cc).^(-2)
+  else
+    J = {s}
+  endif
+endif
+return v
+</code>
+</gretl-function>
+<gretl-function name="invpar_transform" type="matrix" private="1">
+ <params count="2">
+  <param name="par" type="matrix"/>
+  <param name="AR1" type="scalar"/>
+ </params>
+<code># transformation from statistical to optimization parameters
+# (eg rho-&gt;arho); useful for re-using previous estimates as
+# starting point
+ntrpar  = AR1 ? 3 : 1
+ini     = rows(par) - ntrpar + 1
+v0 = par[1:ini-1]
+scalar ls = ln(par[ini]) # sigma -&gt; lnsigma
+matrix v = v0 | ls
+if AR1==1
+  v |= atanh(par[ini+1])
+elif AR1==2
+  v |= (atanh(par[ini+1]) |  par[ini+2])  # change
+endif
+return v
+</code>
+</gretl-function>
+<gretl-function name="HPDP_VCV" type="matrix" private="1">
+ <params count="2">
+  <param name="par" type="matrix"/>
+  <param name="mod" type="bundleref"/>
+ </params>
+<code>/*
+Important: the &quot;par&quot; vector must be in &quot;untransformed&quot;
+form (eg not rho but atan(rho)) etc
+*/
+scalar npar = rows(par)
+scalar vmethod = mod.vcvmeth # 0 = Sandwich, 1 = OPG, 2 = Hessian
+scalar mmethod = mod.method # 0 = GHQ, 1 = GHK
+# printf &quot;Computing covariance matrix...&quot;
+if (vmethod == 0) || (vmethod == 1)
+  G = mmethod == 0 ? HPDP_score_GHQ(par, &amp;mod, 0) : HPDP_score_GHK(par, &amp;mod,0)
+  GG = G'G
+endif
+if (vmethod == 2)
+  # Negative Hessian (force to pd if necessary)
+  H = NumHessian(par, &amp;mod, 1)
+endif
+if (vmethod == 0)
+  # Negative Hessian (may be non-pd)
+  H = NumHessian(par, &amp;mod, 0)
+endif
+if (vmethod == 1)
+  V = invpd(GG)
+elif (vmethod == 2)
+  if rows(H)==0
+    mod.vcvmeth = 1 # OPG
+    V = HPDP_VCV(par, &amp;mod)
+  else
+    V = invpd(H)
+  endif
+elif (vmethod == 0)
+  V = qform(inv(H), GG)
+else
+  printf &quot;what???\n&quot;
+  V = zeros(npar), npar))
+endif
+# --- now handle nonlinear transforms ----------
+matrix J = {}
+par2 = par_transform(par, mod.AR1, &amp;J)
+matrix e = (mod.AR1==2) ? seq(npar-2,npar) : (mod.AR1==1) ? seq(npar-1,npar): npar
+V[e,] = J * V[e,]
+V[,e] = V[,e] * J
+return V
+</code>
+</gretl-function>
+<sample-script>
+set echo off
+set messages off
+
+include DPB.gfn
+
+#------- DP MODEL: HECKMAN (1981) ---------
+
+open examples/union_wooldridge.gdt --frompkg=DPB
+
+list X1 = const married educ 
+list Z1 = const married educ black
+
+b1 = DPB_setup(&quot;DP&quot;,union,X1,Z1)
+DPB_setoption(&amp;b1, &quot;nrep&quot;, 12)
+DPB_estimate(&amp;b1)
+DPB_printout(&amp;b1)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

@@ -1,0 +1,445 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="GJR-garchm" ID="1250657592" needs-time-series-data="true" minver="1.8.4">
+<author>Yi-Nung Yang</author>
+<version>1.1</version>
+<date>2010-01-25</date>
+<description>GJR-GARCH in Mean</description>
+<help>
+This garchm function is to estimate GARCH in mean models with GJR specifications via MLE.
+
+This function package in general works in gretl 1.8.4 and higher. But it works best in gretl 1.8.6 and higher.
+</help>
+<gretl-function name="garchm" type="list">
+ <params count="13">
+  <param name="depvar" type="series">
+<description>Dep. var (應變數)</description>
+  </param>
+  <param name="GARCH" type="int" min="0" max="9" default="1">
+<description>GARCH p</description>
+  </param>
+  <param name="ARCH" type="int" min="1" max="9" default="1">
+<description>ARCH q</description>
+  </param>
+  <param name="indepvar" type="list" optional="true">
+<description>Indpe var (自變數) list</description>
+  </param>
+  <param name="gjr_order" type="int" min="0" max="9" default="0">
+<description>GJR order (階次)</description>
+  </param>
+  <param name="option" type="int" min="0" max="3" default="0">
+<description>GRACH-in-Mean  (選項 0:none; 1:stdev; 2:h; 3:lnh)</description>
+  </param>
+  <param name="LB_Q" type="int" min="0" max="200" default="0">
+<description>Ljung-Box Q (殘差 Q 檢定階次)</description>
+  </param>
+  <param name="LB_Q2" type="int" min="0" max="200" default="0">
+<description>Ljung-Box Q2 (殘差 Q2 檢定階次)</description>
+  </param>
+  <param name="backcast" type="scalar" min="0" max="1" default="0.7">
+<description>backcasting (參數)</description>
+  </param>
+  <param name="ShowInit" type="bool" default="0">
+<description>Show Init. (顯示起始值)?</description>
+  </param>
+  <param name="save_resid" type="bool" default="0">
+<description>Save standardized residual and h (儲存殘差和 h)?</description>
+  </param>
+  <param name="res_name" type="string" optional="true">
+<description>User-defined residual (自訂殘差名稱)</description>
+  </param>
+  <param name="ht_name" type="string" optional="true">
+<description>User-defined h (自訂 h 名稱)</description>
+  </param>
+ </params>
+<code>#================================================================
+#   GJR-GARCH-in-Mean fucntion for gretl by Yi-Nung Yang
+#   Chung Yuan Christian University, Taiwan
+#   http://yaya.it.cycu.edu.tw/gretl
+#================================================================
+set echo off
+set messages off
+# -------- variance equation -----------
+#       series h = omega + alpha*(e(-1))^2 + beta*h(-1)
+if ARCH=0
+  funcerr &quot;ARCH q 必須大於 0&quot;
+else
+  string v_eq = &quot;h = omega &quot;
+  string arch_param = &quot;omega &quot;
+  loop j=1..ARCH  --quiet
+    sprintf arch_term &quot;+alpha%d*(e(-%d))^2&quot;,j,j
+    sprintf v_param &quot;alpha%d &quot;,j
+    scalar @v_param = 0.04
+    string v_eq = v_eq ~ arch_term
+    string arch_param = arch_param ~ v_param
+  endloop
+  if gjr_order&gt;0
+    loop j=1..gjr_order  --quiet
+      sprintf arch_term &quot;+gamma%d*(e(-%d))^2*(e(-%d)&lt;0)&quot;,j,j,j
+      sprintf v_param &quot;gamma%d &quot;,j
+      scalar @v_param = 0.05
+      string v_eq = v_eq ~ arch_term
+      string arch_param = arch_param ~ v_param
+    endloop
+  endif
+  if GARCH&gt;0
+    loop j=1..GARCH  --quiet
+      sprintf arch_term &quot;+beta%d*h(-%d)&quot;,j,j
+      sprintf v_param &quot;beta%d &quot;,j
+      scalar @v_param = 0.04
+      string v_eq = v_eq ~ arch_term
+      string arch_param = arch_param ~ v_param
+    endloop
+  endif
+endif
+#   printf &quot;%s\n&quot;, v_eq
+#   printf &quot;%s\n&quot;, arch_param
+tL2 = indepvar
+tL3 = indepvar || const
+genr is_const = (tL2 = tL3)
+if is_const = 1
+  tL2 -= const
+endif
+i=1
+loop foreach j tL2  --quiet
+  string temp=&quot;x&quot;
+  sprintf temp &quot;X%d&quot;,i
+  #producing tmp%d independent variables
+  genr @temp = tL2.$j
+  printf &quot;%s --- &quot;,&quot;$j&quot;
+  i=i+1
+endloop
+scalar n_x = i-1
+scalar j=1
+# define ----------&gt;  mean eq.
+if is_const = 1
+  string m_eq = &quot;e = y - b0 &quot;
+  string tParam = &quot;b0 &quot;
+else
+  string m_eq = &quot;e= y &quot;
+  string tParam = &quot; &quot;
+endif
+if n_x &gt;=1
+  loop j=1..n_x  --quiet
+    sprintf tx &quot;-b%d*X%d&quot;, j,j
+    sprintf tparameter &quot;b%d &quot;, j
+    scalar @tparameter = 0.0001
+    string m_eq = m_eq ~ tx
+    string tParam = tParam ~ tparameter
+  endloop
+endif
+if option&gt;0
+  if option=1
+    string m_eq = m_eq ~ &quot;-theta*h^0.5&quot;
+    string tPremium=&quot;SQRT(h)&quot;
+  endif
+  if option=2
+    string m_eq = m_eq ~ &quot;-theta*h&quot;
+    string tPremium=&quot;h&quot;
+  endif
+  if option=3
+    string m_eq = m_eq ~ &quot;-theta*log(h)&quot;
+    string tPremium=&quot;ln(h)&quot;
+  endif
+  if option&gt;3
+    funcerr &quot;The GARCH-in-mean options are 1, 2, 3.&quot;
+  endif
+  string tParam = &quot;theta &quot; ~ tParam
+else
+  string tPremium=&quot;None&quot;
+endif
+#       printf &quot;%s\n&quot;, m_eq
+#scalar backcast=0.7
+series y=depvar
+scalar mu = -0.037
+scalar alpha1 = 0.15 - 0.03*(ARCH&gt;1)
+scalar beta1 = 0.6 - 0.12*(GARCH&gt;1)
+scalar gamma1=0.05 - 0.01*(ARCH&gt;1)
+####  scalar theta =0.01879
+scalar b0=-0.00377
+scalar b1=0.5
+scalar b2=0.4
+#scalar omega = 1.149
+#scalar omega =var(y)*(1-alpha1-beta1)
+scalar omega =var(y)*backcast*0.91
+printf &quot;\n\n&quot;
+printf &quot;================================================================\n&quot;
+printf &quot;   GJR-GARCH-in-Mean fucntion for gretl by Yi-Nung Yang\n&quot;
+printf &quot;   Chung Yuan Christian University, Taiwan\n&quot;
+printf &quot;   http://yaya.it.cycu.edu.tw/gretl\n&quot;
+printf &quot;================================================================\n&quot;
+if gjr_order&gt;0
+  printf &quot;The coefficient of GJR Term is gamma_i\n&quot;
+endif
+if option&gt;0
+  printf &quot;GARCH in mean Term is %s\n&quot;,tPremium
+  printf &quot;The coefficient of GARCH in mean Term is theta\n&quot;
+  printf &quot;----------------------------------------------------------------\n&quot;
+endif
+printf &quot;Presample variance: backcast (parameter = %.1f)\n&quot;,backcast
+# obtaining intiatial values from OLS and printing intial values
+# -----------ols ty const
+# -----------printf &quot;islist()=%d, nelem()=%d ===&gt;\n&quot;,islist(indepvar) ,nelem(indepvar)
+if nelem(indepvar) &gt; 0
+  ols y indepvar --quiet
+  # to keep the sample in use
+  genr dum_original = $sample
+  /*
+  garch GARCH ARCH ; y indepvar
+  if option=1
+    series tInMean=$h^0.5
+  elif option=2
+    series tInMean=$h
+  elif option=3
+    series tInMean=log($h)
+  endif
+  */
+  # ----- obtaining initial value for theta (nelem&gt;0)
+  if option &gt; 0
+    #garch GARCH ARCH ; y indepvar
+    ols y indepvar --quiet
+    if option=1
+      series tInMean=($uhat^2)^0.5
+    elif option=2
+      series tInMean=($uhat^2)
+    elif option=3
+      series tInMean=log(($uhat^2))
+    endif
+    ols y indepvar --quiet
+    #series tInMean=($uhat^2)^0.5
+    ols y indepvar tInMean --quiet
+    #ols y tInMean --quiet
+    scalar theta= $coeff(tInMean)
+  endif
+  if ShowInit = 1  ### --- printing intial values
+    printf &quot;Initial Values:\n&quot;
+    if option &gt;0
+      printf &quot;theta=%.6f, &quot;,theta
+    endif
+  endif
+  ols y indepvar --quiet
+  if is_const = 1
+    scalar b0=$coeff(const)
+    if ShowInit = 1  ### --- printing intial values
+      printf &quot;b0=%.6f, &quot;,b0
+    endif
+    matrix B=$coeff
+    k=$ncoeff-1
+    loop j=1..k --quiet
+      scalar b$j = B[j+1]
+      if ShowInit = 1  ### --- printing intial values
+        printf &quot;b%d=%.6f, &quot;,j,b$j
+      endif
+    endloop
+  else
+    matrix B=$coeff
+    k=$ncoeff
+    loop j=1..k --quiet
+      scalar b$j = B[j]
+      if ShowInit = 1  ### --- printing intial values
+        printf &quot;b%d=%.6f, &quot;,j,b$j
+      endif
+    endloop
+  endif
+else   # ======================--------if nelem = 0
+  ols y const --quiet
+  # to keep the sample in use
+  genr dum_original = $sample
+  # ----- obtaining initial value for theta (nelem=0)
+  if option &gt; 0
+    #garch GARCH ARCH ; y indepvar
+    if option=1
+      series tInMean=($uhat^2)^0.5
+    elif option=2
+      series tInMean=($uhat^2)
+    elif option=3
+      series tInMean=log(($uhat^2))
+    endif
+    ols y tInMean --quiet
+    scalar theta= $coeff(tInMean)
+  endif
+  if ShowInit = 1  ### --- printing intial values
+    printf &quot;Initial Values:\n&quot;
+    if option &gt;0
+      printf &quot;theta=%.6f, &quot;,theta
+    endif
+  endif
+endif
+if ShowInit = 1  ### --- printing intial values
+  printf &quot;omega=%.6f, &quot;,omega
+  loop j=1..ARCH  --quiet
+    printf &quot;alpha%d=%.6f, &quot;,j, alpha$j
+  endloop
+  if gjr_order&gt;0
+    loop j=1..gjr_order  --quiet
+      printf &quot;gamma%d=%.6f, &quot;,j, gamma$j
+    endloop
+  endif
+  if GARCH&gt;0
+    loop j=1..GARCH  --quiet
+      printf &quot;beta%d=%.6f, &quot;,j, beta$j
+    endloop
+  endif
+endif
+string tAllParams = tParam ~ &quot; &quot; ~ arch_param
+# --- delete ---&gt; printf &quot;%s\n&quot;, tParam
+printf &quot;\n-------    mean eq &amp; variance eq in this GARCH model --------\n&quot;
+printf &quot;   %s\n&quot;,m_eq
+printf &quot;   %s\n&quot;,v_eq
+printf &quot;================================================================\n&quot;
+#&gt;&gt;&gt;&gt; for debug garchm 1.1----&gt; printf &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;sample size before MLE, t1=%d, t2=%d\n&quot;,$t1, $t2
+#scalar start = $nobs-$T+1
+scalar start=$t1+1
+scalar End = $t2
+scalar presample=0  ####y[1]/backcast		#see Eviews 6 Users guide, p.320 for algorithm
+loop j=start..End  --quiet
+  presample = presample + backcast^(j-2-start+2)*y[j]^2
+endloop
+#&gt;&gt;&gt;&gt; for debug garchm 1.1----&gt;printf &quot;&gt;&gt;&gt;&gt;presample=%f\n&quot;,presample
+#&gt;&gt;&gt;&gt; for debug garchm 1.1----&gt;scalar presample=0.318
+#&gt;&gt;&gt;&gt; for debug garchm 1.1----&gt;print -o r
+mle ll = -0.5*(log(2*pi)+log(h) + (e^2)/h)
+  series h = backcast^($t2-$t1)*var(y) + (1-backcast)*presample
+  #series h=0.1
+  #####series h = backcast^($nobs)*var(y) + (1-backcast)*(y[2]^2+backcast*y[3]^2+backcast^2*y[4]^2+backcast^3*y[5]^2+backcast^4*y[6]^2+backcast^5*y[7]^2)
+  #------------------------series e = y - theta*h^0.5
+  series @m_eq
+  #------------------------series e= y - b0 -b1*X1-b2*X2
+  # ---&gt; to be deleted -----&gt; series h = omega + alpha*(e(-1))^2 + beta*h(-1)
+  series @v_eq
+  params @tAllParams
+end mle
+genr dum_in_mle = $sample
+#&gt;&gt;&gt;&gt; for debug garchm 1.1----&gt;  printf &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;sample size in MLE, nobs=%d, T=%d\n&quot;,$nobs, $T
+# 定義計算 estimated residuals 要取幾個落後期
+scalar start = $t1+1
+# --- to be deleted ---&gt; printf &quot;NOBS=%d  T=%d\n&quot;,$nobs,$T
+# ---- generating standardized residual and ht
+# ---- diagnosis of standardized residuals
+/*
+if LB_Q&gt;0 &amp;&amp; LB_Q2&gt;0
+  smpl full
+  series h = backcast^($nobs)*var(y) + (1-backcast)*presample
+  series e=0
+  if option&gt;0
+    End=$t2-1
+    loop for j=1..End
+      smpl j j
+      genr @m_eq
+      smpl +1 +1
+      genr @v_eq
+    endloop
+    genr @m_eq
+    smpl full
+  else
+    series @m_eq
+    series @v_eq
+  endif
+  series stz_u=e/h^0.5
+  series stz_u2 = stz_u^2
+  corrgm stz_u  LB_Q  --quiet
+  corrgm stz_u2 LB_Q2  --quiet
+endif
+*/
+# ---- generating standardized residual (=e/h^0.5) and ht (=h)
+series h = backcast^($t2-$t1)*var(y) + (1-backcast)*presample
+#series e=0
+if option&gt;0
+  End=$t2-1
+  loop for j=start..End --quiet
+    smpl j j
+    genr @m_eq
+    smpl +1 +1
+    genr @v_eq
+  endloop
+  genr @m_eq
+  # 回復為原來的樣本
+  smpl dum_original --dummy --replace
+else
+  series @m_eq
+  series @v_eq
+endif
+#&gt;&gt;&gt;&gt; for debug garchm 1.1----&gt;print -o h y
+if isstring(res_name) =0
+  sprintf res_name &quot;stz_u&quot;	# default name for e(t)
+endif
+if isstring(ht_name) =0
+  sprintf ht_name &quot;h&quot;			# default name for h(t)
+endif
+# 回復為原來的樣本
+smpl dum_original --dummy --replace
+series  @res_name =e/h^0.5
+series @ht_name=h
+# setting labels of returned variables
+setinfo @res_name -d &quot;=e/h^0.5   (by GJR-garchm packages)&quot;
+setinfo @ht_name -d  &quot;=h              (by GJR-garchm packages)&quot;
+if LB_Q &gt;0
+  corrgm @res_name  LB_Q  --quiet
+endif
+if LB_Q2&gt;0
+  series stz_u2=@res_name^2
+  corrgm stz_u2 LB_Q2  --quiet
+endif
+if save_resid=1
+  list retlist= @res_name @ht_name
+  return retlist
+else
+  list retlist = const
+  return retlist
+endif
+</code>
+</gretl-function>
+<sample-script>
+#================================================================
+#   GJR-GARCH-in-Mean fucntion for gretl by Yi-Nung Yang
+#   Chung Yuan Christian University, Taiwan
+#   http://yaya.it.cycu.edu.tw/gretl
+#================================================================
+# full parameters usages:
+# arguments:
+#    Dependent varaible = r
+#       GARCH p=1
+#       ARCH q=2
+#    List of independent variables in the mean equation (can be null)
+#       gjr_order = 1
+#       GARCH-in-Mean option =0, 1, 2, 3
+#    LB-Q stats order for standardized residuals =8
+#    LB-Q2 stats order for standardized residuals =12
+#    backbast parameter (for initial h_0) = 0.7
+#    Show initial parameters? = 0 (no)
+#    Save (standardized) residuals? = 1 (yes)
+#        User defined &quot;residual&quot; name on Saving
+#        User defined &quot;h&quot; name on Saving
+
+include GJR-garchm.gfn
+open djclose
+series r=ldiff(djclose)*100
+
+# A general GJR-GARCH-in-mean case with saving standardized residuals and predicted h
+# retList is a list include standardized residuals (named u_hat) and predicted conditional variance (named h_uhat)
+retList = garchm(r, 1, 2, null, 1, 1, 8, 12, 0.7, 0, 1, &quot;u_hat&quot;, &quot;h_hat&quot;)
+
+# GARCH(1,1) without any variables in the mean equation
+garchm(r,1,1)
+
+# GARCH(1,1) with a contant only in the mean equation
+list list0 = const
+garchm(r,1,1,list0)
+
+# GJR-GARCG(1,1,null,1)
+garchm(r,1,1,null,1)
+
+# GARCH in mean (in-mean term: h^0.5)
+garchm(r,1,1,null,0,1)
+
+# AR(2)-GARCH(1,1) WITHOUT a contant only in the mean equation
+list list2 = r(-1) r(-2) r(-3)
+garchm(r,1,1,list2)
+
+# AR(3)-GARCH(1,1) with a contant only in the mean equation
+list list3 = const r(-1) r(-2) r(-3)
+garchm(r,1,1,list3)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

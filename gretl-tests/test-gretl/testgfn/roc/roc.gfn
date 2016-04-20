@@ -1,0 +1,616 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="roc" ID="1435261543" minver="2.1.10" lives-in-subdir="true">
+<author email="psummers@highpoint.edu">Peter M. Summers</author>
+<version>1.01</version>
+<date>2015-07-07</date>
+<description>Computation and analysis of receiver operating characteristic curves (ROC) for binary choice models.</description>
+<tags>C25</tags>
+<label>ROC</label>
+<menu-attachment>MODELWIN/Analysis</menu-attachment>
+<help>
+pdfdoc:roc.pdf
+</help>
+<gretl-function name="roc" type="bundle">
+ <params count="3">
+  <param name="y" type="series">
+<description>true value</description>
+  </param>
+  <param name="yhat" type="series">
+<description>predicted value</description>
+  </param>
+  <param name="verbose" type="int" min="0" max="2" default="2"/>
+ </params>
+<code># check that y is binary
+chk = isdummy(y)
+if chk==0
+  funcerr &quot;Series y (true values) must be binary&quot;
+endif
+matrix M = {y, yhat}
+bundle result
+tmp = msortby(M, 2) # ascending order of yhat
+Pmat = selifr(tmp, tmp[,1].=1)
+Nmat = selifr(tmp, tmp[,1].=0)
+P = rows(Pmat)
+N = rows(Nmat)
+F = 0
+Ft = 0
+matrix V_10 = zeros(P,1) # Used in calculating DeLong standard error below
+matrix V_01 = zeros(N,1)
+loop j = 1..P --quiet
+  F += rows(selifr(Nmat,(Nmat[,2].&gt;Pmat[j,2])))
+  Ft += rows(selifr(Nmat,(Nmat[,2].&gt;=Pmat[j,2])))
+  V_10[j] += (rows(selifr(Nmat, Nmat[,2].&lt;Pmat[j,2])) + 0.5*rows(selifr(Nmat, Nmat[,2].=Pmat[j,2])))/N
+endloop
+auroc = 1-(F+Ft)/(2*N*P) # area under ROC
+/*
+Get standard error using method of DeLong et al (1988)
+Agrees with Stata to reported # decimal places
+*/
+loop j = 1..N --quiet
+  V_01[j] += (rows(selifr(Pmat, Nmat[j,2].&lt;Pmat[,2])) + 0.5*rows(selifr(Pmat, Nmat[j,2].=Pmat[,2])))/P
+endloop
+S_10 = P/(P-1)*meanc((V_10 - auroc).^2)
+S_01 = N/(N-1)*meanc((V_01 - auroc).^2)
+S = S_10/P + S_01/N
+se = sqrt(S)
+/*
+Alternative standard error using normal approximation (Mason &amp; Graham eq(12), p. 2153; rescale in terms of A)
+*/
+Fmean = N*P/2
+Fvar = N*P*(N+P+1)/12
+Amean = 1-Fmean/(N*P)
+Avar = Fvar/(N*P)^2
+se_Normal = sqrt(Avar)
+/*
+Finally, tet std. error from formula in Hanley &amp; McNeil, reported in
+http://www.anaesthetist.com/mnm/stats/roc/Findex.htm
+Note 'abnormal' = 'event' so na = P, nn = N
+With example data using prob1, result.hanley = 0.0981602; Stata gives 0.0939. Due to differences in computing Q's?
+*/
+Q1 = auroc/(2-auroc)
+Q2 = 2*auroc^2/(1+auroc)
+Avar = (auroc*(1-auroc) + (P-1)*(Q1 - auroc^2) + (N-1)*(Q2 - auroc^2))/(N*P)
+se_Hanley = sqrt(Avar)
+# One more, from http://www.graphpad.com/guides/prism/6/statistics/index.htm?sensitivity_and_specificity.htm
+# se_null = sqrt((0.25 + (N+P-2))/(12*N*P)) # value of SE under null of auroc = 0.5
+# ROC curve
+tpr = {}
+fpr = {}
+fcp = {}
+loop j = 1..rows(tmp) --quiet
+  tp = rows(selifr(tmp, (tmp[,2].&gt;=tmp[j,2] &amp;&amp; tmp[,1].=1))) # true positives
+  fp = rows(selifr(tmp, (tmp[,2].&gt;=tmp[j,2] &amp;&amp; tmp[,1].=0))) # false positives
+  tn = rows(selifr(tmp, (tmp[,2].&lt;tmp[j,2] &amp;&amp; tmp[,1].=0))) # true negatives
+  tpr |= tp/P
+  fpr |= fp/N
+  fcp |= (tp+tn)/(P+N)
+endloop
+matrix figmat = fcp ~ tmp[,2]
+jnk = maxc(figmat)
+maxfcp = jnk[1]
+jnk = imaxc(figmat)
+optyhat = jnk[1]
+result.area = auroc
+result.se = se
+result.se_Hanley = se_Hanley
+result.se_Normal = se_Normal
+result.maxfcp = maxfcp
+result.thresh = figmat[optyhat,2]
+result.Youden = maxc(tpr-fpr)
+result.tpr = tpr
+result.fpr = fpr
+result.fcp = fcp
+if verbose==2
+  matrix figmat = tpr ~ fpr ~ fpr
+  string xname = &quot;False Positive Rate&quot;
+  string yname = &quot;True Positive Rate&quot;
+  plot figmat
+    options with-lines fit=none
+    literal set nokey
+    literal set xrange [-0.01:1.01]
+    literal set yrange [-0.01:1.01]
+    literal set grid
+    printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+    printf &quot;set ylabel \&quot;%s\&quot;&quot;, yname
+    printf &quot;set label \&quot;Area = %.3g\&quot; at 0.6, 0.35 left front&quot;, auroc
+    printf &quot;set label \&quot;std. error = %.3g\&quot; at 0.6, 0.30 left front&quot;, se
+    printf &quot;set label \&quot;95\% C.I. = [%.3g, %.3g]\&quot; at 0.6, 0.25 left front&quot;,auroc-1.96*se, auroc+1.96*se
+  end plot --output=display
+  matrix figmat = fcp ~ tmp[,2]
+  string xname = &quot;Threshold&quot;
+  string yname = &quot;Fraction Correctly Predicted&quot;
+  plot figmat
+    options with-lines fit=none
+    literal set nokey
+    literal set xrange [-0.01:1.01]
+    literal set grid
+    printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+    printf &quot;set ylabel \&quot;%s\&quot;&quot;, yname
+    printf &quot;set label \&quot;Max correct = %.3g at threshold %.3g\&quot; at graph 0.1, 0.05 left front&quot;, maxfcp, figmat[optyhat,2]
+  end plot --output=display
+endif
+if verbose&gt;=1
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;                      ROC Analysis                         \n&quot;
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;Area under curve (std. error) =  %.3g (%.3g)\n&quot;, auroc, se
+  printf &quot;95%% C.I. = \t [%.3g, %.3g]\n&quot;, auroc-1.96*se, auroc+1.96*se
+  printf &quot;Max correctly predicted = %.3g at threshold %.3g\n&quot;, maxfcp, figmat[optyhat,2]
+  printf &quot;Youden index \t= %.3g\n&quot;, result.Youden
+  printf &quot;------------------------------------------------------\n&quot;
+endif
+return result
+</code>
+</gretl-function>
+<gretl-function name="roccomp" type="bundle">
+ <params count="4">
+  <param name="y" type="series">
+<description>true value</description>
+  </param>
+  <param name="yhat" type="list">
+<description>predicted values</description>
+  </param>
+  <param name="names" type="string" optional="true"/>
+  <param name="verbose" type="bool" default="1"/>
+ </params>
+<code># check that y is binary
+chk = isdummy(y)
+if chk==0
+  funcerr &quot;Series y (true values) must be binary&quot;
+endif
+matrix M = {y, yhat}
+bundle result
+Pmat = selifr(M, M[,1].=1)
+Nmat = selifr(M, M[,1].=0)
+P = rows(Pmat)
+N = rows(Nmat)
+k = nelem(yhat) # number of different ROC curves
+if k&lt;2
+  funcerr &quot;You need at least 2 predicted series to compare&quot;
+endif
+matrix V_10 = zeros(P,k) # Used in calculating DeLong standard error below
+matrix V_01 = zeros(N,k)
+matrix auroc = zeros(k,1) # vector of AUROC measures
+loop foreach i yhat --quiet
+  F = 0
+  Ft = 0
+  loop j = 1..P --quiet
+    F += rows(selifr(Nmat,(Nmat[,i+1].&gt;Pmat[j,i+1])))
+    Ft += rows(selifr(Nmat,(Nmat[,i+1].&gt;=Pmat[j,i+1])))
+    V_10[j,i] += (rows(selifr(Nmat, Nmat[,i+1].&lt;Pmat[j,i+1])) + 0.5*rows(selifr(Nmat, Nmat[,i+1].=Pmat[j,i+1])))/N
+  endloop
+  auroc[i] = 1-(F+Ft)/(2*N*P) # area under ROC
+  loop j = 1..N --quiet
+    V_01[j,i] += (rows(selifr(Pmat, Nmat[j,i+1].&lt;Pmat[,i+1])) + 0.5*rows(selifr(Pmat, Nmat[j,i+1].=Pmat[,i+1])))/P
+  endloop
+endloop
+matrix S_10 = zeros(k,k)
+matrix S_01 = zeros(k,k)
+loop i = 1..k --quiet
+  loop j = 1..k --quiet
+    S_10[i,j] = P/(P-1)*meanc((V_10[,i] - auroc[i]).*(V_10[,j] - auroc[j]))
+    S_01[i,j] = N/(N-1)*meanc((V_01[,i] - auroc[i]).*(V_01[,j] - auroc[j]))
+  endloop
+endloop
+S = S_10/P + S_01/N
+sevec = sqrt(diag(S))
+# test pair-wise differences
+if k==2
+  diffmat = {1, -1}
+else
+  matrix diffmat = I(k)
+  loop i = 1..k-1 --quiet
+    diffmat[i,i+1] = -1
+  endloop
+  diffmat[k,1] = 1
+  diffmat[k,k] = -1
+endif
+matrix zstats = (diffmat*auroc)./sevec
+pv = 2*pvalue(z,zstats)
+matrix rocinfo = auroc ~ sevec
+matrix difftests = zeros(rows(diffmat),2)
+loop i = 1..rows(diffmat) --quiet
+  matrix lvec = diffmat[i,]
+  diffstat = lvec*auroc/sqrt(qform(lvec,S))
+  pv = 2*pvalue(z, abs(diffstat))
+  difftests[i,] = diffstat ~ pv
+endloop
+if k&gt;1
+  jmat = diffmat[1:k-1,]
+  jstat = auroc'*jmat'*inv(qform(jmat, S))*jmat*auroc # test joint hypothesis that all AUROCs are equal
+  pv2 = pvalue(x, rank(qform(jmat,S)), jstat)
+  difftests |= jstat ~ pv2
+endif
+if !isnull(names)
+  string vnames = names
+  if k==2
+    strings namevec = array(1)
+    namevec[1] = &quot;Difference = 0&quot;
+  else
+    strings namevec = array(k+1)
+    loop i = 1..k-1 --quiet
+      namevec[i] = strsplit(names,i) ~ &quot;-&quot; ~ strsplit(names,i+1)
+    endloop
+    namevec[k] = strsplit(names,1) ~ &quot;-&quot; ~ strsplit(names,k)
+    namevec[k+1] = &quot;All differences = 0&quot;
+  endif
+else
+  strings vnames = array(k)
+  loop i = 1..k --quiet
+    sprintf foo &quot;yhat_%d&quot;, i
+    vnames[i] = foo
+  endloop
+  if k==2
+    strings namevec = array(1)
+    namevec[1] = &quot;Difference = 0&quot;
+  else
+    strings namevec = array(k+1)
+    loop i = 1..k-1 --quiet
+      namevec[i] = vnames[i] ~ &quot;-&quot; ~ vnames[i+1]
+    endloop
+    namevec[k] = vnames[1] ~ &quot;-&quot; ~ vnames[k]
+    namevec[k+1] = &quot;All differences = 0&quot;
+  endif
+endif
+if k==2
+  difftests = difftests[2,] # get chi-square version of test
+endif
+strings cnames1 = array(2)
+cnames1[1] = &quot;Area&quot;
+cnames1[2] = &quot;std. error&quot;
+strings cnames2 = array(2)
+cnames2[1] = &quot;test stat&quot;
+cnames2[2] = &quot;p-value&quot;
+rownames(rocinfo, vnames)
+colnames(rocinfo, cnames1)
+rownames(difftests, namevec)
+colnames(difftests, cnames2)
+if verbose&gt;=1
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;                   ROC Comparison                     \n&quot;
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;Areas under ROC curves and their standard errors: \n&quot;
+  printf &quot;%12.4f  \n&quot;, rocinfo
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;Tests of no difference: \n&quot;
+  printf &quot;%12.4f  \n&quot;, difftests
+  printf &quot;Joint test is chi-square with %d degrees of freedom\n&quot;, rank(qform(jmat,S))
+endif
+result.roc_info = rocinfo
+result.roc_vcv = S
+result.roc_tests = difftests
+return result
+</code>
+</gretl-function>
+<gretl-function name="mroc" type="bundle">
+ <params count="3">
+  <param name="y" type="matrix">
+<description>true value</description>
+  </param>
+  <param name="yhat" type="matrix">
+<description>predicted value</description>
+  </param>
+  <param name="verbose" type="int" min="0" max="2" default="2"/>
+ </params>
+<code># check that y is binary
+chk = isdummy(y)
+if chk==0
+  funcerr &quot;Vector y (true values) must be binary&quot;
+endif
+matrix M = y ~ yhat
+bundle result
+tmp = msortby(M, 2) # ascending order of yhat
+Pmat = selifr(tmp, tmp[,1].=1)
+Nmat = selifr(tmp, tmp[,1].=0)
+P = rows(Pmat)
+N = rows(Nmat)
+F = 0
+Ft = 0
+matrix V_10 = zeros(P,1) # Used in calculating DeLong standard error below
+matrix V_01 = zeros(N,1)
+loop j = 1..P --quiet
+  F += rows(selifr(Nmat,(Nmat[,2].&gt;Pmat[j,2])))
+  Ft += rows(selifr(Nmat,(Nmat[,2].&gt;=Pmat[j,2])))
+  V_10[j] += (rows(selifr(Nmat, Nmat[,2].&lt;Pmat[j,2])) + 0.5*rows(selifr(Nmat, Nmat[,2].=Pmat[j,2])))/N
+endloop
+auroc = 1-(F+Ft)/(2*N*P) # area under ROC
+/*
+Get standard error using method of DeLong et al (1988)
+Agrees with Stata to reported # decimal places
+*/
+loop j = 1..N --quiet
+  V_01[j] += (rows(selifr(Pmat, Nmat[j,2].&lt;Pmat[,2])) + 0.5*rows(selifr(Pmat, Nmat[j,2].=Pmat[,2])))/P
+endloop
+S_10 = P/(P-1)*meanc((V_10 - auroc).^2)
+S_01 = N/(N-1)*meanc((V_01 - auroc).^2)
+S = S_10/P + S_01/N
+se = sqrt(S)
+/*
+Alternative standard error using normal approximation (Mason &amp; Graham eq(12), p. 2153; rescale in terms of A)
+*/
+Fmean = N*P/2
+Fvar = N*P*(N+P+1)/12
+Amean = 1-Fmean/(N*P)
+Avar = Fvar/(N*P)^2
+se_Normal = sqrt(Avar)
+/*
+Finally, tet std. error from formula in Hanley &amp; McNeil, reported in
+http://www.anaesthetist.com/mnm/stats/roc/Findex.htm
+Note 'abnormal' = 'event' so na = P, nn = N
+With example data using prob1, result.hanley = 0.0981602; Stata gives 0.0939. Due to differences in computing Q's?
+*/
+Q1 = auroc/(2-auroc)
+Q2 = 2*auroc^2/(1+auroc)
+Avar = (auroc*(1-auroc) + (P-1)*(Q1 - auroc^2) + (N-1)*(Q2 - auroc^2))/(N*P)
+se_Hanley = sqrt(Avar)
+# One more, from http://www.graphpad.com/guides/prism/6/statistics/index.htm?sensitivity_and_specificity.htm
+# se_null = sqrt((0.25 + (N+P-2))/(12*N*P)) # value of SE under null of auroc = 0.5
+# ROC curve
+tpr = {}
+fpr = {}
+fcp = {}
+loop j = 1..rows(tmp) --quiet
+  tp = rows(selifr(tmp, (tmp[,2].&gt;=tmp[j,2] &amp;&amp; tmp[,1].=1))) # true positives
+  fp = rows(selifr(tmp, (tmp[,2].&gt;=tmp[j,2] &amp;&amp; tmp[,1].=0))) # false positives
+  tn = rows(selifr(tmp, (tmp[,2].&lt;tmp[j,2] &amp;&amp; tmp[,1].=0))) # true negatives
+  tpr |= tp/P
+  fpr |= fp/N
+  fcp |= (tp+tn)/(P+N)
+endloop
+matrix figmat = fcp ~ tmp[,2]
+jnk = maxc(figmat)
+maxfcp = jnk[1]
+jnk = imaxc(figmat)
+optyhat = jnk[1]
+result.area = auroc
+result.se = se
+result.se_Hanley = se_Hanley
+result.se_Normal = se_Normal
+result.maxfcp = maxfcp
+result.thresh = figmat[optyhat,2]
+result.Youden = maxc(tpr-fpr)
+result.tpr = tpr
+result.fpr = fpr
+result.fcp = fcp
+if verbose==2
+  matrix figmat = tpr ~ fpr ~ fpr
+  string xname = &quot;False Positive Rate&quot;
+  string yname = &quot;True Positive Rate&quot;
+  plot figmat
+    options with-lines fit=none
+    literal set nokey
+    literal set xrange [-0.01:1.01]
+    literal set yrange [-0.01:1.01]
+    literal set grid
+    printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+    printf &quot;set ylabel \&quot;%s\&quot;&quot;, yname
+    printf &quot;set label \&quot;Area = %.3g\&quot; at 0.6, 0.35 left front&quot;, auroc
+    printf &quot;set label \&quot;std. error = %.3g\&quot; at 0.6, 0.30 left front&quot;, se
+    printf &quot;set label \&quot;95\% C.I. = [%.3g, %.3g]\&quot; at 0.6, 0.25 left front&quot;,auroc-1.96*se, auroc+1.96*se
+  end plot --output=display
+  matrix figmat = fcp ~ tmp[,2]
+  string xname = &quot;Threshold&quot;
+  string yname = &quot;Fraction Correctly Predicted&quot;
+  plot figmat
+    options with-lines fit=none
+    literal set nokey
+    literal set xrange [-0.01:1.01]
+    literal set grid
+    printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+    printf &quot;set ylabel \&quot;%s\&quot;&quot;, yname
+    printf &quot;set label \&quot;Max correct = %.3g at threshold %.3g\&quot; at graph 0.1, 0.05 left front&quot;, maxfcp, figmat[optyhat,2]
+  end plot --output=display
+endif
+if verbose&gt;=1
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;                      ROC Analysis                         \n&quot;
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;Area under curve (std. error) =  %.3g (%.3g)\n&quot;, auroc, se
+  printf &quot;95%% C.I. = \t [%.3g, %.3g]\n&quot;, auroc-1.96*se, auroc+1.96*se
+  printf &quot;Max correctly predicted = %.3g at threshold %.3g\n&quot;, maxfcp, figmat[optyhat,2]
+  printf &quot;Youden index \t= %.3g\n&quot;, result.Youden
+  printf &quot;------------------------------------------------------\n&quot;
+endif
+return result
+</code>
+</gretl-function>
+<gretl-function name="mroccomp" type="bundle">
+ <params count="4">
+  <param name="y" type="matrix">
+<description>true value</description>
+  </param>
+  <param name="yhat" type="matrix">
+<description>predicted values</description>
+  </param>
+  <param name="names" type="string" optional="true"/>
+  <param name="verbose" type="bool" default="1"/>
+ </params>
+<code># check that y is binary
+chk = isdummy(y)
+if chk==0
+  funcerr &quot;Series y (true values) must be binary&quot;
+endif
+matrix M = y ~ yhat
+bundle result
+Pmat = selifr(M, M[,1].=1)
+Nmat = selifr(M, M[,1].=0)
+P = rows(Pmat)
+N = rows(Nmat)
+k = nelem(yhat) # number of different ROC curves
+if k&lt;2
+  funcerr &quot;You need at least 2 predicted series to compare&quot;
+endif
+matrix V_10 = zeros(P,k) # Used in calculating DeLong standard error below
+matrix V_01 = zeros(N,k)
+matrix auroc = zeros(k,1) # vector of AUROC measures
+loop foreach i yhat --quiet
+  F = 0
+  Ft = 0
+  loop j = 1..P --quiet
+    F += rows(selifr(Nmat,(Nmat[,i+1].&gt;Pmat[j,i+1])))
+    Ft += rows(selifr(Nmat,(Nmat[,i+1].&gt;=Pmat[j,i+1])))
+    V_10[j,i] += (rows(selifr(Nmat, Nmat[,i+1].&lt;Pmat[j,i+1])) + 0.5*rows(selifr(Nmat, Nmat[,i+1].=Pmat[j,i+1])))/N
+  endloop
+  auroc[i] = 1-(F+Ft)/(2*N*P) # area under ROC
+  loop j = 1..N --quiet
+    V_01[j,i] += (rows(selifr(Pmat, Nmat[j,i+1].&lt;Pmat[,i+1])) + 0.5*rows(selifr(Pmat, Nmat[j,i+1].=Pmat[,i+1])))/P
+  endloop
+endloop
+matrix S_10 = zeros(k,k)
+matrix S_01 = zeros(k,k)
+loop i = 1..k --quiet
+  loop j = 1..k --quiet
+    S_10[i,j] = P/(P-1)*meanc((V_10[,i] - auroc[i]).*(V_10[,j] - auroc[j]))
+    S_01[i,j] = N/(N-1)*meanc((V_01[,i] - auroc[i]).*(V_01[,j] - auroc[j]))
+  endloop
+endloop
+S = S_10/P + S_01/N
+sevec = sqrt(diag(S))
+# test pair-wise differences
+if k==2
+  diffmat = {1, -1}
+else
+  matrix diffmat = I(k)
+  loop i = 1..k-1 --quiet
+    diffmat[i,i+1] = -1
+  endloop
+  diffmat[k,1] = 1
+  diffmat[k,k] = -1
+endif
+matrix zstats = (diffmat*auroc)./sevec
+pv = 2*pvalue(z,zstats)
+matrix rocinfo = auroc ~ sevec
+matrix difftests = zeros(rows(diffmat),2)
+loop i = 1..rows(diffmat) --quiet
+  matrix lvec = diffmat[i,]
+  diffstat = lvec*auroc/sqrt(qform(lvec,S))
+  pv = 2*pvalue(z, abs(diffstat))
+  difftests[i,] = diffstat ~ pv
+endloop
+if k&gt;1
+  jmat = diffmat[1:k-1,]
+  jstat = auroc'*jmat'*inv(qform(jmat, S))*jmat*auroc # test joint hypothesis that all AUROCs are equal
+  pv2 = pvalue(x, rank(qform(jmat,S)), jstat)
+  difftests |= jstat ~ pv2
+endif
+if !isnull(names)
+  string vnames = names
+  if k==2
+    strings namevec = array(1)
+    namevec[1] = &quot;Difference = 0&quot;
+  else
+    strings namevec = array(k+1)
+    loop i = 1..k-1 --quiet
+      namevec[i] = strsplit(names,i) ~ &quot;-&quot; ~ strsplit(names,i+1)
+    endloop
+    namevec[k] = strsplit(names,1) ~ &quot;-&quot; ~ strsplit(names,k)
+    namevec[k+1] = &quot;All differences = 0&quot;
+  endif
+else
+  strings vnames = array(k)
+  loop i = 1..k --quiet
+    sprintf foo &quot;yhat_%d&quot;, i
+    vnames[i] = foo
+  endloop
+  if k==2
+    strings namevec = array(1)
+    namevec[1] = &quot;Difference = 0&quot;
+  else
+    strings namevec = array(k+1)
+    loop i = 1..k-1 --quiet
+      namevec[i] = vnames[i] ~ &quot;-&quot; ~ vnames[i+1]
+    endloop
+    namevec[k] = vnames[1] ~ &quot;-&quot; ~ vnames[k]
+    namevec[k+1] = &quot;All differences = 0&quot;
+  endif
+endif
+if k==2
+  difftests = difftests[2,] # get chi-square version of test
+endif
+strings cnames1 = array(2)
+cnames1[1] = &quot;Area&quot;
+cnames1[2] = &quot;std. error&quot;
+strings cnames2 = array(2)
+cnames2[1] = &quot;test stat&quot;
+cnames2[2] = &quot;p-value&quot;
+rownames(rocinfo, vnames)
+colnames(rocinfo, cnames1)
+rownames(difftests, namevec)
+colnames(difftests, cnames2)
+if verbose&gt;=1
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;                   ROC Comparison                     \n&quot;
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;Areas under ROC curves and their standard errors: \n&quot;
+  printf &quot;%12.4f  \n&quot;, rocinfo
+  printf &quot;------------------------------------------------------\n&quot;
+  printf &quot;Tests of no difference: \n&quot;
+  printf &quot;%12.4f  \n&quot;, difftests
+  printf &quot;Joint test is chi-square with %d degrees of freedom\n&quot;, rank(qform(jmat,S))
+endif
+result.roc_info = rocinfo
+result.roc_vcv = S
+result.roc_tests = difftests
+return result
+</code>
+</gretl-function>
+<gretl-function name="gui_roc" type="void" menu-only="1" pkg-role="gui-main">
+<code>roc($ylist[1], $yhat)
+</code>
+</gretl-function>
+<gretl-function name="roc_precheck" type="scalar" private="1" pkg-role="gui-precheck">
+<code>if $command != &quot;logit&quot; &amp;&amp; $command != &quot;probit&quot;
+  print &quot;roc: not a logit or probit model&quot;
+  return 1
+endif
+if !isdummy($ylist[1])
+  print &quot;roc: can only handle binary models&quot;
+  return 1
+endif
+return 0
+</code>
+</gretl-function>
+<sample-script>
+set echo off
+set messages off
+
+include roc.gfn
+
+open mroz87 --quiet
+logit LFP const WA WE KL6
+
+# compute basic ROC measures and plot them
+series yhat1 = $yhat
+result = roc(LFP, yhat1)
+
+# alternatively, generate figures 'by hand' (these versions omit the annotations)
+# figure 1
+matrix figmat = result.tpr ~ result.fpr ~ result.fpr
+gnuplot --matrix=figmat --output=display --with-lines --fit=none \ 
+{set xlabel &quot;False Positive Rate&quot;; set ylabel &quot;True Positive Rate&quot;;\
+set nokey}
+
+# figure 2
+matrix thresh = {yhat1}
+thresh = sort(thresh)
+matrix figmat = result.fcp ~ thresh
+gnuplot --matrix=figmat --output=display --with-lines --fit=none \
+  {set xlabel &quot;Threshold&quot;; set ylabel &quot;Fraction Correctly Predicted&quot;; \
+  set nokey}
+
+# estimate alternative models and compare the AUROCs
+logit LFP const WA WE KL6 HA HE FAMINC --quiet
+series yhat2 = $yhat
+
+logit LFP const WA WE KL6 HA HE FAMINC AX MTR --quiet
+series yhat3 = $yhat
+
+list yhat = yhat1 yhat2 yhat3
+matrix bar = {yhat1, yhat2, yhat3}
+
+string names = &quot;model1 model2 model3&quot; 
+result = roccomp(LFP, yhat, names)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

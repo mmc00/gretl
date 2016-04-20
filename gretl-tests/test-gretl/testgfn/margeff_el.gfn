@@ -1,0 +1,1906 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="margeff_el" ID="1442004327" minver="1.10.0">
+<author email="oleg_komashko@ukr.net">Oleh Komashko</author>
+<version>0.5</version>
+<date>2015-09-11</date>
+<description>marg. effects, elasticities, prediction in presense of functions of vars.</description>
+<help>
+The package is intended to compute marginal effects
+and elasticities after any, native, package, or
+user specified model, such that
+
+(i) E(y) = f(x,beta)
+    where beta - a vector of regression parameters
+
+    the model outputs estimates of beta and vcov(beta)
+
+(ii) E(y) = f(x,beta,gamma)
+    where beta - a vector of additional parameters,
+    e.g. $sigma for tobit
+    
+    the model outputs estimates of beta, gamma and 
+    overall covariance matrix: vcov(beta|gamma)
+
+The effects mentioned can be computed at any user-
+specified values of regressors.
+Standard errors are always accessible.
+
+An independent variable could enter several terms
+in a regression, say x1, x1^2, x1*x2 etc.
+The package allows to output effects with respect
+to both  functionally independent
+variables and the regression terms.
+The package contains 8 public functions.
+
+Computing public functions are:
+margeff()
+elast()
+predict_y()
+The first two are followed by printing functions:
+print_elast()
+print_margeff()
+
+Also thete are 3 input helpers:
+make_formula()
+make_formula0()
+dummylist()
+
+DESCRIPTIOS OF FUNCTIONS
+
+function bundle margeff (string s &quot;model&quot;,
+                         string link &quot;link function&quot;,
+                         matrix v &quot;x-values to calc. at&quot;,
+                         matrix b &quot;model coefficients&quot;,
+                         matrix vcv &quot;coeff. covariance matrix&quot;,
+                         string nlspars &quot;parameters; after nls only&quot;,
+                         matrix dumlist)
+Computes marginal effects
+
+s &quot;model&quot;, link, and nlspars
+ After nls link = &quot;nls&quot;
+
+ols C 0 Y
+scalar a = $coeff(0)
+scalar b = $coeff(Y)
+scalar g = 1.0
+
+nls C = a + b * Y^g
+   params a b g
+end nls --vcv
+
+
+&quot;model&quot; is simply quoted right hand side
+of equation: s = &quot;a + b * Y^g&quot;
+
+nlspars consits of scalars params; these
+sould be quoted and separated by spaces :
+nlspars = &quot;a b g&quot;
+
+With others values of link nlspars is ignored,
+nlspars = &quot;&quot; can be used
+
+After E(y) = x'b models, e.g. after ols, wls, hsk, tsls
+and the like link = &quot;&quot;, or link = &quot;@&quot;
+After E(y) = f(x'b) models 
+link = &quot;f(@)&quot;
+Examples of setting the link function
+(the argument should be only &quot;@&quot;):
+
+link = &quot;exp(@)&quot; e.g. after poisson
+
+link = &quot;exp(@)/(1+exp(@)&quot; e.g. after logit or logistic
+
+link = &quot;@^-1&quot; 
+
+s &quot;model&quot; argument is similar to ols xlist, but the
+terms can  consist of not only variables, but expressions:
+s = &quot;0 x1 x1^2 log(x1) x1*x2 exp(x1)&quot;
+
+In the example above v, vector of x-values must have only 2 elements
+
+If you want to find marginal effects w.r.t. terms, set
+s = strsub(varname($xlist),&quot;,&quot;,&quot; &quot;)
+
+s = &quot;&quot; is allowed, but in this case model variables will be
+named as v1, v2, ...
+
+In case of large model rewriting formula by typing may be very
+tedious. The make_formula function is intended to automatize the
+procedure in most cases.
+
+dumlist
+If for example you have 
+list X = x1 x2 x3, of which x2 is a dummy, you have two
+possibilities:
+set dumlist manually: dumlist = {0,1,0},
+or use input helper dummylist():
+dumlist = dummylist(X)
+It should be dumlist = {0} if dummies are absent
+
+NOTE
+never input 1 for const as component of v variable
+
+Output is a bundle, containing marginall effects, their s.e,
+covariance matrix, and several string fields which are
+mostly instructions for printing
+
+function void print_margeff (bundle *b &quot;marg. effects, s.e.&quot;)
+prints results of margeff()
+
+
+function bundle elast (string s &quot;model&quot;,
+                       string link &quot;link function&quot;,
+                       matrix v &quot;x-values to calc. at&quot;,
+                       matrix b &quot;model coefficients&quot;,
+                       matrix vcv &quot;coeff. covariance matrix&quot;,
+                       string nlspars &quot;parameters; after nls only&quot;,
+                       matrix dumlist)
+Output is a bundle, containing elasticities, their s.e,
+covariance matrix, and several string fields which are
+mostly instructions for printing
+
+function void print_elast (bundle *b &quot;marg. effects, s.e.&quot;)
+prints results of margeff()
+
+function string make_formula (string s &quot;names of model xlist&quot;,
+                              bool defaultfun[1] &quot;make/not def. subst&quot;,
+                              string userfun &quot;user-spec. fun subst&quot;,
+                              string userdiv &quot;division subst&quot;,
+                              string undscd &quot;_ subst in names&quot;,
+                              bool crossterms[1] &quot;subst/no _ for *&quot;)
+
+In case of large model rewriting formula by typing may be very tedious.
+This function is intended to automatize the procedure in most cases.
+A typical first argument is varname($xlist).
+The transformation is diveded into 5 steps
+1) default prefixes for functions
+l_ for log
+exp_ for exp
+sq_ for ^2
+For example, make_formula(&quot;LRM l_LRM exp_LRY sq_LRY&quot;,1,&quot;&quot;,&quot;&quot;,&quot;&quot;,0)
+ouputs &quot;LRM log(LRM) exp(LRY) LRY^2&quot;
+The syntax used suppress the other steps
+
+2) user-spicified prefixes for functions
+make_formula(&quot;cos_LRM pow_2_5_LRM&quot;,0,&quot;cos_=cos pow_2_5_=2.5&quot;,&quot;&quot;,&quot;&quot;,0)
+outputs &quot;cos(LRM) LRM^2.5&quot;
+
+3) ratio of variables
+ If you make rations and name them x1_d_x2, x1_d_x3 and so on,
+ you just set userdiv = &quot;_d_&quot;
+ make_formula(&quot;x1_d_x2 l_x1 pow_0_5_x1&quot;,1,&quot;pow_0_5_=0.5&quot;,&quot;_d_&quot;,&quot;&quot;,0)
+outputs &quot;x1/x2 log(x1) x1^0.5&quot;
+
+4) if you have variable names with &quot;_&quot; character which don't mean
+any functions, say x_1, x_2, you can set undscd = &quot;x1_1 x_2&quot;
+make_formula(&quot;x1_d_x2 l_x1 pow_0_5_x1 x_1&quot;,1,\
+&quot;pow_0_5_=0.5&quot;,&quot;_d_&quot;,&quot;x_1&quot;,0)
+outputs &quot;x1/x2 log(x1) x1^0.5 xundscd1&quot;
+So, x_1 -&gt; xundscd1. It is advicable to not have underscoring
+without functional meaning.
+
+5) After the other casess of appearence of &quot;_&quot; in names are removed
+ (you could run the function with crossterms = 0 first and make
+ some editing by hand) crossterms = 1 replaces all &quot;_&quot; by &quot;*&quot;.
+See also the sample script.
+
+function string make_formula0 (string s &quot;names of model xlist&quot;)
+Just a shortcut for make_formula(s,1,&quot;&quot;,&quot;&quot;,&quot;&quot;,1)
+
+function matrix dummylist (list XL)
+output is a vector with 0/1 evements; 1 when the corresponding
+variable from input list is a dummy variable.
+
+Input list shouldn't include const, and should consist of
+only functionally independent variables from $xlist.
+
+function matrix predict_y (string s &quot;model&quot;,
+                           string link &quot;link function&quot;,
+                           matrix newx &quot;x-values to calc. at&quot;,
+                           matrix b &quot;model coefficients&quot;,
+                           matrix vcv &quot;coeff. covariance matrix&quot;,
+                           string nlspars &quot;parameters; after nls only&quot;,
+                           scalar cl[NA] &quot;confidence level NA=.95&quot;,
+                           scalar sgma[NA] &quot;s.e. of errors&quot;,
+                           scalar n[NA] &quot;obs n. for estimation&quot;)
+Shold not be considered as an alternative to fcast command,
+rather, it is analogous to tobit_y
+
+When sgma is supplied (normally as $stderr) c.i. for y
+are computed, otherwise intervals for conditional mean
+are computed.
+Typical n is $T.
+
+Suppose we have estimeted
+ols y 0 x1 x2
+then, for example newx ={2.34,3.5} for one-point forecast
+and newx ={2.34,3.5;2.8;3.9} for 2-points foerast, etc.
+A typical usage
+ls_forecast({2.34,3.5},$coeff,$vcv,0.9,$stderr,$T)
+
+References
+Gretl User's Guide
+Adkins, L. Using Gretl with Hill Griffiths Lim.
+</help>
+<gretl-function name="make_formula" type="string">
+ <params count="6">
+  <param name="s" type="string">
+<description>names of model xlist</description>
+  </param>
+  <param name="defaultfun" type="bool" default="1">
+<description>make/not def. subst</description>
+  </param>
+  <param name="userfun" type="string">
+<description>user-spec. fun subst</description>
+  </param>
+  <param name="userdiv" type="string">
+<description>division subst</description>
+  </param>
+  <param name="undscd" type="string">
+<description>_ subst in names</description>
+  </param>
+  <param name="crossterms" type="bool" default="1">
+<description>subst/no _ for *</description>
+  </param>
+ </params>
+<code>s1 = s
+if  defaultfun
+  s1 =  fl_default(s1)
+endif
+nf = strlen(userfun)
+if nf &gt; 0
+  s1 = fl_userfun(s1,userfun)
+endif
+nd = strlen(userdiv)
+if nd &gt; 0
+  s1 = fl_userdiv(s1,userdiv)
+endif
+nu = strlen(undscd)
+if nf &gt; 0
+  s1 = fl_undscd(s1,undscd)
+endif
+if crossterms
+  s1 = strsub(s1,&quot;_&quot;,&quot;*&quot;)
+endif
+return s1
+</code>
+</gretl-function>
+<gretl-function name="make_formula0" type="string">
+ <params count="1">
+  <param name="s" type="string">
+<description>names of model xlist</description>
+  </param>
+ </params>
+<code>ret = make_formula(s,1,&quot;&quot;,&quot;&quot;,&quot;&quot;,1)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="elast" type="bundle">
+ <params count="7">
+  <param name="s" type="string">
+<description>model</description>
+  </param>
+  <param name="link" type="string">
+<description>link function</description>
+  </param>
+  <param name="v" type="matrix">
+<description>x-values to calc. at</description>
+  </param>
+  <param name="b" type="matrix">
+<description>model coefficients</description>
+  </param>
+  <param name="vcv" type="matrix">
+<description>coeff. covariance matrix</description>
+  </param>
+  <param name="nlspars" type="string">
+<description>parameters; after nls only</description>
+  </param>
+  <param name="dumlist" type="matrix"/>
+ </params>
+<code>if (s =&quot;&quot;)&amp;&amp;(!(link = &quot;nls&quot;))
+  s =aunames0(&quot;v&quot;,nelem(v))
+  nnv = nelem(v)
+  nnb = nelem(b)
+  if nnb = nnv+1
+    s=&quot;0 &quot;~s
+  endif
+endif
+s = const_to_left (s)
+if (link=&quot;&quot;)||link=&quot;@&quot;
+  bundle ret = ls_elast2 (s,v,b,vcv,dumlist)
+else
+  sdl = sum(dumlist)
+  nd = nelem(dumlist)
+  nv = nelem(v)
+  if nd&lt;nv
+    matrix dum1 = zeros(1,nv)
+    loop i=1..nd -q
+      dum1[i] = dumlist[i]
+    endloop
+  elif nd=nv
+    matrix dum1 = dumlist
+  else
+    matrix dum1 = dummies[1:nv]
+  endif
+  sdl = sum(dum1)
+  if (nv = sdl)
+    funcerr &quot;All regressors are dummies. Nothing to compute&quot;
+  endif
+  if link = &quot;nls&quot;
+    s10 = nlasvarsub(s,nlspars)
+    allvars = uniqvarlist (s)
+    nam = allvars
+    nlsspars = strsplit(nlspars)
+    loop i=1..nelem(nlsspars) -q
+      nam = smartstrsub(nam,nlsspars[i],&quot;&quot;)
+    endloop
+    s10 = &quot;myx(&quot;~s10~&quot;)&quot;
+  else
+    nam = uniqvarlist(s)
+    s0 = &quot;(&quot;~makfml(varsub2(s))~&quot;)&quot;
+    s10 = strsub(link,&quot;@&quot;,s0)
+  endif
+  matrix ret2 = df_dbdxde (s10,b,v,dum1)
+  matrix mes = fdjac(v,s10)'
+  matrix xes = fdjac(b,s10)
+  scalar meanprob = @s10
+  s11 = strsub(s10,&quot;v[&quot;,&quot;vv[&quot;)
+  matrix vv = v
+  matrix v10 = {}
+  matrix mes10 = {}
+  dnames = &quot;&quot;
+  cnames = &quot;&quot;
+  bundle ret
+  if (sdl&gt;0)
+    nams = strsplit(nam)
+    loop i=1..nv -q
+      namsi = nams[i]
+      if dum1[i]=1
+        dnames = dnames~&quot; &quot;~namsi
+      else
+        v10 = v10|v[i]
+        mes10 = mes10|mes[i]
+        cnames = cnames~&quot; &quot;~namsi
+      endif
+    endloop
+    dnames = strstrip(dnames)
+    dnames = strsub(dnames,&quot; &quot;,&quot;,&quot;)
+    ret[&quot;Dnames&quot;] = dnames
+    cnames = strstrip(cnames)
+  else
+    mes10 = mes
+    rrv=rows(v)
+    ccv=cols(v)
+    if ccv&gt;rrv
+      v10=v'
+    else
+      v10=v
+    endif
+    cnames=nam
+  endif
+  if link=&quot;nls&quot;
+    mdl = strsub(s,&quot; &quot;,&quot;&quot;)
+  else
+    mdl =  makfml(s)~&quot; &quot;~strsub(link,&quot;@&quot;,&quot;z&quot;)
+  endif
+  ret[&quot;model&quot;] = mdl
+  ret[&quot;mean_depvar&quot;] = meanprob
+  matrix mx = mes10.*xes
+  ret20 = (ret2-mx./meanprob)./meanprob
+  matrix nmes = v10.*mes10
+  nmes = nmes./meanprob
+  ret40 = v10.*ret20
+  vcov = ret40*vcv*ret40'
+  ses = sqrt(diag(vcov))
+  matrix zval = nmes ./ ses
+  matrix pval = 2 * pvalue(z, abs(zval))
+  matrix res = nmes ~ ses ~ zval ~ pval~v10
+  colnames(res, &quot;e_x s.e. z pval x-val&quot;)
+  rownames(res, cnames)
+  ret[&quot;mfx&quot;] = res
+  ret[&quot;vcv&quot;] = vcov
+  if link = &quot;nls&quot;
+    ret[&quot;modtype&quot;]=&quot;ls&quot;
+  else
+    ret[&quot;modtype&quot;]=link
+  endif
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="print_elast" type="void">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>printf &quot;\nTotal elasticities computed at x-val in model:\n\n&quot;
+catch string modtype = b[&quot;modtype&quot;]
+if (modtype = &quot;ls&quot;)||(modtype = &quot;nls&quot;)
+  string m2 = b[&quot;model&quot;]
+  printf &quot;  E(y) = %s,\n&quot;,m2
+else
+  string model0 = b[&quot;model&quot;]
+  models = strsplit(model0)
+  m1 = models[1]
+  m2 = models[2]
+  printf &quot;  E(y) = %s,\n&quot;,m2
+  printf &quot;where\n&quot;
+  printf &quot;  z = %s\n&quot;,m1
+endif
+matrix mp = b[&quot;mean_depvar&quot;]
+catch string Dnames = b[&quot;Dnames&quot;]
+if !isnull(Dnames)
+  printf &quot;\nnote: elasticities not computed for dummy(ies) %s\n&quot;, Dnames
+endif
+printf &quot;\n&quot;
+matrix res = b[&quot;mfx&quot;]
+printf &quot;E(y) = %.4f\n\n%#12.5g\n&quot;, mp, res
+</code>
+</gretl-function>
+<gretl-function name="predict_y" type="matrix">
+ <params count="9">
+  <param name="s" type="string">
+<description>model</description>
+  </param>
+  <param name="link" type="string">
+<description>link function</description>
+  </param>
+  <param name="newx" type="matrix">
+<description>x-values to calc. at</description>
+  </param>
+  <param name="b" type="matrix">
+<description>model coefficients</description>
+  </param>
+  <param name="vcv" type="matrix">
+<description>coeff. covariance matrix</description>
+  </param>
+  <param name="nlspars" type="string">
+<description>parameters; after nls only</description>
+  </param>
+  <param name="cl" type="scalar" default="NA">
+<description>confidence level NA=.95</description>
+  </param>
+  <param name="sgma" type="scalar" default="NA">
+<description>s.e. of errors</description>
+  </param>
+  <param name="n" type="scalar" default="NA">
+<description>obs n. for estimation</description>
+  </param>
+ </params>
+<code>s = const_to_left (s)
+if link=&quot;&quot;
+  link =&quot;@&quot;
+endif
+rb = rows(b)
+if rb==1
+  b = b'
+endif
+nb = nelem(b)
+nv = rows(newx)
+if link = &quot;nls&quot;
+  s10 = nlasvarsub(s,nlspars)
+else
+  if strlen(s)=0
+    if nb = cols(newx)+1
+      s = aunames0(&quot;v&quot;,nb-1)
+      s = &quot;0 &quot;~s
+    else
+      s = aunames0(&quot;v&quot;,nb)
+    endif
+  endif
+  nam = uniqvarlist(s)
+  s0 = varsub2(s)
+  s0 = makfml(s0)
+  s5 = &quot;(&quot;~s0~&quot;)&quot;
+  s10 = strsub(link,&quot;@&quot;,s5)
+endif
+matrix f = {}
+matrix derb = {}
+if link = &quot;nls&quot;
+  loop i=1..nv -q
+    matrix v = newx[i,]
+    f = f|@s10
+    s11 = &quot;myx(&quot;~s10~&quot;)&quot;
+    derb = derb|fdjac(b,@s11)
+  endloop
+else
+  matrix f0 = {}
+  loop i=1..nv -q
+    matrix v = newx[i,]
+    #print v
+    f = f|@s10
+    f0 = f0|@s5
+    s11 = &quot;myx(&quot;~s0~&quot;)&quot;
+    derb = derb|fdjac(b,@s11)
+  endloop
+endif
+if missing(cl)
+  cl = 0.95
+endif
+if missing(n)
+  scalar t = critical(z,(1-cl)/2)
+else
+  scalar t = critical(t,n-nb,(1-cl)/2)
+endif
+matrix vma = diag(derb*vcv*derb')
+if !missing(sgma)
+  vma = (vma.+ sgma^2)
+endif
+vma = sqrt(vma)
+if link = &quot;nls&quot;
+  lb = f - t.*vma
+  rbo = f + t.*vma
+else
+  lb = f0 - t.*vma
+  rbo = f0 + t.*vma
+  hhh = strsub(link,&quot;@&quot;,&quot;lb&quot;)
+  lb = @hhh
+  jjj = strsub(link,&quot;@&quot;,&quot;rbo&quot;)
+  rbo = @jjj
+endif
+ret = f~lb~rbo
+cl100 =100*cl
+sprintf sint &quot;%d&quot;,cl100
+slb =sint~&quot;%_lb&quot;
+srb = sint~&quot;%_rb&quot;
+colnames(ret,&quot;fcst &quot;~slb~&quot; &quot;~srb)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="dummylist" type="matrix">
+ <params count="1">
+  <param name="XL" type="list"/>
+ </params>
+<code>matrix x = zeros(1, nelem(XL))
+loop foreach i XL -q
+  if varnum(XL.$i) &gt; 0
+    if isdummy(XL.$i)
+      x[i] = 1
+    endif
+  endif
+endloop
+return x
+</code>
+</gretl-function>
+<gretl-function name="margeff" type="bundle">
+ <params count="7">
+  <param name="s" type="string">
+<description>model</description>
+  </param>
+  <param name="link" type="string">
+<description>link function</description>
+  </param>
+  <param name="v" type="matrix">
+<description>x-values to calc. at</description>
+  </param>
+  <param name="b" type="matrix">
+<description>model coefficients</description>
+  </param>
+  <param name="vcv" type="matrix">
+<description>coeff. covariance matrix</description>
+  </param>
+  <param name="nlspars" type="string">
+<description>parameters; after nls only</description>
+  </param>
+  <param name="dumlist" type="matrix"/>
+ </params>
+<code>if (s =&quot;&quot;)&amp;&amp;(!(link = &quot;nls&quot;))
+  s =aunames0(&quot;v&quot;,nelem(v))
+  nnv = nelem(v)
+  nnb = nelem(b)
+  if nnb = nnv+1
+    s=&quot;0 &quot;~s
+  endif
+endif
+s = const_to_left (s)
+if (link=&quot;&quot;)||link=&quot;@&quot;
+  bundle ret = ls_marg (s,v,b,vcv)
+else
+  sdl = sum(dumlist)
+  nd = nelem(dumlist)
+  nv = nelem(v)
+  if nd&lt;nv
+    matrix dum1 = zeros(1,nv)
+    loop i=1..nd -q
+      dum1[i] = dumlist[i]
+    endloop
+  elif nd=nv
+    matrix dum1 = dumlist
+  else
+    matrix dum1 = dummies[1:nv]
+  endif
+  if link = &quot;nls&quot;
+    s10 = nlasvarsub(s,nlspars)
+    allvars = uniqvarlist (s)
+    nam = allvars
+    nlsspars = strsplit(nlspars)
+    loop i=1..nelem(nlsspars) -q
+      nam = smartstrsub(nam,nlsspars[i],&quot;&quot;)
+    endloop
+    s10 = &quot;myx(&quot;~s10~&quot;)&quot;
+  else
+    nam = uniqvarlist(s)
+    s0 = &quot;(&quot;~makfml(varsub2(s))~&quot;)&quot;
+    s10 = strsub(link,&quot;@&quot;,s0)
+  endif
+  matrix ret2 = df_dbdx (s10,b,v,dum1)
+  matrix vcov = ret2*vcv*ret2'
+  matrix ses = sqrt(diag(vcov))
+  matrix mes = fdjac(v,s10)'
+  scalar meanprob = @s10
+  s11 = strsub(s10,&quot;v[&quot;,&quot;vv[&quot;)
+  matrix vv = v
+  bundle ret
+  dnames = &quot;&quot;
+  if (sdl&gt;0)
+    nams = strsplit(nam)
+    loop i=1..nv -q
+      if dum1[i]=1
+        vv[i] = 1
+        f1 = @s11
+        vv[i] = 0
+        f2 = @s11
+        mes[i] = f1-f2
+        vv[i]=v[i]
+        namsi = nams[i]
+        dnames = dnames~&quot; &quot;~namsi
+      endif
+    endloop
+    dnames = strstrip(dnames)
+    dnames = strsub(dnames,&quot; &quot;,&quot;,&quot;)
+    ret[&quot;Dnames&quot;] = dnames
+    #print dnames
+  endif
+  if link=&quot;nls&quot;
+    mdl = strsub(s,&quot; &quot;,&quot;&quot;)
+  else
+    mdl =  makfml(s)~&quot; &quot;~strsub(link,&quot;@&quot;,&quot;z&quot;)
+  endif
+  ret[&quot;model&quot;] = mdl
+  ret[&quot;mean_depvar&quot;] = meanprob
+  #print mdl
+  matrix zval = mes ./ ses
+  matrix pval = 2 * pvalue(z, abs(zval))
+  vr = rows(v)
+  vc = cols(v)
+  if vc&gt;vr
+    v = v'
+  endif
+  matrix res = mes ~ ses ~ zval ~ pval~v
+  colnames(res, &quot;dy/dx s.e. z pval x-val&quot;)
+  rownames(res, nam)
+  ret[&quot;mfx&quot;] = res
+  ret[&quot;vcv&quot;] = vcov
+  #ret[&quot;varnames&quot;] = nam
+  if link = &quot;nls&quot;
+    ret[&quot;modtype&quot;]=&quot;ls&quot;
+  else
+    ret[&quot;modtype&quot;]=link
+  endif
+  #print res
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="print_margeff" type="void">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>printf &quot;\ndy/dx computed at x-val in model:\n\n&quot;
+catch string modtype = b[&quot;modtype&quot;]
+if (modtype = &quot;ls&quot;)||(modtype = &quot;nls&quot;)
+  string m2 = b[&quot;model&quot;]
+  printf &quot;  E(y) = %s,\n&quot;,m2
+else
+  string model0 = b[&quot;model&quot;]
+  models = strsplit(model0)
+  m1 = models[1]
+  m2 = models[2]
+  printf &quot;  E(y) = %s,\n&quot;,m2
+  printf &quot;where\n&quot;
+  printf &quot;  z = %s\n&quot;,m1
+endif
+matrix mp = b[&quot;mean_depvar&quot;]
+catch string Dnames = b[&quot;Dnames&quot;]
+if !isnull(Dnames)
+  printf &quot;\nnote: dp/dx based on discrete change for %s\n&quot;, Dnames
+endif
+printf &quot;\n&quot;
+matrix res = b[&quot;mfx&quot;]
+printf &quot;E(y) = %.4f\n\n%#12.5g\n&quot;, mp, res
+</code>
+</gretl-function>
+<gretl-function name="myx" type="scalar" private="1">
+ <params count="1">
+  <param name="x" type="scalar"/>
+ </params>
+<code>return x
+</code>
+</gretl-function>
+<gretl-function name="ls_me" type="matrix" private="1">
+ <params count="3">
+  <param name="s" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="v" type="matrix"/>
+ </params>
+<code>ss = &quot;myx(&quot;~s~&quot;)&quot;
+matrix ret = fdjac(v,ss)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="ls_mev" type="matrix" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="v" type="matrix"/>
+ </params>
+<code>ss = &quot;myx(&quot;~s~&quot;)&quot;
+matrix ret = fdjac(v,ss)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="makfml" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>sss = strsplit(s)
+n = nelem(sss)
+s1 = sss[1]
+z = s1=&quot;0&quot;||s1=&quot;const&quot;
+if z
+  ret = &quot;b[1]&quot;
+else
+  ret = &quot;b[1]*&quot;~s1
+endif
+if n &gt;1
+  loop i = 2..n -q
+    sprintf us &quot;b[%d]&quot;,i
+    us = us~&quot;*&quot;~sss[i]
+    ret = ret~&quot;+&quot;~us
+  endloop
+endif
+#print z
+return ret
+</code>
+</gretl-function>
+<gretl-function name="aunames" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="n" type="scalar"/>
+ </params>
+<code>r = s~&quot;[1]&quot;
+if n&gt;1
+  string rs = &quot;&quot;
+  loop i=2..n -q
+    sprintf rs &quot; %s[%d]&quot;,s,i
+    r = r~rs
+  endloop
+endif
+return r
+</code>
+</gretl-function>
+<gretl-function name="bveval" type="scalar" private="1">
+ <params count="3">
+  <param name="s" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="v" type="matrix"/>
+ </params>
+<code>return @s
+</code>
+</gretl-function>
+<gretl-function name="isstrstr" type="scalar" private="1">
+ <params count="2">
+  <param name="s1" type="string"/>
+  <param name="s2" type="string"/>
+ </params>
+<code>xx = strstr(s1,s2)
+nxx = strlen(xx)
+ret = (nxx&gt;0)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="cutstrstr" type="string" private="1">
+ <params count="2">
+  <param name="s1" type="string"/>
+  <param name="s2" type="string"/>
+ </params>
+<code>xx = strstr(s1,s2)
+nxx = strlen(xx)
+#print nxx
+n = strlen(s2)
+if nxx&lt;(n+1)
+  string ret = &quot;&quot;
+else
+  string ret = substr(xx,n+1,nxx)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="posstrstr" type="matrix" private="1">
+ <params count="2">
+  <param name="s1" type="string"/>
+  <param name="s2" type="string"/>
+ </params>
+<code>xx = cutstrstr(s1,s2)
+nxx = strlen(xx)
+ww = isstrstr(s1,s2)
+#print xx
+if nxx+ww=0
+  ret = {0}
+  #print ret
+else
+  ret = {strlen(s1)-strlen(strstr(s1,s2))+1}
+  #print ret
+  #endif
+  xx = s1
+  loop while nxx&gt;0 -q
+    #nxx2=nxx
+    xx = cutstrstr(xx,s2)
+    nxx = strlen(xx)
+    if nxx&gt;0&amp;&amp;isstrstr(xx,s2)
+      ret = ret~(strlen(s1)-strlen(strstr(xx,s2))+1)
+    endif
+  endloop
+endif
+return ret
+#     ret = (nxx&gt;0)
+#     return ret
+</code>
+</gretl-function>
+<gretl-function name="intquote" type="string" private="1">
+ <params count="1">
+  <param name="n" type="int"/>
+ </params>
+<code>sprintf ret &quot;%d&quot;,n
+return ret
+</code>
+</gretl-function>
+<gretl-function name="isdigit" type="scalar" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+if !(n = 1)
+  ret = 0
+else
+  string lts = &quot;0123456789&quot;
+  ret = isstrstr(lts,s)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="isvarchar" type="scalar" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+if !(n = 1)
+  ret = 0
+else
+  string lts = &quot;qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_&quot;
+  ret = isstrstr(lts,s)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="isvarcharN" type="scalar" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+if !(n = 1)
+  ret = 0
+else
+  string lts = &quot;qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_0123456789&quot;
+  ret = isstrstr(lts,s)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="varcharmap" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+ret = &quot;&quot;
+loop i=1..n
+  ret = ret~intquote(isvarchar(substr(s,i,i)))
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="varcharmapN" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+ret = &quot;&quot;
+loop i=1..n -q
+  ret = ret~intquote(isvarcharN(substr(s,i,i)))
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="rawvarlist" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>s = strsub(s,&quot; &quot;,&quot;#&quot;)
+s =&quot;;&quot;~s~&quot;;&quot;
+n = strlen(s)
+#print n
+charpos = posstrstr(varcharmapN(s),&quot;1&quot;)
+#print charpos
+nvchar = nelem(posstrstr(varcharmapN(s),&quot;1&quot;))
+if nvchar = 1
+  nvchar = charpos[1]&gt;0
+endif
+#print nvchar
+starts = posstrstr(varcharmapN(s),&quot;01&quot;)
+ends = posstrstr(varcharmapN(s),&quot;10&quot;)
+ne = nelem(ends)
+fs = starts[1]
+le = ends[ne]
+if nvchar=0
+  ret = &quot;_empty&quot;
+  starts = {0}
+  ends = {0}
+elif nvchar=n
+  starts = {1}
+  ends = {n}
+  ret = s
+else
+  z = isvarchar(substr(s,n,n))
+  w = isvarchar(substr(s,1,1))
+  if z
+    if le=0
+      ends[ne]=n
+    else
+      ends=ends~n
+    endif
+  endif
+  if w&amp;&amp;!(fs=0)
+    starts = 0~starts
+  endif
+  starts = starts.+1
+  ns = nelem(starts)
+  #          print starts
+  #         print ends
+  matrix boo = {}
+  matrix doo = starts|ends
+  str = &quot;&quot;
+  loop i=1..ns -q
+    scalar ssi = starts[i]
+    scalar esi = ends[i]
+    si = substr(s,ssi,esi)
+    nsi = strlen(si)
+    matrix dm ={}
+    loop j=1..nsi -q
+      dmi = isdigit(substr(si,j,j))
+      dm = dm~dmi
+    endloop
+    sdm = sum(dm)
+    nextch = substr(s,esi+1,esi+1)
+    if (sdm&lt;nsi)&amp;&amp;!(nextch==&quot;(&quot;)
+      boo =  boo~doo[,i]
+      str = str~&quot; &quot;~si
+    endif
+    ret = strstrip(str)
+  endloop
+endif
+#print starts
+#print ends
+return ret
+</code>
+</gretl-function>
+<gretl-function name="uniqvarlist" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>s0 =  rawvarlist (s)
+ss = strsplit(s0)
+rs = ss[1]
+nss = nelem(ss)
+if nss&gt;1
+  loop i=2..nss -q
+    num  = 0
+    #             nj = i -1
+    #             loop j=1..nj
+    #                 i
+    sss = strsplit(rs)
+    nsss = nelem(sss)
+    rsi = ss[i]
+    #print nsss
+    loop j=1..nsss -q
+      sssj = sss[j]
+      if rsi=sssj
+        num=num+1
+      endif
+    endloop
+    if num=0
+      rs = rs~&quot; &quot;~rsi
+    endif
+  endloop
+endif
+rs = strstrip(rs)
+#     s5 = strsplit(s)
+#     s51 = s5[1]
+#     if s51=&quot;0&quot;
+#         rs = &quot;0 &quot;~rs
+#     endif
+return rs
+</code>
+</gretl-function>
+<gretl-function name="nstrsort" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>ss = strsplit(s)
+nss = nelem(ss)
+if nss&gt;1
+  ma = {}
+  loop i=1..nss -q
+    si = ss[i]
+    ma = ma~strlen(si)
+  endloop
+  # sorteg lengths
+  dsma = dsort(uniq(ma))
+  ndsma = nelem(dsma)
+  if ndsma &gt;1
+    # number of variables with a length from dsma
+    naa = {}
+    loop i=1..ndsma -q
+      n = 0
+      ni = dsma[i]
+      loop j=1..nss -q
+        nj = ma[j]
+        if ni = nj
+          n = n+1
+        endif
+      endloop
+      naa = naa~n
+    endloop
+    #     print naa
+    #
+    #     print dsma
+    #     print ma
+    rs = &quot;&quot;
+    loop i=1..ndsma -q
+      loop j=1..nss -q
+        ni = dsma[i]
+        nj = ma[j]
+        if ni = nj
+          ssj = ss[j]
+          rs = rs~&quot; &quot;~ssj
+        endif
+      endloop
+    endloop
+  else
+    rs = s
+  endif
+else
+  rs = s
+endif
+return rs
+</code>
+</gretl-function>
+<gretl-function name="unsplit" type="string" private="1">
+ <params count="1">
+  <param name="ss" type="strings"/>
+ </params>
+<code>n = nelem(ss)
+rs = &quot;&quot;
+loop i=1..n -q
+  ssi = ss[i]
+  rs = rs~&quot; &quot;~ssi
+endloop
+rs = strstrip(rs)
+return rs
+</code>
+</gretl-function>
+<gretl-function name="fl_sub1" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="sub" type="string"/>
+ </params>
+<code>ss = strsplit(s)
+ss1 = ss[1]
+s1 = s
+n = strlen(s)
+if ss1=&quot;0&quot;
+  s1 = substr(s1,3,n)
+endif
+if ss1=&quot;const&quot;
+  s1 = substr(s1,7,n)
+endif
+nam = uniqvarlist(s1)
+nams = strsplit(s1)
+nn = nelem(nams)
+loop i=1..nn -q
+  namsi = nams[i]
+  nnamsi = strlen(namsi)
+  ns = strlen(sub)
+  sub_=sub~&quot;_&quot;
+  if nnamsi&gt;(ns+1)
+    prefix = substr(namsi,1,ns+1)
+    if sub_= prefix
+      suffix = substr(namsi,ns+2,nnamsi)
+      sub9 = sub
+      if sub = &quot;l&quot;
+        sub9 = &quot;log&quot;
+      endif
+      if sub = &quot;sq&quot;
+        subs = suffix~&quot;^2&quot;
+      else
+        subs = sub9~&quot;(&quot;~suffix~&quot;)&quot;
+      endif
+      s1 = strsub(s1,namsi,subs)
+    endif
+  endif
+endloop
+if ss1=&quot;0&quot;
+  s1 = &quot;0 &quot;~s1
+endif
+if ss1=&quot;const&quot;
+  s1 = &quot;const &quot;~s1
+endif
+return s1
+</code>
+</gretl-function>
+<gretl-function name="fl_default" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>subs = &quot;l sq exp&quot;
+s = strsub(s,&quot;,&quot;,&quot; &quot;)
+ssubs = strsplit(subs)
+n = nelem(ssubs)
+s1 = s
+loop i=1..n -q
+  subsi = ssubs[i]
+  s1 = fl_sub1(s1,subsi)
+endloop
+return s1
+</code>
+</gretl-function>
+<gretl-function name="isdotdigit" type="scalar" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+if !(n = 1)
+  ret = 0
+else
+  string lts = &quot;0123456789.&quot;
+  ret = isstrstr(lts,s)
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="isnumber" type="scalar" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>n = strlen(s)
+check ={}
+loop i=1..n -q
+  if isdotdigit (substr(s,i,i))
+    check = check~1
+  else
+    check = check~0
+  endif
+endloop
+scalar checksum = sum(check)
+if checksum &lt; n
+  ret = 0
+else
+  dpos = posstrstr(s,&quot;.&quot;)
+  nd = nelem(dpos)
+  if nd &gt; 1
+    ret = 0
+  else
+    ret = 1
+  endif
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="fl_usersub1" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="sub" type="string"/>
+ </params>
+<code>ss = strsplit(s)
+ss1 = ss[1]
+s1 = s
+n = strlen(s)
+if ss1=&quot;0&quot;
+  s1 = substr(s1,3,n)
+endif
+if ss1=&quot;const&quot;
+  s1 = substr(s1,7,n)
+endif
+nam = uniqvarlist(s1)
+nams = strsplit(s1)
+nn = nelem(nams)
+sub10 = strsub(sub,&quot;=&quot;,&quot; &quot;)
+splitsub = strsplit(sub10)
+sub_=splitsub[1]
+ns = strlen(sub_)
+loop i=1..nn -q
+  namsi = nams[i]
+  nnamsi = strlen(namsi)
+  if nnamsi&gt;ns
+    prefix = substr(namsi,1,ns)
+    if sub_= prefix
+      suffix = substr(namsi,ns+1,nnamsi)
+      sub9 = splitsub[2]
+      isn = isnumber(sub9)
+      if isn
+        subs = suffix~&quot;^&quot;~sub9
+      else
+        subs = sub9~&quot;(&quot;~suffix~&quot;)&quot;
+      endif
+      s1 = strsub(s1,namsi,subs)
+    endif
+  endif
+endloop
+if ss1=&quot;0&quot;
+  s1 = &quot;0 &quot;~s1
+endif
+if ss1=&quot;const&quot;
+  s1 = &quot;const &quot;~s1
+endif
+return s1
+</code>
+</gretl-function>
+<gretl-function name="fl_userfun" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="subs" type="string"/>
+ </params>
+<code>#subs = &quot;l sq exp&quot;
+s = strsub(s,&quot;,&quot;,&quot; &quot;)
+ssubs = strsplit(subs)
+n = nelem(ssubs)
+s1 = s
+loop i=1..n -q
+  subsi = ssubs[i]
+  s1 = fl_usersub1(s1,subsi)
+endloop
+return s1
+</code>
+</gretl-function>
+<gretl-function name="fl_userdiv" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="subs" type="string"/>
+ </params>
+<code>s = strsub(s,&quot;,&quot;,&quot; &quot;)
+ret = strsub(s,subs,&quot;/&quot;)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="underscored_off" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>ret = strsub(s,&quot;_&quot;,&quot;undscd&quot;)
+return ret
+</code>
+</gretl-function>
+<gretl-function name="fl_undscd" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="undscd" type="string"/>
+ </params>
+<code>srtundscd = nstrsort(undscd)
+#print srtundscd
+sundscd = strsplit(srtundscd)
+n = nelem(sundscd)
+s1 = s
+loop i=1..n -q
+  sundscdi = sundscd[i]
+  subs = underscored_off(sundscdi)
+  s1 = strsub(s1,sundscdi,subs)
+endloop
+return s1
+</code>
+</gretl-function>
+<gretl-function name="df_dbidxj" type="scalar" private="1">
+ <params count="6">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="i" type="int"/>
+  <param name="j" type="int"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>if missing(h)
+  h=0.0001
+endif
+hall = {10^-4,abs(b[i])*10^-14,abs(x[j]*10^-14)}
+h = max(hall)
+fun1 = strsub(fun,&quot;x[&quot;,&quot;xx[&quot;)
+fun1 = strsub(fun1,&quot;b[&quot;,&quot;bb[&quot;)
+matrix bb = b
+matrix xx = x
+f0 = @fun1
+xx[j]=x[j]+h
+bb[i]=b[i]+h
+f1 = @fun1
+xx[j]=x[j]-h
+bb[i]=b[i]-h
+f2 = @fun1
+ret = (f1+f2-2*f0)/(2*h^2)
+scalar hb = max({10^-4,abs(b[i])*10^-14})
+rb = df_dbidbi(fun,b,x,i,hb)
+scalar hx = max({10^-4,abs(x[j])*10^-14})
+rx = df_dxjdxj (fun,b,x,j,hx)
+ret = ret-(rb+rx)/2
+return ret
+</code>
+</gretl-function>
+<gretl-function name="df_dbdxj" type="matrix" private="1">
+ <params count="5">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="j" type="int"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>nb = nelem(b)
+ret = {}
+loop i=1..nb -q
+  ret = ret~df_dbidxj(fun,b,x,i,j,h)
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="df_dbdxcont" type="matrix" private="1">
+ <params count="4">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>nx = nelem(x)
+ret = {}
+loop j=1..nx -q
+  ret = ret|df_dbdxj(fun,b,x,j,h)
+endloop
+return ret
+</code>
+</gretl-function>
+<gretl-function name="df_dbdxjdum" type="matrix" private="1">
+ <params count="4">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="j" type="int"/>
+ </params>
+<code>nb = nelem(b)
+x[j] = 1
+fun0 = &quot;myx(&quot;~fun~&quot;)&quot;
+matrix ret1 = fdjac(b,fun0)
+x[j] = 0
+matrix ret2 = fdjac(b,fun0)
+return ret1-ret2
+</code>
+</gretl-function>
+<gretl-function name="df_dbdx" type="matrix" private="1">
+ <params count="5">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="dumlist" type="matrix"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>vars = uniqvarlist (fun)
+varss = strsplit(vars)
+n = nelem(varss)
+z = &quot;&quot;
+loop ii=1..n -q
+  varssi = varss[ii]
+  if !(varssi=&quot;b&quot;)
+    z=varssi
+  endif
+endloop
+fun0 = strsub(fun,z,&quot;x&quot;)
+nx = nelem(x)
+nd = nelem(dumlist)
+sdl = sum(dumlist)
+if (nd&lt;nx)||(sdl=0)
+  ret = df_dbdxcont(fun0,b,x,h)
+else
+  ret = {}
+  loop j=1..nx -q
+    if dumlist[j]=1
+      retj = df_dbdxjdum (fun0,b,x,j)
+    else
+      retj = df_dbdxj (fun0,b,x,j,h)
+    endif
+    ret = ret|retj
+  endloop
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="df_dbdxde" type="matrix" private="1">
+ <params count="5">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="dumlist" type="matrix"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>vars = uniqvarlist (fun)
+varss = strsplit(vars)
+n = nelem(varss)
+z = &quot;&quot;
+loop ii=1..n -q
+  varssi = varss[ii]
+  if !(varssi=&quot;b&quot;)
+    z=varssi
+  endif
+endloop
+fun0 = strsub(fun,z,&quot;x&quot;)
+nx = nelem(x)
+nd = nelem(dumlist)
+sdl = sum(dumlist)
+if (nd&lt;nx)||(sdl=0)
+  ret = df_dbdxcont(fun0,b,x,h)
+else
+  ret = {}
+  loop j=1..nx -q
+    if dumlist[j]=0
+      retj = df_dbdxj (fun0,b,x,j,h)
+      ret = ret|retj
+    endif
+  endloop
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="smartstrsub" type="string" private="1">
+ <params count="3">
+  <param name="s" type="string"/>
+  <param name="find" type="string"/>
+  <param name="sub" type="string"/>
+ </params>
+<code>pos = posstrstr(s,find)
+n = nelem(pos)
+if (n = 1)&amp;&amp;(pos[1]=0)
+  ret = s
+else
+  ns = strlen(s)
+  nf = strlen(find)
+  s1 = &quot;{&quot;~s~&quot;}&quot;
+  matrix pos1 = pos.+1
+  ret = &quot;&quot;
+  k = pos1[1]-1
+  m = 1
+  loop i=1..n -q
+    possi = pos1[i]
+    possfi = possi+nf-1
+    ch1 = substr(s1,possi-1,possi-1)
+    ch2 = substr(s1,possfi+1,possfi+1)
+    if isvarcharN(ch1)||isvarcharN(ch2)||ch2=&quot;[&quot;
+      text = find
+    else
+      text = sub
+    endif
+    ret = ret~substr(s1,m,k)~text
+    m = possfi+1
+    if i&lt;n
+      k = pos1[i+1]-1
+    else
+      k = ns+2
+    endif
+    #print ret
+  endloop
+  ret = ret~substr(s1,m,k)
+  #print ret
+  nr = strlen(ret)
+  ret = substr(ret,2,nr-1)
+  #print ret
+endif
+return ret
+</code>
+</gretl-function>
+<gretl-function name="aunames0" type="string" private="1">
+ <params count="2">
+  <param name="s" type="string"/>
+  <param name="n" type="scalar"/>
+ </params>
+<code>r = s~&quot;1&quot;
+if n&gt;1
+  string rs = &quot;&quot;
+  loop i=2..n -q
+    sprintf rs &quot; %s%d&quot;,s,i
+    r = r~rs
+  endloop
+endif
+return r
+</code>
+</gretl-function>
+<gretl-function name="nlasvarsub" type="string" private="1">
+ <params count="2">
+  <param name="fun" type="string"/>
+  <param name="pars" type="string"/>
+ </params>
+<code>allvars = uniqvarlist (fun)
+spars = strsplit(pars)
+npars = nelem(spars)
+vars = allvars
+loop i=1..npars -q
+  vars = smartstrsub(vars,spars[i],&quot;&quot;)
+endloop
+vars = strstrip(vars)
+varss = strsplit(vars)
+nvars = nelem(varss)
+fla1 = fun
+vs = aunames(&quot;v&quot;,nvars)
+bs = aunames(&quot;b&quot;,npars)
+vss = strsplit(vs)
+#print vs
+loop i=1..nvars -q
+  fla1 =smartstrsub(fla1,varss[i],vss[i])
+endloop
+bss = strsplit(bs)
+#print fla1
+loop i=1..npars -q
+  fla1 =smartstrsub(fla1,spars[i],bss[i])
+endloop
+fla1 = strsub(fla1,&quot; &quot;,&quot;&quot;)
+return fla1
+</code>
+</gretl-function>
+<gretl-function name="ls_elast2" type="bundle" private="1">
+ <params count="5">
+  <param name="s" type="string"/>
+  <param name="v" type="matrix"/>
+  <param name="b" type="matrix"/>
+  <param name="vcv" type="matrix"/>
+  <param name="dumlist" type="matrix"/>
+ </params>
+<code>s = const_to_left(s)
+sdl = sum(dumlist)
+nd = nelem(dumlist)
+nv = nelem(v)
+if nd&lt;nv
+  matrix dum1 = zeros(1,nv)
+  loop i=1..nd -q
+    dum1[i] = dumlist[i]
+  endloop
+elif nd=nv
+  matrix dum1 = dumlist
+else
+  matrix dum1 = dummies[1:nv]
+endif
+sdl = sum(dum1)
+if (nv = sdl)
+  funcerr &quot;All regressors are dummies. Nothing to compute&quot;
+endif
+ss = strsplit(s)
+ss1 = ss[1]
+as1 = s
+n = strlen(s)
+if ss1=&quot;0&quot;
+  as1 = substr(as1,3,n)
+endif
+if ss1=&quot;const&quot;
+  as1 = substr(as1,7,n)
+endif
+nam = uniqvarlist(as1)
+s0 = varsub2(s)
+sss = makfml(s0)
+matrix mes = ls_me (sss,b,v)
+ssspl = strsplit(s0)
+s1 = ssspl[1]
+if (s1=&quot;const&quot;)
+  ssspl[1]=&quot;0&quot;
+endif
+rv = rows(v)
+rc = cols(v)
+if rc &gt; rv
+  matrix v = v'
+endif
+matrix ret2 = {}
+matrix vv = v
+matrix v10 = {}
+matrix mes10 = {}
+dnames = &quot;&quot;
+cnames = &quot;&quot;
+nams = strsplit(nam)
+n = nelem(ssspl)
+ret1 = {}
+loop i=1..n -q
+  uu = ls_mev(ssspl[i],v)
+  ret1 = ret1|uu
+endloop
+loop i=1..nv -q
+  namsi = nams[i]
+  if dum1[i]=0
+    ret2 = ret2|ret1[,i]'
+    v10 = v10|v[i]
+    mes10 = mes10|mes[i]
+    cnames = cnames~&quot; &quot;~namsi
+  else
+    dnames = dnames~&quot; &quot;~namsi
+  endif
+endloop
+cnames = strstrip(cnames)
+dnames = strstrip(dnames)
+dnames = strsub(dnames,&quot; &quot;,&quot;,&quot;)
+nndd = strlen(dnames)
+ssss = &quot;myx(&quot;~sss~&quot;)&quot;
+matrix xes = fdjac(b,ssss)
+matrix mx = mes10.*xes
+meanprob = bveval (sss,b,v)
+ret20 = (ret2-mx./meanprob)./meanprob
+matrix nmes = v10.*mes10
+nmes = nmes./meanprob
+ret40 = v10.*ret20
+vcov = ret40*vcv*ret40'
+ses = sqrt(diag(vcov))
+matrix zval = nmes ./ ses
+matrix pval = 2 * pvalue(z, abs(zval))
+matrix res = nmes ~ ses ~ zval ~ pval~v10
+colnames(res, &quot;e_x s.e. z pval x-val&quot;)
+rownames(res, cnames)
+bundle ret
+mdl =  makfml(s)
+ret[&quot;model&quot;] = mdl
+ret[&quot;mean_depvar&quot;] = meanprob
+ret[&quot;mfx&quot;] = res
+ret[&quot;vcv&quot;] = vcov
+if nndd &gt; 0
+  ret[&quot;Dnames&quot;] = dnames
+endif
+ret[&quot;modtype&quot;]=&quot;ls&quot;
+return ret
+</code>
+</gretl-function>
+<gretl-function name="const_to_left" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>if strlen(s)=0
+  s1 = s
+else
+  ss = strsplit(s)
+  ns = nelem(ss)
+  uuu = {}
+  loop i = 1 .. ns -q
+    ssi = ss[i]
+    if (ssi = &quot;0&quot;)||(ssi = &quot;const&quot;)
+      uuu = uuu~1
+    else
+      uuu = uuu~0
+    endif
+  endloop
+  su = sum(uuu)
+  n = strlen(s)
+  s1 = &quot; &quot;~s~&quot; &quot;
+  s1 = strsub(s1,&quot; 0 &quot;,&quot; &quot;)
+  s1 = strsub(s1,&quot; const &quot;,&quot; &quot;)
+  s1 = strstrip(strsub(s1,&quot;  &quot;,&quot; &quot;))
+  if su &gt; 0
+    s1 = &quot;0 &quot;~s1
+    s1 = strstrip(s1)
+  endif
+endif
+return s1
+</code>
+</gretl-function>
+<gretl-function name="varsub2" type="string" private="1">
+ <params count="1">
+  <param name="s" type="string"/>
+ </params>
+<code>su = uniqvarlist (s)
+sus = strsplit(su)
+n = nelem(sus)
+vs = aunames(&quot;v&quot;,n)
+vss = strsplit(vs)
+s0 = s
+loop i=1..n -q
+  susi = sus[i]
+  vi = vss[i]
+  s0 = smartstrsub(s0,susi,vi)
+endloop
+return s0
+</code>
+</gretl-function>
+<gretl-function name="ls_marg" type="bundle" private="1">
+ <params count="4">
+  <param name="s" type="string"/>
+  <param name="v" type="matrix"/>
+  <param name="b" type="matrix"/>
+  <param name="vcv" type="matrix"/>
+ </params>
+<code>s = const_to_left(s)
+nv = nelem(v)
+nam = strstrip(strsub(uniqvarlist(s),&quot;const&quot;,&quot;&quot;))
+nams = strsplit(nam)
+s0 = makfml(varsub2(s))
+s10 = &quot;myx(&quot;~s0~&quot;)&quot;
+matrix mes = fdjac(v,s10)'
+rv = rows(v)
+rc = cols(v)
+if rc &gt; rv
+  matrix v = v'
+endif
+scalar meanprob = @s10
+ssspl = strsplit(varsub2(s))
+n = nelem(ssspl)
+matrix ret1 = {}
+loop i=1..n -q
+  uu = ls_mev(ssspl[i],v)
+  ret1 = ret1|uu
+endloop
+matrix vcov = ret1'*vcv*ret1
+matrix ses = sqrt(diag(vcov))
+bundle ret
+mdl =  strsub(makfml(s),&quot; &quot;,&quot;&quot;)
+ret[&quot;model&quot;] = mdl
+ret[&quot;mean_depvar&quot;] = meanprob
+matrix zval = mes ./ ses
+matrix pval = 2 * pvalue(z, abs(zval))
+matrix res = mes ~ ses ~ zval ~ pval~v
+colnames(res, &quot;dy/dx s.e. z pval x-val&quot;)
+rownames(res, nam)
+ret[&quot;mfx&quot;] = res
+ret[&quot;vcv&quot;] = vcov
+ret[&quot;modtype&quot;]=&quot;ls&quot;
+return ret
+</code>
+</gretl-function>
+<gretl-function name="df_dbidbi" type="scalar" private="1">
+ <params count="5">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="i" type="int"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>if missing(h)
+  h= 0.0001
+endif
+fun1 = strsub(fun,&quot;b[&quot;,&quot;bb[&quot;)
+matrix bb = b
+f0 = @fun1
+bb[i]=b[i]+h
+f1 =@fun1
+bb[i]=b[i]-h
+f2 =@fun1
+ret = (f1+f2-2*f0)/h^2
+return ret
+</code>
+</gretl-function>
+<gretl-function name="df_dxjdxj" type="scalar" private="1">
+ <params count="5">
+  <param name="fun" type="string"/>
+  <param name="b" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="j" type="int"/>
+  <param name="h" type="scalar" default="NA"/>
+ </params>
+<code>if missing(h)
+  h= 0.0001
+endif
+fun1 = strsub(fun,&quot;x[&quot;,&quot;xx[&quot;)
+matrix xx = x
+f0 = @fun1
+xx[j]=x[j]+h
+f1 =@fun1
+xx[j]=x[j]-h
+f2 =@fun1
+ret = (f1+f2-2*f0)/h^2
+return ret
+</code>
+</gretl-function>
+<sample-script>
+## after ols
+include margeff_el.gfn
+nulldata 500
+
+
+# generate data
+series x1 = normal(1,1)
+series x2 = normal(1,1)
+series x3 = normal(1,1)
+series x4 = normal(1,1)
+series x5 = normal(1,1)
+
+series eps = normal(0,1)
+series y = x1+x2+x3+x4+x5+x1^2+x1*x2+x1*x3\
+  +x1*x4+x1*x5+x2^2+x2*x3+x2*x4+x2*x5+x3^2+x3*x4\
+  +x3*x5+x4^2+x4*x5+x5^2+eps
+
+# forming lists of independent variables
+list x = 0 x1 x2 x3 x4 x5
+list xbig = square(x-0,1)
+
+# regression with full set
+# of the second order terms
+ols y x xbig
+
+# making model formula
+fla = make_formula0 (varname($xlist))
+fla
+
+# elasticities
+b40 = elast(fla,&quot;&quot;,meanc({x-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_elast (&amp;b40)
+
+# b41 and b400 are obtained using numeric second derivatives
+# while b41 and b401 are based on fjack only
+# you can test the performance of
+# help fucnction computing second derivatives
+
+b41 = elast(fla,&quot;@^1&quot;,meanc({x-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_elast (&amp;b41)
+
+
+b400 = margeff(fla,&quot;&quot;,meanc({x-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_margeff (&amp;b400)
+
+b401 = margeff(fla,&quot;@^1&quot;,meanc({x-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_margeff (&amp;b401)
+
+# computing marginal effects with respect to
+# terms is very simple:
+fla402 = strsub(varname($xlist),&quot;,&quot;,&quot; &quot;)
+b402 = margeff(fla402,&quot;&quot;,meanc({$xlist-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_margeff (&amp;b402)
+
+
+# You can use the following shortcut,
+# the names of variables in this case will be v1, v2, ...
+b403 = margeff(&quot;&quot;,&quot;&quot;,meanc({$xlist-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_margeff (&amp;b403)
+
+b404 = elast(&quot;&quot;,&quot;&quot;,meanc({$xlist-0}),$coeff,$vcv,&quot;&quot;,{0})
+print_elast (&amp;b404)
+
+
+## after a glm (poisson)
+
+open greene22_2
+list X = 0 Z1 Z2 Z3
+
+poisson Y X
+list X0 = X - 0
+mmm = meanc({X0})
+
+bp21 = elast(&quot;0 Z1 Z2 Z3&quot;,&quot;exp(@)&quot;,mmm,$coeff,$vcv,&quot;&quot;,{1})
+print_elast(&amp;bp21)
+
+bp22 = margeff(&quot;0 Z1 Z2 Z3&quot;,&quot;exp(@)&quot;,mmm,$coeff,$vcv,&quot;&quot;,{1})
+print_margeff(&amp;bp22)
+
+eval predict_y(&quot;0 Z1 Z2 Z3&quot;,&quot;exp(@)&quot;,mmm,$coeff,$vcv,&quot;&quot;)
+
+## after nls
+
+open greene11_3.gdt
+
+ols C 0 Y
+scalar a = $coeff(0)
+scalar b = $coeff(Y)
+scalar g = 1.0
+
+nls C = a + b * Y^g
+   params a b g
+end nls --vcv
+
+b11 = elast(&quot;a + b * Y^g&quot;,&quot;nls&quot;,{mean(Y)},$coeff,$vcv,&quot;a b g&quot;,{0})
+b110 = margeff(&quot;a + b * Y^g&quot;,&quot;nls&quot;,{mean(Y)},$coeff,$vcv,&quot;a b g&quot;,{0})
+print_elast (&amp;b11)
+print_margeff (&amp;b110)
+
+eval predict_y(&quot;a + b * Y^g&quot;,&quot;nls&quot;,{mean(Y)},$coeff,$vcv,&quot;a b g&quot;)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

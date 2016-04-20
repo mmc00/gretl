@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="gnuplot_piechart" ID="1414071493" no-data-ok="true" minver="1.9.92">
+<author>Ignacio Diaz-Emparanza</author>
+<version>1.0</version>
+<date>2014-10-23</date>
+<description>A simple 2D pie chart</description>
+<label>Pie chart</label>
+<menu-attachment>MAINWIN/View/GraphVars</menu-attachment>
+<help>
+A function for making a pie chart. With the values ​​of a variable and a label for every value, this function prepares a file with instructions to be sent to Gnuplot (the program which gretl uses for making graphics). This file is saved in the 'dotdir' Gretl directory. Then, the file is executed by Gnuplot and the graph is presented in a popup window.
+
+This package has a unique function with four parameters:
+
+A: An N x 1 matrix (where N is the number of observations)(N&lt;11)
+S: a string (consisting of N labels, separated by spaces), 
+radius: a scalar, which determines the radius of the circle,
+distance: a scalar, which determines where the labels are placed
+
+An image of 640x480 pixels is created. The radius is a value in the range [0,1] which is measured according to the total width of the image. In tests it has been found that suitable values ​​may be between 0.2 and 0.35. Labels are placed at an intermediate angle of each piece. The parameter 'dist' determines the distance from the origin. dist = 1 indicates that the labels will be placed right on the edge of the circle. In our tests, values ​​between 1.1 and 1.5 have been quite adequate.
+</help>
+<gretl-function name="gnuplot_piechart" type="string">
+ <params count="4">
+  <param name="A" type="matrix"/>
+  <param name="S" type="string"/>
+  <param name="radius" type="scalar" default="0.3"/>
+  <param name="dist" type="scalar" default="1.2"/>
+ </params>
+<code>scalar nA = rows(A)
+if nA &gt; 10
+  funcerr &quot;Too many values. You'd better use another type of chart&quot;
+endif
+if cols(A) &gt; 1
+  funcerr &quot;The input matrix should be N x 1&quot;
+endif
+string fname = ($windows==0) ? sprintf(&quot;@dotdir/%d.plt&quot;, floor(randgen1(u,1000,9999))) : sprintf(&quot;@dotdir\\%d.plt&quot;, floor(randgen1(u,1000,9999)))
+matrix A = seq(1,nA)'~A/sumc(A)
+matrix A = mreverse(msortby(A,2))
+matrix inter=zeros(nA,2)
+loop i=1..nA --quiet
+  scalar io = A[i,1]
+  string s$i=strsplit(S, io)
+  scalar v$i=A[i,1]
+  matrix inter[$i,] = (i==1)? { 0, A[i,2] } : { inter[i-1,2], inter[i-1,2]+A[i,2] }
+endloop
+matrix inter2 = inter*360
+set echo off
+set messages off
+outfile &quot;@fname&quot; --write
+print &quot;reset&quot;
+printf &quot;b=%g; B=0.5; h=1.5*b*%g\n&quot;, radius, dist
+print &quot;unset border; unset tics; unset key&quot;
+print &quot;set angles degrees; set yrange [0:1]; set size ratio 1.0; set style fill solid 1.0 border -1&quot;
+loop for (j=1;j&lt;=nA;j++) --quiet
+  printf &quot;set obj %d circle arc [%g:%g] fc lt %d\n&quot;, j, inter2[j,1], inter2[j,2], j
+  printf &quot;set obj %d circle at screen B,B size screen b front\n&quot;, j
+endloop
+print &quot;set angles radians&quot;
+d=inter[1,2]
+printf &quot;set label \&quot;%s\&quot; at graph B+cos(%f*pi)*h, graph B+sin(%f*pi)*h center front\n&quot;, s1, d, d
+printf &quot;set label \&quot;%.1f%%\&quot; at graph B+cos(%f*pi)*b, graph B+sin(%f*pi)*b center front tc rgb \&quot;white\&quot;\n&quot;, A[1,2]*100, d, d
+loop for (j=2;j&lt;=nA;j++) --quiet
+  d1=inter[j,1]*2
+  dm2=A[j,2]
+  printf &quot;set label \&quot;%s\&quot; at graph B+cos((%f+%f)*pi)*h, graph B+sin((%f+%f)*pi)*h center front\n&quot;, s$j, d1, dm2, d1, dm2
+  printf &quot;set label \&quot;%.1f%%\&quot; at graph B+cos((%f+%f)*pi)*b, graph B+sin((%f+%f)*pi)*b center front tc rgb \&quot;white\&quot;\n&quot;, A[j,2]*100, d1, dm2, d1, dm2
+endloop
+print &quot;plot 2&quot;
+outfile --close
+set force_decpoint on
+gnuplot --input=&quot;@fname&quot; --output=display
+return fname
+</code>
+</gretl-function>
+<sample-script>
+include gnuplot_piechart.gfn
+nulldata 8
+#Results of election for European Parliament 2014
+matrix A = {221; 191; 70;  67; 52; 50; 48; 52}
+string S = &quot;EPP PASD ECR ALDE EUL-NGL Greens-EFA EFDD NI&quot;
+string pie1 = gnuplot_piechart(A, S, 0.3, 1.15) 
+print &quot;@pie1&quot;
+quit
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

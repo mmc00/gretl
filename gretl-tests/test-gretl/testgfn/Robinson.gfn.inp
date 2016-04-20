@@ -1,0 +1,7 @@
+include ./Robinson.gfn
+open greene5_1.gdt
+series Y = realgdp
+series c = realcons
+series i = realinvs
+scalar h=0.654
+Robinson(Y,c,i,h)

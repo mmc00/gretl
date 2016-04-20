@@ -1,0 +1,8 @@
+include ./moran.gfn
+
+open http://www.ecn.wfu.edu/pub/gretldata/columbusswm.gdt
+matrix W = { dataset } 
+matrix WS = W ./ sumr(W) # row-standardize matrix
+open http://www.ecn.wfu.edu/pub/gretldata/columbusdata.gdt --preserve
+
+moran(crime,WS)

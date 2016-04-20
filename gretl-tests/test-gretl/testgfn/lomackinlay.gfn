@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="lomackinlay" ID="1427126717" needs-time-series-data="true" minver="1.8.4">
+<author email="cottrell@wfu.edu">Allin Cottrell</author>
+<version>1.1</version>
+<date>2009-08-19</date>
+<description>Lo-MacKinlay variance ratio test</description>
+<help>
+Variance-Ratio test for the null hypothesis that a time series
+follows a random walk.  See A. Lo and A. C. MacKinlay,
+&quot;Stock Market Prices do not Follow Random Walks: Evidence from
+a Simple Specification Test&quot;, Review of Financial Studies, 1988.
+
+The first parameter, y, is the series to examine.  It should be
+given in (probably log) level form.
+
+The second parameter, q, is the desired order of differencing for 
+the variance comparison.  Typical values are 2, 4, 8 or 16. This
+parameter has a minimum of 2, and that is also the default value.
+</help>
+<gretl-function name="lomackinlay" type="void">
+ <params count="2">
+  <param name="y" type="series"/>
+  <param name="q" type="scalar" min="2" default="2"/>
+ </params>
+<code>series ydiff = diff(y)
+scalar T = sum(ok(ydiff))
+scalar rem = T % q
+if rem &gt; 0
+  smpl ; -rem
+  T -= rem
+endif
+scalar muhat = mean(ydiff)
+series cdiff2 = (ydiff - muhat)^2
+scalar Scdiff2 = sum(cdiff2)
+scalar s2 = Scdiff2 / (T - 1)
+series qdiff2 = (y - y(-q) - q * muhat)^2
+# note: using df correction
+scalar m = q * (T - q + 1) * (1 - q/T)
+scalar s2q = sum(qdiff2) / m
+scalar R = s2q / s2
+scalar M = R - 1
+scalar V = 2 * (2 * q - 1) * (q - 1) / (3 * q)
+scalar SE = sqrt(V / T)
+scalar Z0 = M / SE
+printf &quot;Lo-MacKinlay test, q = %d, T = %d\n\n&quot;, q, T
+printf &quot;Variance estimate from first differences = %.5g\n&quot;, s2
+printf &quot;Variance estimate from q-th differences = %.5g\n&quot;, s2q
+printf &quot;Variance Ratio: R = %.5g / %.5g = %g\n&quot;, s2q, s2, R
+printf &quot;M(q) = R - 1 = %.5g\n\n&quot;, M
+printf &quot;Standard error of M under homoskedasticity = %.5g\n&quot;, SE
+printf &quot;Test statistic: z = %.5g / %.5g = %.5g\n&quot;, M, SE, Z0
+printf &quot;Two-tailed p-value = %.5g\n\n&quot;, 2 * pvalue(z, abs(Z0))
+# robust variant of the test
+V = 0
+scalar q1 = q - 1
+scalar X = Scdiff2^2
+loop i=1..q1 --quiet
+  scalar deltaj = sum(cdiff2 * cdiff2(-$i)) / X
+  V += (2 * (q - $i) / q)^2 * deltaj
+endloop
+SE = sqrt(V)
+scalar Z1 = M / SE
+printf &quot;Robust estimate of s.e. of M = %.5g\n&quot;, SE
+printf &quot;Robust test statistic: z = %.5g / %.5g = %.5g\n&quot;, M, SE, Z1
+printf &quot;Two-tailed p-value = %.5g\n\n&quot;, 2 * pvalue(z, abs(Z1))
+</code>
+</gretl-function>
+<sample-script>
+include lomackinlay.gfn
+open data9-7
+lomackinlay(QNC, 4)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="Robinson" ID="1377734619" minver="1.8.4">
+<author>Uriel Rodriguez Ramires</author>
+<version>1.0</version>
+<date>2013-08-28</date>
+<description>Semiparametric Regression</description>
+<help>
+--------------------------------------------------------------------------
+Econometric Semiparametric
+Uriel Rodríguez Ramirez, Universidad de Guanajuato.
+urieleconometria@hotmail.com 
+--------------------------------------------------------------------------
+
+This program shows the partial linear regression method estimated by the method of Robinson, the model can be expressed as follows:
+
+			        Y=BX+g(Z)+U
+
+where the function g (.) takes into account the nonlinearities, the variable Z is a state variable, this can be determined by economic theory.
+</help>
+<gretl-function name="Robinson" type="void">
+ <params count="4">
+  <param name="y" type="series">
+<description>dependent variable</description>
+  </param>
+  <param name="x" type="series">
+<description>independents variables</description>
+  </param>
+  <param name="z" type="series">
+<description>state variable</description>
+  </param>
+  <param name="h" type="scalar">
+<description>bandwith</description>
+  </param>
+ </params>
+<code>if h=0
+  scalar h = $nobs^(-0.2)
+endif
+series m1 = nadarwat(y, z, h)
+series m2 = nadarwat(x, z, h)
+ols m1 m2
+e=$uhat
+yh=$yhat
+n=$nobs
+genr time
+series m3 = nadarwat(e, z, h)
+yha=yh+m3
+gnuplot y yha x --output=display --with-lines=yha
+
+</code>
+</gretl-function>
+<sample-script>
+include Robinson.gfn
+open greene5_1.gdt
+series Y = realgdp
+series c = realcons
+series i = realinvs
+scalar h=0.654
+Robinson(Y,c,i,h)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

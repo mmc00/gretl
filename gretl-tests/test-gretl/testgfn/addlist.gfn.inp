@@ -1,0 +1,10 @@
+include ./addlist.gfn
+open data4-10
+list l1 = const CATHOL INCOME
+list l2 = PUPIL WHITE ADMEXP REV MEMNEA COLLEGE
+# use AIC
+list final = addlist(ENROLL, l1, l2, 1)
+list final print
+# use BIC
+final = addlist(ENROLL, l1, l2, 2)
+list final print

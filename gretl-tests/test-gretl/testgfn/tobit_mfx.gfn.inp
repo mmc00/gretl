@@ -1,0 +1,34 @@
+include ./tobit_mfx.gfn
+# for script to run
+# an user should install sample
+# data for  Introductory Econometrics by J. M. Wooldridge
+open wooldridge/affairs.gdt -q
+list X = const male age yrsmarr relig occup ratemarr
+
+## Marginal effects at means of the dasta
+# for Tobit I
+bundle b1 = tobit_mfx(naffairs,X)
+tobit_mfx_print(&b1)
+
+# for orbitrary left censoring
+bundle b2 = tobit_mfx(naffairs,X,1)
+tobit_mfx_print(&b2)
+
+# for arbitrary right censoring
+bundle b3 = tobit_mfx(naffairs,X,NA,4)
+tobit_mfx_print(&b3)
+
+
+# for double censoring
+bundle b4= tobit_mfx(naffairs,X,0,4)
+tobit_mfx_print(&b4)
+
+
+# tobit_dp_dx gives me at arbitrary point
+tobit naffairs X
+matrix Xm = {X}
+# means of the data, but age is set to 30
+means = meanc(Xm)
+means[3] = 30
+
+eval tobit_dp_dx($coeff,X,means,$sigma)

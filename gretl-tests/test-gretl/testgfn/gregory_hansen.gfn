@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="gregory_hansen" ID="1384980204" needs-time-series-data="true" minver="1.9.12">
+<author>Artur Tarassow</author>
+<version>0.6</version>
+<date>2014-11-08</date>
+<description>Residual-based tests for cointegration in models with regime shifts</description>
+<help>
+&quot;Residual-based tests for cointegration in models
+   with regime shifts&quot;, Journal of Econometrics (1996)
+   by Allan W. Gregory and Bruce E. Hansen
+   URL: http://www.ssc.wisc.edu/~bhansen/papers/joe_96.html
+
+   B. Hansen's original GAUSS code was translated by:
+   Artur Tarassow
+   Department of Socio-Economics
+   University of Hamburg (GER)
+   artur.tarassow@wiso.uni-hamburg.de      
+
+
+   Function main
+   #	FORMAT: call  main(y, x, model, choice, k)
+   #	INPUT:      y - matrix of depend variable
+   #		x 		- data matrix for independent variables (first row is first observation)
+   #		model 	- choice for model
+   #					=2  C
+   #					=3  C/T
+   #					=4  C/S
+   #		choice - only in ADF test
+   #					=1  pre-specified AR lag
+   #					=2  AIC-chosen AR lag
+   #					=3  BIC-chosen AR lag
+   #					=4  downward-t-chosen AR lag
+   #		k - maximum lag for ADF test
+   
+   #	OUTPUT: print automatically Za*, breakpoint for Za*, Zt*, breakpoint for Zt*, ADF*, breakpoint for ADF* and AR lag chosen for ADF*
+   #	EXTERNAL PROCEDURES: adf,  phillips
+   #	NB: Constant included in regression
+   
+
+   Bundle output:
+   adft		: ADF* test statistics
+   za		: Za test statistics   
+   zt		: Zt test statistics
+   
+   critadf	: Critical values for ADF*	# note: only for up to 4 regressors available
+   critzt	: Critical values for Zt	# note: only for up to 4 regressors available
+   critza	: Critical values for Za	# note: only for up to 4 regressors available
+         
+   bpadf 	: Breakpoint ADF* test
+   bpza		: Breakpoint Za test
+   bpzt		: Breakpoint Zt test
+   
+   adflag	: Determined lag length of the ADF* test
+   
+   tsadf	: Vector of estimated ADF* test stats over the trimmed sample
+   tsza 	: Vector of estimated Za test stats over the trimmed sample
+   tszt 	: Vector of estimated Zt test stats over the trimmed sample
+
+   
+   CHANGELOG:
+   0.6 (Nov. 2014)
+   - minor changes
+   - changed example using original data used by Gregory and Hansen
+</help>
+<gretl-function name="adftest" type="matrix">
+ <params count="4">
+  <param name="y" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="kmax" type="scalar"/>
+  <param name="choice" type="scalar"/>
+ </params>
+<code>
+# compute ADF
+scalar n=rows(y)
+
+bundle olsb = estim(y,x)
+#matrix b = olsb.b
+matrix e = olsb.e
+#scalar sig2 = olsb.sig2
+#matrix se = olsb.se
+matrix de=e[2:n]-e[1:n-1] 		# difference of residuals
+
+scalar ic=0
+scalar k=kmax
+matrix temp1 = zeros(kmax+1,1)
+matrix temp2 = zeros(kmax+1,1)
+loop while k&gt;=0 -q
+  yde = de[1+k:n-1]
+  n1 = rows(yde)
+  #  set up matrix for independent variable(lagged residuals)  #
+  xe=e[k+1:n-1]
+  scalar j=1
+  loop while j &lt;= k -q
+    xe = xe ~ de[k+1-j:n-1-j]
+    j=j+1
+  endloop
+  bundle olsb = estim(yde,xe)
+  matrix b = olsb.b
+  matrix e1 = olsb.e
+  scalar sig2 = olsb.sig2
+  matrix se = olsb.se
+  
+  if choice==1  # K is pre-specified
+    temp1[k+1] = -1000   # set a random negative constant #
+    temp2[k+1]=b[1]/se[1]
+    break
+  elif choice==2  # K is determined by AIC #
+    aic=ln(e1'e1/n1)+2*(k+2)/n1
+    ic=aic
+  elif choice==3  # K is determined by BIC #
+    bic=ln(e1'e1/n1)+(k+2)*ln(n1)/n1
+    ic=bic
+  elif choice==4 # K is determined by downward t #
+    if abs(b[k+1]/se[k+1]) &gt;= 1.96 || k==0
+      temp1[k+1]=-1000    # set a random negative constant #
+      temp2[k+1]=b[1]/se[1]
+      break
+    endif
+  endif
+  temp1[k+1]=ic
+  temp2[k+1]=b[1]/se[1]
+  k=k-1
+endloop
+
+matrix lag=iminc(temp1)
+matrix tstat=temp2[lag]
+matrix OUT = tstat ~ (lag-1)
+return OUT
+</code>
+</gretl-function>
+<gretl-function name="critza" type="matrix">
+ <params count="2">
+  <param name="m" type="scalar">
+<description># of regressors</description>
+  </param>
+  <param name="model" type="scalar">
+<description>1:C, 2:C/T, 3:C/S</description>
+  </param>
+ </params>
+<code>
+matrix RET = {}
+if model == 2
+  # Critical values
+  matrix CRIT_C = { -50.07 , -45.01 , -40.48 , -36.19 ; -57.01 , -51.41 , -46.98 , -42.49 ; -63.64 , -57.96 , -53.58 , -48.65 ; -70.18 , -64.41 , -59.40 , -54.38 }
+  matrix RET = CRIT_C[m,]
+elif model == 3
+  matrix CRIT_CT = { -57.28 , -52.09 , -47.96 , -43.22 ; -64.77 , -58.57 , -53.92 , -48.94 ; -70.27 , -64.26 , -59.76 , -54.94 ; -76.95 , -70.45 , -65.44 , -60.12 }
+  matrix RET = CRIT_CT[m,]
+elif model == 4
+  matrix CRIT_CS = { -57.17 , -51.32 , -47.04 , -41.85 ; -68.21 , -63.28 , -58.33 , -52.85 ; -80.15 , -73.91 , -68.94 , -63.42 ; -90.35 , -84.00 , -78.52 , -72.56 }
+  matrix RET = CRIT_CS[m,]
+endif
+
+colnames(RET, &quot;CV1 CV25 CV5 CV10&quot;)
+return RET
+</code>
+</gretl-function>
+<gretl-function name="critadfzt" type="matrix">
+ <params count="2">
+  <param name="m" type="scalar">
+<description># of regressors</description>
+  </param>
+  <param name="model" type="scalar">
+<description>2:C, 3:C/T, 4:C/S</description>
+  </param>
+ </params>
+<code>
+matrix RET = {}
+if model == 2
+  # Critical values
+  matrix CRIT_C = { -5.13 , -4.83 , -4.61 , -4.34 ; -5.44 , -5.16 , -4.92 , -4.69 ; -5.77 , -5.50 , -5.28 , -5.02 ; -6.05 , -5.80 , -5.56 , -5.31 }
+  matrix RET = CRIT_C[m,]
+elif model == 3
+  matrix CRIT_CT = { -5.45 , -5.21 , -4.99 , -4.72 ; -5.80 , -5.51 , -5.29 , -5.03 ; -6.05 , -5.79 , -5.57 , -5.33 ; -6.36 , -6.07 , -5.83 , -5.59 }
+  matrix RET = CRIT_CT[m,]
+elif model == 4
+  matrix CRIT_CS = { -5.47 , -5.19 , -4.95 , -4.68 ; -5.97 , -5.73 , -5.50 , -5.23 ; -6.51 , -6.23 , -6.00 , -5.75 ; -6.92 , -6.64 , -6.41 , -6.17 }
+  RET = CRIT_CS[m,]
+endif
+
+colnames(RET, &quot;CV1 CV25 CV5 CV10&quot;)
+return RET
+</code>
+</gretl-function>
+<gretl-function name="estim" type="bundle">
+ <params count="2">
+  <param name="y" type="matrix"/>
+  <param name="x" type="matrix"/>
+ </params>
+<code>bundle bund = null
+
+m = invpd(x'*x)
+b = mols(y,x)
+bund.b = b
+e = y - x*b
+sig2=(e'e)/(rows(y)-cols(x))
+se = sqrt(diag(m)*sig2)
+
+bund.e = e
+bund.sig2 = sig2
+bund.se = se
+
+return bund
+</code>
+</gretl-function>
+<gretl-function name="phillips" type="matrix">
+ <params count="2">
+  <param name="y" type="matrix"/>
+  <param name="x" type="matrix"/>
+ </params>
+<code>scalar n=rows(y)
+
+#  OLS regression
+matrix b = mols(y,x,null, null)
+matrix e = y - x*b
+
+#  OLS regression on residuals
+matrix be = e[2:n]\e[1:n-1]
+matrix ue = e[2:n] - e[1:n-1]*be
+
+# calculate bandwidth number
+scalar nu = rows(ue)
+matrix bu=ue[2:nu]\ue[1:nu-1]
+matrix uu=ue[2:nu]-ue[1:nu-1].*bu
+matrix su=meanc(uu.^2)
+scalar a2=(4*bu^2*su/(1-bu)^8)/(su/(1-bu)^4)
+scalar bandwidth=1.3221*((a2*nu)^0.2)
+
+scalar m = bandwidth
+scalar j=1
+scalar lemda=0
+loop while j&lt;=m -q
+  matrix gama=ue[1:nu-j]'ue[j+1:nu]/nu
+  scalar c = j/m
+  scalar w=(75/(6*pi*c)^2)*(sin(1.2*pi*c)/(1.2*pi*c)-cos(1.2*pi*c))
+  scalar lemda = lemda + w*gama
+  j = j + 1
+endloop
+
+# calculate Za and Zt for each t
+scalar p=sumc(e[1:n-1].*e[2:n]-lemda)/sumc(e[1:n-1].^2)
+matrix za = n*(p-1)
+matrix sigma2 = 2*lemda+ue'ue/nu
+s = sigma2/(e[1:n-1]'e[1:n-1])
+matrix zt=(p-1)/sqrt(s)
+
+OUT = za ~ zt
+return OUT
+</code>
+</gretl-function>
+<gretl-function name="main" type="bundle">
+ <params count="5">
+  <param name="y" type="matrix"/>
+  <param name="x" type="matrix"/>
+  <param name="model" type="int"/>
+  <param name="choice" type="int"/>
+  <param name="k" type="int"/>
+ </params>
+<code>
+bundle cbreak
+
+scalar n = rows(y)
+scalar begin=round(0.15*n)
+scalar final=round(0.85*n)
+matrix temp1=zeros((final-begin+1),1)
+temp2 = temp1
+temp3 = temp1
+temp4 = temp1
+scalar t = begin
+
+loop while t&lt;=final -q
+  matrix dummy = zeros(t,1) | ones((n-t),1)
+  # adjust regressors for different models
+  if model==3			# C/T
+    matrix x1 = ones(n,1) ~ dummy ~ seq(1,n)' ~ x
+  elif model==4		# C/S
+    matrix x1 = ones(n,1) ~ dummy ~ x ~ dummy.*x
+  elif model==2		# C
+    matrix x1 = ones(n,1) ~ dummy ~ x
+  endif
+  
+  # computer ADF for each t
+  mtmp = adftest(y,x1,k,choice)
+  temp1[t-begin+1] = mtmp[1]		# teststat
+  temp2[t-begin+1] = mtmp[2]		# lag-order of ADF test
+  
+  # compute Za or Zt for each t
+  mtmp = phillips(y,x1)
+  temp3[t-begin+1] = mtmp[1]
+  temp4[t-begin+1] = mtmp[2]
+  t=t+1
+endloop
+
+#  ADF test
+scalar tstat = minc(temp1)
+scalar lag = iminc(temp1)
+scalar breakpta = (lag+begin-1)/n
+scalar lag = temp2[lag]
+scalar mnum = cols(x)
+if mnum &lt;= 4
+  matrix critA = critadfzt(mnum,model)
+endif
+printf &quot;******** ADF Test ***********\n&quot;
+printf &quot;t-statistic = %.3f\n&quot;, tstat
+printf &quot;AR lag = %d\n&quot;, lag
+printf &quot;break point (ADF) = %.2f\n&quot;, breakpta
+if mnum &lt;= 4
+  printf &quot;Critical values (ADF): \n&quot;
+  printf &quot;CV 0.01 = %6.3f \n&quot;, critA[1]
+  printf &quot;CV 0.025 = %6.3f \n&quot;, critA[2]
+  printf &quot;CV 0.05 = %6.3f \n&quot;, critA[3]
+  printf &quot;CV 0.10 = %6.3f\n&quot;, critA[4]
+endif
+printf &quot;\n&quot;
+
+#  Phillips test
+scalar za = minc(temp3)
+scalar breakpt1 = (iminc(temp3)+begin-1)/n
+scalar zt = minc(temp4)
+scalar breakpt2 = (iminc(temp4)+begin-1)/n
+if mnum &lt;= 4
+  matrix critB = critza(mnum,model)
+endif
+printf &quot;******** Phillips Test ********\n&quot;
+printf &quot;Zt =            %.3f\n&quot;, zt
+printf &quot;breakpoint (Zt) =  %.2f\n&quot;, breakpt2
+if mnum &lt;= 4
+  printf &quot;Critical values (Zt): \n&quot;
+  printf &quot;CV 0.01 = %6.3f \n&quot;, critA[1]
+  printf &quot;CV 0.025 = %6.3f \n&quot;, critA[2]
+  printf &quot;CV 0.05 = %6.3f \n&quot;, critA[3]
+  printf &quot;CV 0.10 = %6.3f\n&quot;, critA[4]
+endif
+printf &quot;\n&quot;
+printf &quot;Za =              %.3f\n&quot;, za
+printf &quot;breakpoint(Za) = %.2f\n&quot;, breakpt1
+if mnum &lt;= 4
+  printf &quot;Critical values (Za): \n&quot;
+  printf &quot;CV 0.01 = %6.3f \n&quot;, critB[1]
+  printf &quot;CV 0.025 = %6.3f \n&quot;, critB[2]
+  printf &quot;CV 0.05 = %6.3f \n&quot;, critB[3]
+  printf &quot;CV 0.10 = %6.3f\n&quot;, critB[4]
+endif
+printf &quot;\n&quot;
+
+# Assemble bundle
+cbreak.adft = tstat
+cbreak.adflag = lag
+cbreak.bpadf = breakpta
+cbreak.tsadf = temp1
+cbreak.zt = zt
+cbreak.bpzt = breakpt2
+cbreak.tszt = temp4
+cbreak.za = za
+cbreak.bpza = breakpt1
+cbreak.tsza = temp3
+cbreak.critadf = critA
+cbreak.critzt = critA
+cbreak.critzt = critB
+
+# Plot
+matrix mplot = temp1 ~ temp3 ~ temp4
+colnames(mplot, &quot;ADF* Za Zt&quot;)
+string DET = &quot;&quot;
+if choice==2
+  DET = &quot;C&quot;
+elif choice==3
+  DET = &quot;C/T&quot;
+else
+  DET = &quot;C/S&quot;
+endif
+
+return cbreak
+</code>
+</gretl-function>
+<sample-script>
+#################
+#	 EXAMPLE: &quot;Residual-based tests for cointegration in models with regime shifts&quot;
+#    by Allan W. Gregory and Bruce E. Hansen	#
+#################
+set echo off
+set messages off
+include gregory_hansen.gfn
+
+open http://www.wiso.uni-hamburg.de/fileadmin/sozialoekonomie/vwl/fritsche/Tarassow/joe96_data.csv
+rename xx3 ynr			# Net National Product, Billions of 82$
+rename xx2 pp			# Implicit Price Deflator, PI
+rename xx1 m1			# m1/p - M1, Billions of $
+rename xx4 sr			# 3 Month T-Bills
+
+series md = log(m1)
+series ynr = log(ynr)
+
+smpl 1960:1 1990:4		# Sample selected in the original article
+
+matrix y = { md }	# Endogeneous
+matrix x = { ynr } ~ { sr }	# Exogenous
+
+# Setup; main(y,x,model,choice,k)
+
+scalar model = 4		# Select break-type: 2=C, 3=C/T, 4=C/S
+# CHOICE only ADF*-test
+# =1  pre-specified AR lag
+# =2  AIC-chosen AR lag
+# =3  BIC-chosen AR lag
+# =4  downward-t-chosen AR lag
+scalar choice = 2		# only for ADF*-test relevant
+scalar k = 6			# maximum lag for ADF test
+greghans = main(y,x,model,choice,k)
+
+# Plot regime shift
+matrix mplot = greghans.tsadf ~ greghans.tsza ~ greghans.tszt
+colnames(mplot, &quot;adf* z_a z_t date&quot;)
+gnuplot 1 2 3 --matrix=mplot --time-series --with-lp --output=display \
+  { set term png font 'Helvetica,13' ; \
+  set title &quot;Regime shifts with ADF*, Za and Zt&quot; ; \
+  set key bottom left ; }
+# Conventional ADF Test
+coint k md ynr sr --test-down --skip-df
+coint k md ynr sr --ct --test-down --skip-df
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

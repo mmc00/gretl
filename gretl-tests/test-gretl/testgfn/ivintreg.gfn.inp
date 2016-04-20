@@ -1,0 +1,35 @@
+include ./ivintreg.gfn
+/*
+Example file for ivintreg: we use the Mroz(1987) dataset
+to estimate a wage equation for women on the exactly observed 
+log wage; then, we pretend we only observe the log wage in classes
+and re-estimate the wage equation by IV interval regression.
+*/
+
+set echo off
+set messages off
+open mroz87.gdt --quiet
+
+series lwage = ln(WW)
+
+list Y = WE            # endogenous regressors
+list X = const WA AX   # exogenous regressors
+list Z = WFED WMED CIT # instruments
+
+tsls lwage X Y ; X Z
+
+# ---- now construct the interval variables -------------------
+
+lw_inf = lwage < -1.5 ? NA : floor(lwage - 0.5) + 0.5
+lw_sup = lwage > 2.5 ? NA : ceil(lwage - 0.5) + 0.5
+
+# ---- load the function package ------------------------------
+
+
+# ----- perform estimation ------------------------------------
+
+bundle IVint_2s = ivintreg(lw_inf, lw_sup, Y, X, Z, 1)
+bundle IVint_ml = ivintreg(lw_inf, lw_sup, Y, X, Z, 2)
+
+ivintreg_print(&IVint_2s)
+ivintreg_print(&IVint_ml)

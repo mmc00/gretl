@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="heckprobit" ID="1432217793" minver="1.10.0">
+<author email="c.pigini@gmail.com">Claudia Pigini</author>
+<version>0.1</version>
+<date>2015-05-12</date>
+<description>Probit model with sample selection</description>
+<label>Probit with sample selection</label>
+<menu-attachment>MAINWIN/Model/LimdepModels/probit</menu-attachment>
+<help>
+heckprobit: probit model with sample selection
+
+Output   :  bundle
+
+Arguments:  series depvar,
+			list indepvars_maineq, 
+		    series selvar, 
+			list indepvars_seleq,
+            scalar vcv (optional),
+	        scalar ver (optional),
+	        scalar new (optional)
+
+
+scalar vcv: 0 Hessian (default), 1 Asymptotic, 2 Sandwich 
+scalar ver: 0 No output, 1 Output from function (default), 2 Verbose MLE 
+scalar new: 1 Newton-Raphson (default), 0 BFGS
+
+Estimates a probit model with sample selection (Van de Ven and Van Pragg, 1981). 
+
+The argument list starts with the dependent variables of the main equation (depvar), followed by the list 
+of  regressors (indepvars_maineq), then the dependent variable of the selection equation (selvar) needs to 
+be supplied, followed by its on list of regressors (indepvars_seleq). 
+
+By default, standard errors are computed using a numerical approximation to the Hessian at convergence, the 
+printed estimation output is provided by the public function heckprobit_printout, and the log-likelihood is
+maximized by Newton-Raphson. Default settings can be changed by including the optional scalars as function
+arguments.
+
+Examples:
+
+- Default settings
+
+&lt;hansl&gt;
+b = heckprobit(y,X,s,Z)
+&lt;/hansl&gt; 
+
+- Robust standard errors, verbose mle, optimizer bfgs
+
+&lt;hansl&gt;
+b = heckprobit(y,X,s,Z,2,2,0)
+&lt;/hansl&gt; 
+
+
+Alternatively to the wrapper function heckprobit, the public functions heckprobit_setup, heckprobit_setoption,
+heckprobit_estimate, and heckprobit_printout can be used
+
+Examples:
+
+- Default settings
+
+&lt;hansl&gt;
+b = heckprobit_setup(y,X,s,Z)
+heckprobit_estimate(&amp;b)
+heckprobit_printout(&amp;b)
+&lt;/hansl&gt;
+
+If desired, the user can supply a pointer to a vector of initial values for the estimation as an additional 
+argument to heckprobit_estimate, for example:
+
+&lt;hansl&gt;
+par = muniform(nelem(X)+nelem(Z)+1,1)
+b = heckprobit_estimate(&amp;b, &amp;par)
+&lt;/hansl&gt;
+
+
+- Robust standard errors, verbose mle, optimizer bfgs
+
+&lt;hansl&gt;
+b = heckprobit_setup(y,X,s,Z)
+foo = heckprobit_setoption(&amp;b, &quot;vcvtype&quot;, 2)
+moo = heckprobit_setoption(&amp;b, &quot;verbose&quot;, 2)
+bar = heckprobit_setoption(&amp;b, &quot;newton&quot; , 0)
+
+heckprobit_estimate(&amp;b)
+heckprobit_printout(&amp;b)
+&lt;/hansl&gt;
+
+When using public functions, options have to be supplied via 
+
+heckprobit_setoption
+
+Output    :  scalar
+Arguments : *bundle b, string opt, scalar value  
+
+The function returns a scalar equal to 0 if the option has been successfully set. Otherwise an integer is 
+returned and the associated warning is printed. The string identifies the option for the type of estimated 
+covariance matrix to be computed, verbosity level, and optimizer. The associated scalars are described above,
+vcv, ver and new, respectively.
+
+
+Van de Ven, W. P. M. M., and B. M. S. Van Pragg, (1981): &quot;The demand for deductibles in private health insurance: 
+A probit model with sample selection&quot; Journal of Econometrics 17: 229–252
+</help>
+<gretl-function name="heckprobit_setup" type="bundle">
+ <params count="4">
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+  <param name="s" type="series"/>
+  <param name="Z" type="list"/>
+ </params>
+<code>bundle ret
+ret[&quot;n&quot;] = $nobs
+# eliminate missing values
+smpl ok(s) &amp;&amp; ok(X) &amp;&amp; ok(Z) --restrict
+# check y and s are dummy variables
+check = isdummy(y)
+if check == 0
+  printf &quot;%s is not a dummy variable; aborting\n&quot;, argname(y)
+  ret[&quot;err&quot;] = 48
+  return ret
+else
+  ret[&quot;err&quot;] = 0
+endif
+check = isdummy(s)
+if check == 0
+  printf &quot;%s is not a dummy variable; aborting\n&quot;, argname(s)
+  ret[&quot;err&quot;] = 48
+  return ret
+else
+  ret[&quot;err&quot;] = 0
+endif
+ret[&quot;cens&quot;] = $nobs - sum(ok(y))
+# main equation
+ret[&quot;depvar&quot;] = y
+ret[&quot;depvarname&quot;] = argname(y)
+ret[&quot;k&quot;] = nelem(X)
+ret[&quot;mX&quot;] = { X }
+ret[&quot;mXnames&quot;] = varname(X)
+# main equation
+ret[&quot;selvar&quot;] = s
+ret[&quot;selvarname&quot;] = argname(s)
+ret[&quot;h&quot;] = nelem(Z)
+ret[&quot;mZ&quot;] = { Z }
+ret[&quot;mZnames&quot;] = varname(Z)
+ret[&quot;npar&quot;] = ret[&quot;k&quot;] + ret[&quot;h&quot;] + 1
+# Default settings
+ret[&quot;vcvtype&quot;]    = 0 # default value for vcvtype
+ret[&quot;verbose&quot;]    = 1 # default output from print-out function
+ret[&quot;newton&quot;]  = 1 # default optimizer newton-raphson
+# Initial values:
+# Very unexpensive computationally and handier to compute here
+# while I can still work with lists
+theta = heckprobit_init(y,X,s,Z)
+ret[&quot;theta&quot;] = theta
+# Still, I will leave you the chance to supply
+# your own initial values later
+return ret
+</code>
+</gretl-function>
+<gretl-function name="heckprobit_setoption" type="scalar">
+ <params count="3">
+  <param name="b" type="bundleref"/>
+  <param name="opt" type="string"/>
+  <param name="value" type="scalar"/>
+ </params>
+<code>err = 0
+if opt==&quot;verbose&quot;
+  if value&gt;2
+    err = 1
+  else
+    b[&quot;verbose&quot;] = value
+  endif
+elif opt==&quot;vcvtype&quot;
+  if value&gt;2
+    err = 2
+  else
+    b[&quot;vcvtype&quot;] = value
+  endif
+elif opt==&quot;newton&quot;
+  if value&gt; 1
+    err = 2
+  else
+    b[&quot;newton&quot;] = value
+  endif
+else
+  err = 3
+endif
+if err&gt;0
+  printf &quot;Warning in heckprobit_setoption\n&quot;
+  if err &lt; 3
+    printf &quot;Illegal value %s = %d\n&quot;, opt, value
+  else
+    printf &quot;%s unrecognised option\n&quot;, opt
+  endif
+endif
+return err
+</code>
+</gretl-function>
+<gretl-function name="heckprobit_estimate" type="void">
+ <params count="2">
+  <param name="b" type="bundleref"/>
+  <param name="theta" type="matrixref" optional="true"/>
+ </params>
+<code>matrix X = b[&quot;mX&quot;]
+matrix Z = b[&quot;mZ&quot;]
+m = b[&quot;npar&quot;]
+series y = b[&quot;depvar&quot;]
+series s = b[&quot;selvar&quot;]
+if isnull(theta)
+  matrix theta = b[&quot;theta&quot;]
+endif
+verbose = b[&quot;verbose&quot;]
+vcvtype = b[&quot;vcvtype&quot;]
+if (verbose==2)
+  setopt mle --verbose
+else
+  setopt mle --quiet
+endif
+if (vcvtype==0)
+  setopt mle --hessian
+elif (vcvtype==2)
+  setopt mle --robust
+endif
+new = b[&quot;newton&quot;]
+if new
+  set optimizer newton
+endif
+series ll = NA
+mle ll = heckprobit_loglik(y,X,s,Z,theta)
+  deriv theta = heckprobit_score(y,X,s,Z,theta)
+end mle
+b[&quot;theta&quot;] = $coeff
+b[&quot;vcv&quot;] = $vcv
+b[&quot;stderr&quot;] = $stderr
+b[&quot;rho&quot;] = tanh($coeff[m])
+b[&quot;rho_stderr&quot;] = 1/cosh($coeff[m])^2 * $stderr[m]
+b[&quot;T&quot;] = $T
+b[&quot;t1&quot;] = $t1
+b[&quot;t2&quot;] = $t2
+#b[&quot;SCORE&quot;] = SCORE
+b[&quot;llt&quot;] = ll
+b[&quot;lnl1&quot;] = $lnl
+b[&quot;infocrit&quot;] = $aic ~ $bic ~ $hqc
+</code>
+</gretl-function>
+<gretl-function name="heckprobit_printout" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix theta = b[&quot;theta&quot;]
+matrix stderr = b[&quot;stderr&quot;]
+k = b[&quot;k&quot;]
+h = b[&quot;h&quot;]
+Xnames = b[&quot;mXnames&quot;]
+Znames = b[&quot;mZnames&quot;]
+printf &quot;Probit model with sample selection\n&quot;
+vcv = b[&quot;vcvtype&quot;]
+if (vcv==1)
+  printf &quot;Standard errors based on OPG\n&quot;
+elif (vcv==2)
+  printf &quot;Robust standard errors\n&quot;
+else
+  printf &quot;Standard errors based on Hessian\n&quot;
+endif
+tmp = theta[1:k] ~ stderr[1:k]
+printf &quot;Main equation\n&quot;
+printf &quot;Dependent variable %s \n&quot;, b[&quot;depvarname&quot;]
+modprint tmp Xnames
+tmp = theta[k+1:k+h] ~ stderr[k+1:k+h]
+printf &quot;Selection equation\n&quot;
+printf &quot;Dependent variable %s \n&quot;, b[&quot;selvarname&quot;]
+modprint tmp Znames
+tmp = b[&quot;rho&quot;] ~ b[&quot;rho_stderr&quot;]
+string rho = &quot;rho&quot;
+printf &quot;Correlation coefficient\n&quot;
+modprint tmp rho
+printf &quot;Censored observations %d (%g%%)\n\n&quot;, b[&quot;cens&quot;], b[&quot;cens&quot;]/b[&quot;n&quot;]
+infocrit = b[&quot;infocrit&quot;]
+printf &quot;Log-likelihood   %14.4f  Akaike criterion %12.4f\n&quot;, b[&quot;lnl1&quot;], infocrit[1]
+printf &quot;Schwarz criterion  %12.4f  Hannan-Quinn   %14.4f\n&quot;, infocrit[2], infocrit[3]
+</code>
+</gretl-function>
+<gretl-function name="heckprobit" type="bundle" pkg-role="gui-main">
+ <params count="7">
+  <param name="y" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="X" type="list">
+<description>List of main equation explanatory variables</description>
+  </param>
+  <param name="s" type="series">
+<description>Selection variable</description>
+  </param>
+  <param name="Z" type="list">
+<description>List of selection equation explanatory variables</description>
+  </param>
+  <param name="vcv" type="int" min="0" max="2" default="0">
+<description>Covariance matrix</description>
+  </param>
+  <param name="v" type="int" min="0" max="2" default="1">
+<description>Verbosity level</description>
+  </param>
+  <param name="optim" type="int" min="0" max="1" default="1"/>
+ </params>
+<code># bundle setup (with default options)
+b = heckprobit_setup(y,X,s,Z)
+# Re-save dependent variable names (otherwise substituted)
+b[&quot;depvarname&quot;] = argname(y)
+b[&quot;selvarname&quot;] = argname(s)
+# set user supplied options
+err = heckprobit_setoption(&amp;b, &quot;verbose&quot;, v)
+err = heckprobit_setoption(&amp;b, &quot;vcvtype&quot;, vcv)
+err = heckprobit_setoption(&amp;b, &quot;newton&quot;, optim)
+heckprobit_estimate(&amp;b)
+if v&gt;0
+  heckprobit_printout(&amp;b)
+endif
+return b
+</code>
+</gretl-function>
+<gretl-function name="heckprobit_init" type="matrix" private="1">
+ <params count="4">
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+  <param name="s" type="series"/>
+  <param name="Z" type="list"/>
+ </params>
+<code>probit s Z -q
+g = $coeff
+u = $uhat
+probit y X u -q
+b = $coeff[1:nelem(X)]
+rho = $coeff[nelem(X)+1]
+matrix theta = b | g | atanh(rho)
+return theta
+</code>
+</gretl-function>
+<gretl-function name="heckprobit_loglik" type="series" private="1">
+ <params count="5">
+  <param name="y" type="series"/>
+  <param name="X" type="matrix"/>
+  <param name="s" type="series"/>
+  <param name="Z" type="matrix"/>
+  <param name="theta" type="matrix"/>
+ </params>
+<code>k = cols(X)
+h = cols(Z)
+a = theta[k+h+1]
+series ndx = X * theta[1:k]
+series ndz = Z * theta[k+1:k+h]
+series P = s ? (y ? cdf(D, tanh(a), ndx, ndz) :   cdf(D, -tanh(a), -ndx, ndz)) : cnorm(-ndz)
+return ln(P)
+</code>
+</gretl-function>
+<gretl-function name="heckprobit_score" type="matrix" private="1">
+ <params count="5">
+  <param name="y" type="series"/>
+  <param name="X" type="matrix"/>
+  <param name="s" type="series"/>
+  <param name="Z" type="matrix"/>
+  <param name="theta" type="matrix"/>
+ </params>
+<code>k = cols(X)
+h = cols(Z)
+a = theta[k+h+1]
+rho = tanh(a)
+series ndx = X * theta[1:k]
+series ndx = y ? ndx : -ndx
+series ndz = Z * theta[k+1:k+h]
+ca = cosh(a)
+sa = sinh(a)
+series P = s ? (y ? cdf(D, rho, ndx, ndz) :   cdf(D, -rho, ndx, ndz)) : cnorm(-ndz)
+ssa = y ? sa : -sa
+u_zx = (ca*ndz - ssa*ndx)
+u_xz = (ca*ndx - ssa*ndz)
+series dbeta = dnorm(ndx)*cnorm(u_zx) / P
+series dbeta = s ? (y ? dbeta : -dbeta) : 0
+series dgamma = s ? dnorm(ndz)*cnorm(u_xz) / P : -dnorm(ndz)/P
+series da = (1/ca)*dnorm(ndz)*dnorm(u_xz) / P
+series da = s ? (y ? da : -da) : 0
+matrix scbeta = dbeta .* X
+matrix scgamma = dgamma .* Z
+matrix sca = { da }
+matrix G = scbeta~scgamma~sca
+flush
+return G
+</code>
+</gretl-function>
+<sample-script>
+set echo off
+set messages off
+
+/*
+   Sample script for the heckprobit function
+   (probit with sample selection).
+   
+   In order to illustrate the function, we use the &quot;mroz87&quot;
+   dataset and we set up a model for the variable &quot;Is the woman's
+   wage higher than her husband's?&quot;, where clearly the sample 
+   selection is determined by labor force participation.
+*/
+
+open mroz87.gdt
+
+series WA2 = WA^2
+series KIDS = (KL6+K618)&gt;0
+series AX2 = AX * AX
+series AGEDIF = HA - WA
+
+# the dependent variable
+depvar = LFP ? (WW &gt; HW) : NA
+
+# ESTIMATE HECKPROBIT 
+
+include heckprobit.gfn
+
+# main eq. explanatory variables
+list X = const AX AX2 WE HE AGEDIF CIT 
+
+# selection eq. explanatory variables
+list Z = const WA WA2 KIDS WE
+# USING THE WRAPPER FUNCTION
+
+# default settings
+mod1 = heckprobit(depvar,X,LFP,Z)
+
+# options: robust standard errors, verbose mle, optimizer bfgs
+mod2 = heckprobit(depvar,X,LFP,Z,2,2,0)
+
+# USING PUBLIC FUNCTIONS
+
+# default settings
+mod3 = heckprobit_setup(depvar,X,LFP,Z)
+heckprobit_estimate(&amp;mod3)
+heckprobit_printout(&amp;mod3)
+
+# options: robust standard errors, verbose mle, optimizer bfgs
+
+heckprobit_setoption(&amp;mod3, &quot;vcvtype&quot;, 2)
+heckprobit_setoption(&amp;mod3, &quot;verbose&quot;, 2)
+heckprobit_setoption(&amp;mod3, &quot;newton&quot; , 0)
+
+heckprobit_estimate(&amp;mod3)
+heckprobit_printout(&amp;mod3)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

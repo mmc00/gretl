@@ -1,0 +1,14 @@
+include ./Winters/Winters.gfn
+open data9-3.gdt
+
+# formu=1, delta1=0.5, delta2=0.1, delta3=0.7, intra-sample predictions=4
+bundle BW=Winters(reskwh, 1, 0.5, 0.1, 0.7, 4)
+series reskwh_W_mul = BW.reskwh_W_mul
+
+#Adding space for post-sample predictions
+dataset addobs +4
+#
+#Running the function with formulation additive (formu=0) and default values:
+#delta1=0.3, delta2=0.1, delta3=0.7
+bundle BW2=Winters(reskwh, 0)
+series reskwh_W_add = BW2.reskwh_W_add

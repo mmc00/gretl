@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="bandplot" ID="1439319853" model-requirement="ols" minver="1.10.1">
+<author email="cottrell@wfu.edu">Allin Cottrell</author>
+<version>0.3</version>
+<date>2015-07-11</date>
+<description>Confidence band plot</description>
+<label>Confidence band plot</label>
+<menu-attachment>MODELWIN/Graphs</menu-attachment>
+<help filename="bandplot.help">
+The function bandplot() produces a confidence band plot for
+the effect of a specific regressor, in the context of a multiple
+regression estimated via OLS. You need to select a particular
+independent variable to be examined and a confidence level.
+
+The parameters of bandplot() are noted below. The associated
+&quot;accessor&quot; that can be used to get the relevant variable after
+estimation is shown in parentheses where applicable. Note,
+hwever, the the matrices should be passed in &quot;pointer&quot; form.
+
+function bandplot (const matrix *b, 
+                   const matrix *V,
+                   const matrix *X,
+                   int xcol,
+                   scalar conf,
+                   int df,
+                   string yname)
+
+b      coefficient matrix ($coeff)
+V      covariance matrix ($vcv)
+X      matrix of regressors ({$xlist})
+xcol   the 1-based index of the column of X containing the 
+       variable that should be placed on the x-axis
+conf   the desired confidence level, as a decimal fraction
+df     the degrees of freedom of the model ($df)
+yname  the name of the dependent variable ($depvar)
+</help>
+<gui-help filename="bpgui.help">
+This function displays a confidence band for the effect of 
+a specific regressor, in the context of a multiple regression 
+estimated via OLS. You need to select a particular independent
+variable to be examined and a confidence level.
+
+The fitted line shows the prediction for the dependent variable
+as the value of the selected regressor is varied, while holding
+all other regressors at their mean values.
+
+The confidence band takes the form of the fitted value plus and
+minus a certain number of standard errors, the number depending
+on the chosen level of confidence. The standard error in
+question is that for the prediction of the conditional mean of 
+the dependent variable: it incorporates uncertainty over the
+true parameter values, and its size varies with the distance of
+the value of the chosen regressor from its sample mean.
+</gui-help>
+<gretl-function name="GUI_bandplot" type="void" no-print="1" pkg-role="gui-main">
+ <params count="2">
+  <param name="xvar" type="int" default="-999">
+<description>x-axis variable</description>
+  </param>
+  <param name="conf" type="scalar" min="0.5" max="0.99" default="0.95" step="0.01">
+<description>confidence level</description>
+  </param>
+ </params>
+<code>matrix b = $coeff
+matrix V = $vcv
+list Xlist = $xlist
+matrix X = {Xlist}
+colnames(X, Xlist)
+bandplot(&amp;b, &amp;V, &amp;X, xvar, conf, $df, $depvar)
+</code>
+</gretl-function>
+<gretl-function name="bandplot" type="void" no-print="1">
+ <params count="7">
+  <param name="b" type="matrixref" const="true"/>
+  <param name="V" type="matrixref" const="true"/>
+  <param name="X" type="matrixref" const="true"/>
+  <param name="xcol" type="int" min="1"/>
+  <param name="conf" type="scalar" min="0.1" max="0.999" default="0.95"/>
+  <param name="df" type="int" min="1"/>
+  <param name="yname" type="string"/>
+ </params>
+<code># the variable we want on the x-axis
+matrix xref = X[,xcol]
+# and its max and min
+scalar xmax = maxc(xref)
+scalar xmin = minc(xref)
+# set the other regressors to their means (this could
+# be made configurable)
+matrix Xm = meanc(X)
+# the number of points to evaluate
+scalar n = 50
+# the number of standard errors +/-
+scalar nse = critical(t, df, (1 - conf) / 2)
+# the matrix for plotting
+matrix plotmat = zeros(n, 4)
+scalar xi = xmin
+scalar xstep = (xmax - xmin) / n
+scalar yhat se
+loop i=1..n --quiet
+  Xm[xcol] = xi
+  # find the fitted value and its standard error
+  yhat =  Xm * b
+  se = sqrt(qform(Xm, V))
+  # fill the current row of the plot matrix
+  plotmat[i,1] = yhat
+  plotmat[i,2] = yhat - nse * se
+  plotmat[i,3] = yhat + nse * se
+  plotmat[i,4] = xi
+  xi += xstep
+endloop
+string title
+title = sprintf(&quot;%s: fitted values with %g%% confidence band for mean&quot;, yname, 100 * conf)
+string xname = colname(X, xcol)
+plot plotmat
+  options with-lines fit=none
+  literal set linetype 3 lc rgb &quot;#0000ff&quot;
+  literal set nokey
+  printf &quot;set title \&quot;%s\&quot;&quot;, title
+  printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+end plot --output=display
+</code>
+</gretl-function>
+<sample-script filename="enroll.inp">
+include bandplot.gfn
+open data4-10.gdt
+
+list Xlist = 0 CATHOL PUPIL WHITE
+ols ENROLL Xlist
+matrix b = $coeff
+matrix V = $vcv
+matrix X = {Xlist}
+colnames(X, Xlist)
+scalar xvar = 2 # the variable (X column) to put on the x-axis
+
+bandplot(&amp;b, &amp;V, &amp;X, xvar, 0.95, $df, $depvar)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

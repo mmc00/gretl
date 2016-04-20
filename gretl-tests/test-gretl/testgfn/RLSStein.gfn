@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="RLSStein" ID="1373394226" no-data-ok="true" minver="1.8.4">
+<author>Lee C. Adkins</author>
+<version>0.92</version>
+<date>2013-07-09</date>
+<description>RLS Stein-rule estimator</description>
+<label>RLS Stein-Rule</label>
+<menu-attachment>MAINWIN/Model/LinearModels</menu-attachment>
+<help>
+Inputs:
+ y = a series containing the dependent variable,
+ EXOG = a list of regressors,
+ R = a JxK matrix of constants for linear hypotheses RB=r,
+ r = a Jx1 vector of constants 
+ Loss = desired loss function (0=&quot;SEL&quot; or 1=&quot;MSEP&quot;),
+ verb = Verbosity {0=no print, 1=print},
+ B = number of bootstrap replications
+
+The function computes a positive-part Restricted Least Squares (RLS) Stein-rule estimator.  Judge and Bock (1981) discuss a family of Stein-rule estimators that dominates the MLE of $\beta$ in the classical normal linear regression model under weighted quadratic loss.   The estimator is a linear combination of the unrestricted and restricted maximum likelihood estimators, where the degree of shrinkage is controlled using a conventional Wald test of the implied hypothesis restrictions.  The function computes the positive-part version of the RLS Stein-rule that allows users to specify the desired linear restrictions on the model and to select a loss function under which to compute the RLS-Stein rule.  If desired, the user may compute bootstrap standard errors for the estimator.
+
+Based on the restrictions, the model's regressors, and the selected loss function, a minimax shrinkage constant is computed (amax). The value that minimizes quadratic risk under the chosen loss function is amax/2 and this is what the constant is set to in the package.
+
+The bootstrap standard errors are computed by resampling, with replacement, from the Stein-rule residuals.  As Adkins (1992) notes, this is likely to get one closer to the actual standard errors than other resampling schemes.
+
+The number of restrictions, J, must exceed 2 in order to satisfy the minimaxity condition.  If the user specifies fewer than 3, an error is returned.  Also, badly conditioned data can lead to zero shrinkage under squared error loss (Loss=SEL).  Hence, a warning will be produced when the data are highly collinear, causing the minimaxity constant amax&lt;0 or when its eigenvalues are complex.
+
+See: http://learneconometrics.com/pdf/gretlStein/RLSStein.pdf for additional details.
+
+References:
+
+Judge, G. G. and M. E. Bock (1981), The Statistical Implications of Pre-Test and Stein-Rule Estimators in Econometrics, North-Holland Publishing Co., Amsterdam.
+
+Adkins, Lee C. (1992), Finite sample moments of a bootstrap estimator of the James-Stein rule, Econometric Reviews 11, pp. 173-193.
+
+Adkins, Lee C. and R. Carter Hill (1990b), The RLS positive-part Stein estimator, American Journal of Agricultural Economics 72, pp. 727-730.
+</help>
+<gretl-function name="RLSStein" type="bundle">
+ <params count="7">
+  <param name="y" type="series">
+<description>Dependent Variable</description>
+  </param>
+  <param name="EXOG" type="list">
+<description>Regressors</description>
+  </param>
+  <param name="R" type="matrix">
+<description>R for linear hypotheses RB=r</description>
+  </param>
+  <param name="r" type="matrix">
+<description>r for linear hypotheses</description>
+  </param>
+  <param name="Loss" type="int" min="0" max="1" default="1">
+<description>Loss function</description>
+<labels count="2">
+"SEL" "MSEP" </labels>
+  </param>
+  <param name="verb" type="int" min="0" max="1" default="1">
+<description>Verbosity</description>
+<labels count="2">
+"no print" "print" </labels>
+  </param>
+  <param name="B" type="int" default="100">
+<description>Bootstrap Replications</description>
+  </param>
+ </params>
+<code># first thing, drop all obs with missing values anywhere
+list EVERYTHING = y || EXOG
+smpl EVERYTHING --no-missing
+bundle rr = Stein_setup(y, EXOG, R, r, Loss, verb, B)
+scalar err = aw(&amp;rr)
+scalar err = Stein_estimate(&amp;rr)
+scalar err = bootStein(&amp;rr)
+if verb == 1
+  Stein_printout(&amp;rr)
+endif
+return rr
+</code>
+</gretl-function>
+<gretl-function name="Stein_setup" type="bundle" private="1">
+ <params count="7">
+  <param name="y" type="series"/>
+  <param name="EXOG" type="list"/>
+  <param name="R" type="matrix"/>
+  <param name="r" type="matrix"/>
+  <param name="Loss" type="int"/>
+  <param name="verb" type="int"/>
+  <param name="B" type="int"/>
+ </params>
+<code>bundle ret
+matrix ym = { y }
+ret[&quot;B&quot;]=B                # number of Bootstrap samples
+ret[&quot;mENDOG&quot;] = ym
+ret[&quot;depvar&quot;] = y
+ret[&quot;depvarname&quot;] = argname(y)
+ret[&quot;verbosity&quot;]=verb
+matrix K = nelem(EXOG)
+matrix N = $nobs
+matrix J = rows(R)
+matrix X = { EXOG }
+ret[&quot;mk&quot;] = K
+ret[&quot;mEXOG&quot;] = X
+ret[&quot;mEXOGnames&quot;] = varname(EXOG)
+ret[&quot;Rmat&quot;] = R
+ret[&quot;J&quot;] = J
+ret[&quot;r&quot;] = r
+ret[&quot;Loss&quot;]=Loss
+ret[&quot;N&quot;]=N
+# OLS/MLE
+matrix cov_u res_u
+matrix b = mols(ym, X, &amp;res_u, &amp;cov_u)
+matrix sig2 = (res_u'*res_u)/(N-K)
+ret[&quot;unrest&quot;]=b
+ret[&quot;unrest_se&quot;]=sqrt(diag(cov_u))
+ret[&quot;sig2&quot;]=sig2
+# RLS
+matrix res cov_r
+matrix bstar=mrls(ym, X, R, r, &amp;res, &amp;cov_r)
+matrix se = sqrt(diag(sig2*cov_r))
+matrix f=(b-bstar)'*X'X*(b-bstar)/(J*sig2)
+ret[&quot;res&quot;]=bstar
+ret[&quot;res_se&quot;]=se
+ret[&quot;u&quot;]=f
+ret[&quot;SR_se&quot;]=zeros(nelem(EXOG),1)
+ret[&quot;complex&quot;]=0
+ret[&quot;collinear&quot;]=0
+return ret
+</code>
+</gretl-function>
+<gretl-function name="Wmat" type="scalar" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix X = b[&quot;mEXOG&quot;]
+scalar Loss = b[&quot;Loss&quot;]
+if Loss == 0
+  matrix W = I(cols(X))
+else
+  matrix W = X'*X
+endif
+b[&quot;mW&quot;] = W
+return 0
+</code>
+</gretl-function>
+<gretl-function name="amax" type="matrix" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix X = b[&quot;mEXOG&quot;]
+scalar J = b[&quot;J&quot;]
+matrix W = b[&quot;mW&quot;]
+matrix R = b[&quot;Rmat&quot;]
+matrix K = b[&quot;mk&quot;]
+matrix Si = inv(X'*X)
+scalar df = rows(X)-cols(X)+2
+scalar a1 = 2/df
+matrix RSiWSiR = qform(R*Si,W)
+matrix RSiR=qform(R,Si)
+matrix A =inv(RSiR)*RSiWSiR
+scalar tA = tr(A)
+matrix mm=eigengen(A,null)
+if cols(mm) &gt; 1
+  b[&quot;complex&quot;] = 1
+  matrix mm=1E10 * ones(cols(X),1)
+else
+  b[&quot;complex&quot;] = 0
+endif
+scalar m = maxc(mm)
+matrix a2 = tr(A)/m - 2
+if (a2&lt;0)
+  b[&quot;collinear&quot;] = 1
+else
+  b[&quot;collinear&quot;] = 0
+endif
+matrix a3 = a1*a2
+b[&quot;max_eigen&quot;]=m
+b[&quot;amax&quot;]=maxc(a3|0)
+return 0
+</code>
+</gretl-function>
+<gretl-function name="aw" type="scalar" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>e1 = Wmat(&amp;b)
+e2 = amax(&amp;b)
+return maxr(e1~e2)
+</code>
+</gretl-function>
+<gretl-function name="Stein_estimate" type="scalar" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code># Check J&gt;2
+if rows(b[&quot;Rmat&quot;]) &lt; 3
+  funcerr number of restriction must exceed 2
+endif
+# collect the constants for the SR
+scalar K = b[&quot;mk&quot;]
+scalar N = b[&quot;N&quot;]
+scalar J = b[&quot;J&quot;]
+scalar a = b[&quot;amax&quot;]/2
+scalar c = a * (N-K)/J
+# positive-part
+scalar F = b[&quot;u&quot;]
+scalar aj=minc((c/F)|1)
+# compute the RLS Stein-rule
+matrix sr=(1-aj)*b[&quot;unrest&quot;]+(aj)*b[&quot;res&quot;]
+b[&quot;Sresidual&quot;]=b[&quot;mENDOG&quot;]-b[&quot;mEXOG&quot;]*sr
+b[&quot;t1&quot;] = $t1
+b[&quot;t2&quot;] = $t2
+b[&quot;c&quot;]=c
+b[&quot;shrinkage&quot;]=aj
+b[&quot;SRCoeff&quot;]=sr
+return 0
+</code>
+</gretl-function>
+<gretl-function name="Stein_printout" type="void" private="1">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>scalar Loss = b[&quot;Loss&quot;]
+printf &quot;Stein-Rule Estimation of a linear regression\n&quot;
+printf &quot;using observations %d-%d\n&quot;, b[&quot;t1&quot;], b[&quot;t2&quot;]
+if Loss == 0
+  print &quot;Squared Error Loss&quot;
+else
+  print &quot;Mean Square Error of Prediction Loss&quot;
+endif
+string depvar = b[&quot;depvarname&quot;]
+printf &quot;Dependent Variable @depvar \n \n&quot;
+mnames = b[&quot;mEXOGnames&quot;]
+matrix M = b[&quot;unrest&quot;] ~ b[&quot;unrest_se&quot;]
+printf &quot;Unrestricted OLS\n&quot;
+modprint M mnames
+matrix M = b[&quot;res&quot;] ~ b[&quot;res_se&quot;]
+printf &quot;Restricted LS\n&quot;
+modprint M mnames
+matrix M = b[&quot;SRCoeff&quot;]~b[&quot;SR_se&quot;]
+string vn = b[&quot;mEXOGnames&quot;]
+colnames(M, &quot;Stein  SE&quot;)
+string vname = strsub(vn, &quot;,&quot;, &quot; &quot;)
+rownames(M,  &quot; @vname  &quot; )
+printf &quot;Stein-Rule estimates\n %10.4f\n&quot;, M
+printf &quot;a=%.4f, c=%.4f, shrinkage is %.4f and F=%.4f\n&quot;,b[&quot;amax&quot;],b[&quot;c&quot;],b[&quot;shrinkage&quot;], b[&quot;u&quot;]
+scalar r1 = b[&quot;complex&quot;]
+if r1 == 1
+  printf &quot;\nThe eigenvalues of inv(R*inv(S)*R')R*inv(S)*W*inv(S)*R') are complex.\n&quot;
+  printf &quot;The maximum root is arbitrarily set to 1E10\n&quot;
+  printf &quot;Consider a different loss function or set of restrictions.\n&quot;
+endif
+scalar r2 = b[&quot;collinear&quot;]
+if r2 == 1
+  printf &quot;\nThe data are highly collinear and no shrinkage\nwill occur under the current loss function.\n\n&quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="bootStein" type="scalar" private="1">
+ <params count="1">
+  <param name="S" type="bundleref"/>
+ </params>
+<code>scalar K = S[&quot;mk&quot;]
+scalar B = S[&quot;B&quot;]
+if B &gt; 1
+  matrix bootmt=zeros(B,K)
+  matrix xm = S[&quot;mEXOG&quot;]
+  matrix yhat=xm*S[&quot;SRCoeff&quot;]
+  matrix ehatStein=S[&quot;mENDOG&quot;]-yhat
+  matrix BigR = S[&quot;Rmat&quot;]
+  matrix Lr = S[&quot;r&quot;]
+  scalar LM = S[&quot;Loss&quot;]
+  list xlist = null
+  loop i = 1..K --quiet
+    series xb_$i =  xm[,i]
+    xlist += xb_$i
+  endloop
+  loop i = 1..B --quiet
+    matrix e=resample(ehatStein).*sqrt(rows(xm)/(rows(xm)-K))
+    matrix ym=yhat+e
+    series ys = ym
+    bundle SB=Stein_setup(ys, xlist, BigR, Lr, LM , 0, 200 )
+    scalar errB = aw(&amp;SB)
+    scalar errB = Stein_estimate(&amp;SB)
+    bootmt[i,]=(SB[&quot;SRCoeff&quot;])'
+  endloop
+  matrix pc=mcov(bootmt)
+  S[&quot;bootCov&quot;]=pc
+  S[&quot;SR_se&quot;]=sqrt(diag(pc))
+else
+  S[&quot;bootCov&quot;]= 0
+  S[&quot;SR_se&quot;]= 0
+endif
+return 0
+</code>
+</gretl-function>
+<sample-script>
+include RLSStein.gfn
+open data4-1
+series sqft = sqft/1000
+square sqft bedrms
+list xlist = const sqft sq_sqft bedrms baths
+matrix Rmat = zeros(4,1)~I(4)
+matrix r = { 350 ; -50 ; 0 ; 0}
+
+Stein = RLSStein(price, xlist, Rmat, r, 1, 1, 200)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

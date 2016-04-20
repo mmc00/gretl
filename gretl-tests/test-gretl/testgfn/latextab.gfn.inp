@@ -1,0 +1,24 @@
+include ./latextab.gfn
+set echo off
+set messages off
+
+open denmark.gdt -q
+# Compute some stats and add to matrix
+matrix mstat = zeros(2,3)
+list ylist = LRM LRY
+list dylist = diff(ylist)
+loop foreach i dylist -q
+    mstat[i,] = min($i)~max($i)~mean($i)
+endloop
+
+# Add some strings
+string cnames = "Variable Min Max Mean"
+colnames(mstat, "@cnames")
+string rnames = strsub(varname(dylist),","," ")
+rnames = strsub(rnames, "_", "\_")
+rownames(mstat, "@rnames")
+string note = "Add a note"
+string caption = "Descriptive Statistics"
+scalar dec = 3
+# Write tex-file
+latextab(mstat, cnames, rnames, "@caption", "", "@note", "@workdir/ltabout.tex", dec)

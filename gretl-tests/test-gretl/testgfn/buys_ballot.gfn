@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="buys_ballot" ID="1323268959" needs-qm-data="true" minver="1.9.92">
+<author email="ignacio.diaz-emparanza@ehu.eus">Ignacio Diaz-emparanza, Riccardo (Jack) Lucchetti</author>
+<version>1.6</version>
+<date>2014-12-03</date>
+<description>Plots for seasonal time series</description>
+<label>Buys-Ballot</label>
+<menu-attachment>MAINWIN/View/GraphVars</menu-attachment>
+<help>
+This package computes and shows the graph of the series across the numbers of the months (or periods in general), which is called a Buys-Ballot plot. By election of the user it computes and displays also the transposed plots, with a series for each different month, across years.
+</help>
+<gretl-function name="buys_ballot" type="matrix">
+ <params count="3">
+  <param name="y" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="trans" type="int" min="0" max="1" default="0">
+<description>Type of plot</description>
+<labels count="2">
+"Buys-Ballot plot" "Subperiods plot" </labels>
+  </param>
+  <param name="outprint" type="bool" default="0">
+<description>Print results</description>
+  </param>
+ </params>
+<code>if ($pd!=4 &amp;&amp; $pd!=12)
+  funcerr &quot;This package is only prepared for quarterly and monthly data.&quot;
+endif
+string sname=argname(y)
+scalar spd=$pd
+smpl --contiguous
+scalar in=$t1-1
+###################################
+# Looking for complete years
+# Searching for the first value of the series which
+# corresponds to the first month/quarter
+scalar prim=0
+loop while (prim==0) --quiet
+  in++
+  scalar prim = ($obsminor[in]==1) ? in : 0
+endloop
+string sprim=obslabel(prim)
+scalar firstyear = $obsmajor[prim]
+scalar lastyear = $obsmajor[$t2]
+####################################
+smpl @sprim $t2
+####
+#Building seasonal dummies
+if $pd!=5 &amp;&amp; $pd!=6 &amp;&amp; $pd!=7 &amp;&amp; $pd!=52
+  series u=$obsminor
+else
+  series u = (time-1)%$pd + 1
+endif
+discrete u
+list DUMs = dummify(u,NA)
+###
+matrix F= { DUMs }
+matrix Y = { y }
+# padding
+padding = rows(Y) % spd
+if padding &gt; 0
+  set warnings off
+  matrix pad = ones(spd - padding, 1) .* NA
+  Y |= pad
+  pad = I(spd)
+  F |= pad[padding+1:,]
+endif
+scalar cF=floor(cols(F))
+matrix YC
+loop i=1..cF --quiet
+  matrix YC=YC~selifr(Y, F[,i])
+endloop
+if (trans==1) #Subperiods plot
+  matrix YB=YC~seq(firstyear,lastyear)'
+  scalar in=$t2-$t1+1
+  if in&lt;spd
+    funcerr &quot;Insufficient observations (at least a complete year is needed)&quot;
+  endif
+  string per = &quot;&quot;
+  if (spd=4)
+    scalar err=colnames(YB,&quot;q1 q2 q3 q4 year&quot;)
+  elif (spd=12)
+    scalar err=colnames(YB,&quot;jan feb mar apr may jun jul aug sep oct nov dec year&quot;)
+  else
+    scalar spd1=$pd
+    loop i=1..spd1 --quiet
+      string per += &quot;per$i &quot;
+    endloop
+    string per += &quot;year&quot;
+    scalar err=colnames(YB, per)
+  endif
+  gnuplot --matrix=YB --output=display --with-lines { set title 'Subperiods evolution plot for series @sname'; }
+else #Buys-Ballot
+  matrix YB=YC'~seq(1, spd)'
+  string anyos
+  loop i=firstyear..lastyear --quiet
+    string anyos += &quot;$i &quot;
+  endloop
+  if spd==4
+    string anyos += &quot;quarter&quot;
+  elif spd==12
+    string anyos += &quot;month&quot;
+  else
+    string anyos += &quot;period&quot;
+  endif
+  scalar err=colnames(YB, &quot;@anyos&quot;)
+  gnuplot --matrix=YB --output=display --with-lines { set title 'Buys-Ballot plot for series @sname'; }
+endif
+if outprint==1
+  YB
+endif
+return YB
+</code>
+</gretl-function>
+<sample-script>
+include buys_ballot.gfn
+open data9-3.gdt
+
+#Plot the serie reskwh across quarters
+matrix mr=buys_ballot(reskwh,1)
+
+#Plot a series for each quarter in Y with the years in X
+matrix mr2=buys_ballot(reskwh,0)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

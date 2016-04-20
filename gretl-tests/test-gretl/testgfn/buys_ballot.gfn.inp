@@ -1,0 +1,8 @@
+include ./buys_ballot.gfn
+open data9-3.gdt
+
+#Plot the serie reskwh across quarters
+matrix mr=buys_ballot(reskwh,1)
+
+#Plot a series for each quarter in Y with the years in X
+matrix mr2=buys_ballot(reskwh,0)

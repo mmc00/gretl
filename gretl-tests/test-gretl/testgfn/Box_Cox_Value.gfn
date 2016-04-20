@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="Box_Cox_Value" ID="1401861739" minver="1.8.4">
+<author>Pedro Isaac Chávez López</author>
+<version>1.01</version>
+<date>2014-05-13</date>
+<description>Obtain the lambda value of a Box-Cox Transformation</description>
+<help>
+--------------------------------------------------------------------------------
+This program computes the Box-Cox Transformation according to the minimum Skewness criteria (the code obtains the value of lambda that minimizes the skewness). 
+When some observations are negative, then we include the parameter lambda2. The latter is equal to the absolute value of the minimum's data plus one.
+---------------------------------------------------------------------------------
+Input:
+
+Variable:    One vector containing the data to be modified by the Box-Cox  
+                   Transformation.
+
+Type of series: The time series may be difference stationary or trend stationary. This function can apply the first difference or filter the deterministic trend component to the variable to obtain a stationary series. The options are:
+                (1)=Stationary,
+                (2)=Difference Stationary, 
+                (3)=Trend Stationary.
+                default: (1)
+
+Interval of lambda1 (-/+): Interval which is considered to find the best   
+                           lambda1 value. The value must be an integer.
+             default: 3
+
+Accuracy:    Chose the accuracy of the grid-algorithm. 
+             Options are:
+             (1)=0.1, (2)=0.01, (3)=0.001
+             default: 2
+
+Figure:      Plots (i) the variable against time and (ii) the Box-Cox transformed variable
+             with the optimal lambda1
+             (if the original variable contains negative values, it shows the 
+             rescaled original value plus lambda2). 
+                       1 -&gt; includes plot
+                       0 -&gt; does not include plot
+              Default: 1
+
+Q-Q Plot:     Shows the Q-Q plot for normality of the transformed variable and for
+              the original variable, respectively.
+                       1 -&gt; includes plot
+                       0 -&gt; does not include plot
+              Default: 1
+-------------------------------------------------------------------------------
+Output: bundle containing:
+
+lambda1 value: Shows the optimum lambda1 value according to the accuracy and  
+               interval input options.
+ 
+skewness:      Shows the skewness of the modified variable with the optimal 
+               lambda1 value.
+-------------------------------------------------------------------------------
+Further details: 
+*The minimum skewness criterion is obtained from:
+Jason W. Osborne (2010), &quot;Improving your data transformations: Applying the Box-Cox transformation&quot;; Practical Assessment, Research &amp; Evaluation; Vol. 15(2).
+*The election of choosing the lambda2 value when not all the data is positive is based on the seminal paper:
+G.E.P. Box, D.R. Cox (1964); &quot;An Analysis of Transformations&quot;; Journal of the Royal Statistical Society; Vol. 26(2).
+-------------------------------------------------------------------------------
+Function written by:
+Pedro Isaac Chávez López
+isaacchavez2006@hotmail.com
+pedro.chavez@alumnos.cide.edu
+-------------------------------------------------------------------------------
+</help>
+<gretl-function name="Box_Cox_Value" type="series">
+ <params count="7">
+  <param name="y" type="series">
+<description>Variable</description>
+  </param>
+  <param name="T_S" type="int" min="1" default="1">
+<description>Type of series: 1=Stationary, 2=Difference Stationary, 3=Trend Stationary</description>
+  </param>
+  <param name="Bound" type="int" min="1" default="3">
+<description>Lambda1 interval (-/+)</description>
+  </param>
+  <param name="Acc_op" type="int" min="1" max="3" default="2">
+<description>Accuracy: 1=0.1, 2=0.01, 3=0.001</description>
+  </param>
+  <param name="Figure" type="bool" default="1">
+<description>Figure?</description>
+  </param>
+  <param name="QQ" type="bool" default="1">
+<description>Q-Q Plot for modified variable?</description>
+  </param>
+  <param name="QQ2" type="bool" default="1">
+<description>Q-Q Plot for original variable?</description>
+  </param>
+ </params>
+<code>smpl y --contiguous
+T = $nobs
+if Acc_op == 1     #fit the accuracy according to the option selected
+  Acc = 10
+elif Acc_op == 2
+  Acc = 100
+elif Acc_op == 3
+  Acc = 1000
+endif
+
+series y_aux = zeros(T,1)
+matrix skew = zeros(2*Bound*Acc+1,1)
+if T_S==2
+  y = diff(y)
+elif T_S==3
+  ols y 0 time --quiet
+  y = $uhat
+endif
+
+i = 0
+if min(y) &gt;= 0       #all values of series y are positive
+  loop for (lambda1 = -Bound; lambda1 &lt;= Bound; lambda1 += 1/Acc) --quiet
+    i = i+1
+    if lambda1 == 0
+      y_aux = log(y)    #first part of Box-Cox Transformation
+    else
+      y_aux = (y^lambda1-1)/lambda1  #Second part of Box-Cox Transformation
+    endif
+    #calculate and save the skewness for every series y transform with lambda1
+    skew[i,1]=skewness(y_aux)
+  endloop
+else
+  lambda2=abs(min(y))+1     #not all the values of y series are positive
+  y=y+lambda2
+  loop for (lambda1 = -Bound; lambda1 &lt;= Bound; lambda1 += 1/Acc) --quiet
+    i = i+1
+    if lambda1 == 0
+      y_aux = log(y) #fist part of the modified Box-Cox Transformation
+    else
+      y_aux = ((y)^lambda1-1)/lambda1 #second part of the modified Box-Cox Transformation
+    endif
+    skew[i,1]=skewness(y_aux)
+  endloop
+endif
+z = iminc(abs(skew))   #get the min skewness (in absoulte value) row of all the y's transformed skewness
+lambda_opt = -Bound+(z-1)/Acc #get lambda1 optimum with the value of z obtained previously
+print &quot;------------------------------------------&quot;
+print &quot;BOX-COX TRANSFORMATION&quot;
+print &quot;Shows best lambda1 value according to  &quot;
+print &quot;minimum skewness criterion                &quot;
+print &quot;------------------------------------------&quot;
+
+printf &quot;The lambda1 value is %.3g\n and the corresponding skewness is %.3g\n&quot;, lambda_opt, min(abs(skew))
+if Figure   #shows the plot with the original y series and the transformed series with the optimum lambda
+  if lambda_opt == 0
+    y_aux = log(y)
+  else
+    y_aux = (y^lambda_opt-1)/lambda_opt
+  endif
+  gnuplot y y_aux --time-series --with-lines
+endif
+if QQ
+  qqplot y_aux  #shows the Q-Q plot for normality
+endif
+if QQ2
+  qqplot y
+endif
+setinfo y_aux -d &quot;series modified by Box-Cox transformation&quot;
+return y_aux
+</code>
+</gretl-function>
+<sample-script>
+include Box_Cox_Value.gfn
+
+open AWM.gdt
+series TRIAL = Box_Cox_Value(CAN,30,2,1,1,1,1)
+#------------------------------------------------
+# &quot;3&quot; accounts for the interval of the lambda value [-3,3]; 
+# &quot;2&quot;  chooses the accurate option ((2)=0.01) for the lambda value; 
+# &quot;1&quot;  chooses the original data series to be transformed; 
+# &quot;1&quot;  the last three options indicate to generate the 3 plots 
+# (gunplot and the QQplots);
+print TRIAL
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

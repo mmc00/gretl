@@ -1,0 +1,399 @@
+=== /home/helio/test-gretl/foreign ===
+output/longley-julia.out vs newout/longley-julia.out:
+10,16c10,16
+<       12.228      8.0224
+<       10.920      7.5300
+<       11.797      7.5697
+<       12.528      8.1421
+<       13.169      8.3801
+<       11.770      7.2368
+<       12.235      8.0333
+---
+>       12.241      8.0218
+>       10.925      7.4109
+>       11.821      7.5518
+>       12.569      8.1276
+>       13.218      8.3765
+>       11.659      7.1809
+>       12.248      8.0333
+19c19
+<       12.092      7.8449
+---
+>       12.097      7.8147
+output/longley-python.out vs newout/longley-python.out:
+10,16c10,16
+<       12.228      12.241
+<       10.920      11.028
+<       11.797      11.796
+<       12.528      12.512
+<       13.169      12.869
+<       11.770      11.735
+<       12.235      12.247
+---
+>       12.241      12.241
+>       10.925      11.028
+>       11.821      11.796
+>       12.569      12.512
+>       13.218      12.869
+>       11.659      11.735
+>       12.248      12.247
+19c19
+<       12.092      12.061
+---
+>       12.097      12.061
+output/longley-stata.out vs newout/longley-stata.out:
+27,88c27
+< 
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (8 vars, 16 obs)
+< 
+< . regress employ prdefl gnp unemp armfrc pop year
+< 
+<       Source |       SS       df       MS              Number of obs =      16
+< -------------+------------------------------           F(  6,     9) =  330.29
+<        Model |   184172402     6  30695400.3           Prob > F      =  0.0000
+<     Residual |  836424.129     9  92936.0144           R-squared     =  0.9955
+< -------------+------------------------------           Adj R-squared =  0.9925
+<        Total |   185008826    15  12333921.7           Root MSE      =  304.85
+< 
+< ------------------------------------------------------------------------------
+<       employ |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<       prdefl |   15.06167   84.91486     0.18   0.863    -177.0291    207.1524
+<          gnp |  -.0358191    .033491    -1.07   0.313     -.111581    .0399428
+<        unemp |  -2.020229   .4883995    -4.14   0.003    -3.125065   -.9153928
+<       armfrc |  -1.033227   .2142741    -4.82   0.001    -1.517948   -.5485049
+<          pop |  -.0511045   .2260731    -0.23   0.826    -.5625173    .4603083
+<         year |   1829.151   455.4785     4.02   0.003     798.7873    2859.515
+<        _cons |   -3482258   890420.3    -3.91   0.004     -5496529    -1467987
+< ------------------------------------------------------------------------------
+< 
+< . matrix b = e(b)
+< 
+< . matrix vcv = e(V)
+< 
+< . gretl_export b "b.mat"
+< 
+< . gretl_export vcv "vcv.mat"
+< 
+< . 
+< end of do-file
+< 
+< Comparison with NIST certified values
+< 
+< Log-relative error (= correct digits): gretl
+< 
+<      coeff    stderr
+<     12.228    11.956
+<     10.920    12.004
+<     11.797    11.940
+<     12.528    11.899
+<     13.169    11.912
+<     11.770    11.907
+<     12.235    11.958
+< 
+< Log-relative error (= correct digits): stata
+< 
+<      coeff    stderr
+<      6.839     7.095
+<      4.873     6.127
+<      5.819     6.243
+<      6.470     6.365
+<      6.742     6.972
+<      5.139     6.248
+<      6.892     7.184
+---
+> Failed to execute child process "stata" (No such file or directory)
+output/octcohere.out vs newout/octcohere.out:
+27a28,35
+> octave exited with status 256
+> stderr:
+> warning: docstring file '/usr/local/share/octave/4.0.1/etc/built-in-docstrings' not found
+> error: package signal is not installed
+> error: called from
+>     load_packages at line 53 column 11
+>     pkg at line 422 column 7
+>     /home/cottrell/.gretl/gretltmp.m at line 2 column 1
+29,33d36
+< ? h = mread("/home/cottrell/.gretl/h.mat")
+< Generated matrix h
+< ? colnames(h, "coherence")
+< ? print h
+< h (65 x 1)
+35,102d37
+<    coherence 
+<      0.31056 
+<      0.30882 
+<      0.30356 
+<      0.29460 
+<      0.28163 
+<      0.26419 
+<      0.24166 
+<      0.21318 
+<      0.17765 
+<      0.13367 
+<     0.079587 
+<     0.013573 
+<    -0.065888 
+<     -0.15889 
+<     -0.26168 
+<     -0.36274 
+<     -0.43922 
+<     -0.46125 
+<     -0.41091 
+<     -0.30147 
+<     -0.16977 
+<    -0.049852 
+<     0.040832 
+<     0.098521 
+<      0.12577 
+<      0.12658 
+<      0.10447 
+<     0.062248 
+<    0.0028016 
+<    -0.069333 
+<     -0.14567 
+<     -0.21170 
+<     -0.24791 
+<     -0.23748 
+<     -0.17811 
+<    -0.085844 
+<     0.014719 
+<      0.10337 
+<      0.16935 
+<      0.20938 
+<      0.22403 
+<      0.21512 
+<      0.18470 
+<      0.13510 
+<     0.069906 
+<   -0.0043344 
+<    -0.076340 
+<     -0.12995 
+<     -0.14825 
+<     -0.12202 
+<    -0.056334 
+<     0.031819 
+<      0.12293 
+<      0.20250 
+<      0.26275 
+<      0.30066 
+<      0.31551 
+<      0.30716 
+<      0.27536 
+<      0.22002 
+<      0.14259 
+<     0.048934 
+<    -0.046986 
+<     -0.12189 
+<     -0.15065 
+< 
+< Done
+output/oxdpd.out vs newout/oxdpd.out:
+84c84
+< DPD package version 1.24, object created on  4-02-2016
+---
+> DPD package version 1.24, object created on 20-04-2016
+127,139c127,139
+<   5.0090e-13 
+<   9.9495e-13 
+<   6.6436e-14 
+<   5.5757e-13 
+<   8.4079e-14 
+<   6.5067e-15 
+<   2.4883e-13 
+<   2.0616e-14 
+<   1.0318e-12 
+<   4.0052e-13 
+<   2.7596e-13 
+<   2.6468e-12 
+<   1.3646e-12 
+---
+>   1.6115e-13 
+>   4.1133e-13 
+>   1.0322e-14 
+>   1.5786e-13 
+>   1.5639e-14 
+>   1.2809e-13 
+>   3.3032e-14 
+>   1.0308e-12 
+>   6.1297e-13 
+>   2.9237e-13 
+>   8.9904e-14 
+>   3.5635e-12 
+>   1.3729e-12 
+output/pancorr.out vs newout/pancorr.out:
+79a80
+> Failed to execute child process "stata" (No such file or directory)
+81,185d81
+< . quietly adopath + "/home/cottrell/.gretl/"
+< 
+< . * load data from gretl
+< . insheet using "stata.csv"
+< (11 vars, 90 obs)
+< 
+< . xtset unit year
+<        panel variable:  unit (strongly balanced)
+<         time variable:  year, 1970 to 1984
+<                 delta:  1 unit
+< 
+< . xtreg l_c l_q l_pf lf, fe
+< 
+< Fixed-effects (within) regression               Number of obs      =        90
+< Group variable: unit                            Number of groups   =         6
+< 
+< R-sq:  within  = 0.9926                         Obs per group: min =        15
+<        between = 0.9856                                        avg =      15.0
+<        overall = 0.9873                                        max =        15
+< 
+<                                                 F(3,81)            =   3604.80
+< corr(u_i, Xb)  = -0.3475                        Prob > F           =    0.0000
+< 
+< ------------------------------------------------------------------------------
+<          l_c |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+< -------------+----------------------------------------------------------------
+<          l_q |   .9192846   .0298901    30.76   0.000     .8598126    .9787565
+<         l_pf |   .4174918   .0151991    27.47   0.000     .3872503    .4477333
+<           lf |  -1.070396     .20169    -5.31   0.000    -1.471696   -.6690963
+<        _cons |   9.713528    .229641    42.30   0.000     9.256614    10.17044
+< -------------+----------------------------------------------------------------
+<      sigma_u |  .13207751
+<      sigma_e |  .06010514
+<          rho |  .82843656   (fraction of variance due to u_i)
+< ------------------------------------------------------------------------------
+< F test that all u_i=0:     F(5, 81) =    57.73               Prob > F = 0.0000
+< 
+< . 
+< end of do-file
+< 
+< ? foreign language=R --send-data
+< ?   library("plm")
+< ?   H <- pdata.frame(gretldata, index = c("unit", "year"))
+< ?   mfe <- plm(l_C ~ l_Q + l_PF + LF, data=H, model="within")
+< ?   summary(mfe)
+< ? end foreign
+< Oneway (individual) effect Within Model
+< 
+< Call:
+< plm(formula = l_C ~ l_Q + l_PF + LF, data = H, model = "within")
+< 
+< Balanced Panel: n=6, T=15, N=90
+< 
+< Residuals :
+<    Min. 1st Qu.  Median 3rd Qu.    Max. 
+< -0.1560 -0.0352 -0.0093  0.0349  0.1660 
+< 
+< Coefficients :
+<       Estimate Std. Error t-value Pr(>|t|)    
+< l_Q   0.919285   0.029890 30.7555  < 2e-16 ***
+< l_PF  0.417492   0.015199 27.4682  < 2e-16 ***
+< LF   -1.070396   0.201690 -5.3071  9.5e-07 ***
+< ---
+< Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+< 
+< Total Sum of Squares:    39.361
+< Residual Sum of Squares: 0.29262
+< R-Squared      :  0.99257 
+<       Adj. R-Squared :  0.89331 
+< F-statistic: 3604.81 on 3 and 81 DF, p-value: < 2.22e-16
+< ? panel l_C 0 X --random
+< 
+< Model 2: Random-effects (GLS), using 90 observations
+< Included 6 cross-sectional units
+< Time-series length = 15
+< Dependent variable: l_C
+< 
+<              coefficient   std. error   t-ratio   p-value 
+<   --------------------------------------------------------
+<   const        9.62791     0.210164     45.81     3.40e-62 ***
+<   l_Q          0.906681    0.0256249    35.38     4.95e-53 ***
+<   l_PF         0.422778    0.0140248    30.15     1.72e-47 ***
+<   LF          -1.06450     0.200070     -5.321    8.10e-07 ***
+< 
+< Mean dependent var   13.36561   S.D. dependent var   1.131971
+< Sum squared resid    1.495397   S.E. of regression   0.131105
+< Log-likelihood       56.67935   Akaike criterion    -105.3587
+< Schwarz criterion   -95.35945   Hannan-Quinn        -101.3264
+< 
+< 'Between' variance = 0.0155972
+< 'Within' variance = 0.00361262
+< theta used for quasi-demeaning = 0.876685
+< corr(y,yhat)^2 = 0.987609
+< 
+< Breusch-Pagan test -
+<   Null hypothesis: Variance of the unit-specific error = 0
+<   Asymptotic test statistic: Chi-square(1) = 334.85
+<   with p-value = 8.44102e-75
+< 
+< Hausman test -
+<   Null hypothesis: GLS estimates are consistent
+<   Asymptotic test statistic: Chi-square(3) = 3.52343
+<   with p-value = 0.317735
+< 
+< Done
+output/Rchoose.out vs newout/Rchoose.out:
+7,9c7,9
+< choose(10, 4)
+< Generated scalar c = 210
+< Done
+---
+> > c = R.choose(
+> Failed to load plugin: /usr/lib/libR.so
+> The symbol 'R.choose' is undefined
+output/Rlm.out vs newout/Rlm.out:
+25,37c26,27
+< ? rb
+< rb (2 x 1)
+< 
+<       52.351 
+<      0.13875 
+< 
+< ? matrix rb = R.ols(2*price, sqft)
+< ? rb
+< rb (2 x 1)
+< 
+<       104.70 
+<      0.27750 
+< 
+---
+> > rb = R.ols(
+> The symbol 'R.ols' is undefined
+output/Rloclev.out vs newout/Rloclev.out:
+55c56,57
+< *** Rlib time = 0.229581
+---
+> 
+> *** Rlib time = 0.356469
+output/Rsink.out vs newout/Rsink.out:
+35c35
+< Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+---
+> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+output/Rskew.out vs newout/Rskew.out:
+29,33c29,33
+< [1] "s=0.01114292962, k=2.816483792\n"
+< wrote /home/cottrell/.gretl/Rstats.mat 
+< wrote /home/cottrell/.gretl/rdata.csv 
+< ? matrix Rstats = mread("Rstats.mat", 1)
+< Generated matrix Rstats
+---
+> R exited with status 256
+> stderr:
+> Error in library(moments) : there is no package called 'moments'
+> Calls: source -> withVisible -> eval -> eval -> library
+> Execution halted
+35,36d34
+< gretl:
+<  0.0111429296234   2.81648379168
+38,45d35
+< 
+< R:
+<  0.0111429296234   2.81648379168
+< 
+< ? eval Gstats - Rstats
+<  -6.5052e-16   3.5527e-15 
+< 
+< Done

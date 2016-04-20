@@ -1,0 +1,50 @@
+include ./BMA/BMA.gfn
+# Usage:
+open greene9_1.gdt
+
+list greene = dataset
+
+BMA_main(greene, 1, 1.5, 0.6, 4, 1, 0, 0, 10000, 10, 1)
+
+# The above example consists of three blocks.
+# The first block is just opening of the so called greene9_1 dataset,
+# which is bundled in every standard gretl installation.
+# This dataset contains cross-sectional data on manufacturing
+# of transportation equipment # presented as Table 9.1 in
+# Greene, Econometric Analysis, 4e}.
+
+# The second block is the definition of the green list which
+# contains all variables available in the greene9_1 dataset.
+# The first variable - valadd - will be the dependent variable.
+
+# The third block contains the definition for Bayesian model
+# averaging analysis: binomial prior, prior average model size
+# set to 1.5 (which means that we have uniform model prior),
+# significance level for the initial model set to 0.6,
+# 4 top ranked models, Benchmark g-prior, without jointness analysis,
+# without out-of-sample predictions, 10000 replications with 10%
+# burn-in draws and basic output (verbosity set to 1).
+
+
+# Suppose we want to run the same analysis but following
+# Occam's razor philosophy. The simplest way is setting the prior
+# average model size to 1. The code would be as follows:
+BMA_main(greene, 1, 1, 0.6, 4, 1, 0, 0, 10000, 10, 1)
+
+# Because in the Occam's razor philosophy we penalize large
+# models assigning high probability for small ones, better distribution
+# then binomial is binomial-beta (which is right skewed). In order to
+# use binomial-beta distribution we have to set prior to 2.
+# The code would be as follows:
+BMA_main(greene, 2, 1, 0.6, 4, 1, 0, 0, 10000, 10, 1)
+
+# Suppose we want to set g-prior to Risk Inflation Criterion (g-RIC),
+# uniform model prior, do jointness analysis with Ley-Steel Measure,
+# compute forecasts for 3 observations and print additional information
+# in results (verbosity set to 2). The code would be as follows:
+BMA_main(greene, 1, 1.5, 0.6, 4, 3, 1, 3, 10000, 10, 2)
+
+# Finally, if we want to save results of the above Bayesian model
+# averaging analysis in the matrix results_mat,
+# the code should be as follows:
+results_mat = BMA_main(greene, 1, 1.5, 0.6, 4, 3, 1, 3, 10000, 10, 2)

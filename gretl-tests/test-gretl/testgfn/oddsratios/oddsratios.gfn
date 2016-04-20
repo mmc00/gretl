@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="oddsratios" ID="1427052677" no-data-ok="true" minver="1.9.5" lives-in-subdir="true">
+<author email="r.lucchetti@univpm.it">Riccardo &quot;Jack&quot; Lucchetti and Allin Cottrell</author>
+<version>1.0</version>
+<date>2015-03-22</date>
+<description>Computation of odds ratios for logit models</description>
+<label>Logit odds ratios</label>
+<menu-attachment>MODELWIN/Analysis</menu-attachment>
+<help>
+pdfdoc:oddsratios.pdf
+</help>
+<gretl-function name="oddsratios_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix O = b[&quot;or&quot;]
+string yname = b[&quot;depvar&quot;]
+strings cnames = b[&quot;vnames&quot;]
+scalar alpha = b[&quot;alpha&quot;]
+scalar k = rows(O)
+printf &quot;\nOdds-ratios for %s:\n\n&quot;, yname
+printf &quot;====================================================\n&quot;
+printf &quot;        Variable  Odds-ratio    %4.1f%% conf. interval\n&quot;, 100*(1-alpha)
+printf &quot;====================================================\n&quot;
+loop i=1..k --quiet
+  printf &quot;%16s  %10.4f     [%8.3f,%8.3f]\n&quot;, cnames[i], O[i,1], O[i,2], O[i,3]
+endloop
+printf &quot;====================================================\n&quot;
+</code>
+</gretl-function>
+<gretl-function name="oddsratios" type="bundle">
+ <params count="6">
+  <param name="cf" type="matrix"/>
+  <param name="se" type="matrix"/>
+  <param name="alpha" type="scalar" min="0.005" max="0.6" default="0.05"/>
+  <param name="depvar" type="string"/>
+  <param name="XL" type="list"/>
+  <param name="silent" type="bool" default="0"/>
+ </params>
+<code>scalar nx = nelem(XL)
+if inlist(XL, 0)
+  XL -= 0
+  matrix or = oddsratios_matrix(cf[2:nx], se[2:nx], alpha)
+else
+  matrix or = oddsratios_matrix(cf[1:nx], se[1:nx], alpha)
+endif
+bundle b
+b[&quot;depvar&quot;] = depvar
+b[&quot;vnames&quot;] = strsplit(strsub(varname(XL), &quot;,&quot;, &quot; &quot;))
+b[&quot;alpha&quot;] = alpha
+b[&quot;or&quot;] = or
+if !silent
+  oddsratios_print(&amp;b)
+endif
+return b
+</code>
+</gretl-function>
+<gretl-function name="oddsratios_matrix" type="matrix">
+ <params count="3">
+  <param name="cf" type="matrix"/>
+  <param name="se" type="matrix"/>
+  <param name="alpha" type="scalar" min="0.005" max="0.6" default="0.05"/>
+ </params>
+<code># we return a 3-columns matrix here: the odds ratios proper
+# and next the corresponding lower and upper bound
+scalar k = rows(cf)
+if rows(se) != k
+  funcerr &quot;cf and se are not conformable&quot;
+endif
+if cols(cf) != 1 || cols(se) != 1
+  funcerr &quot;cf, se: expected column vectors&quot;
+endif
+scalar z = critical(z, alpha/2)
+matrix ret = cf ~ (cf - z .* se) ~ (cf + z .* se)
+return exp(ret)
+</code>
+</gretl-function>
+<gretl-function name="GUI_oddsratios" type="bundle" no-print="1" menu-only="1" pkg-role="gui-main">
+<code>scalar alpha = 0.05
+bundle b = oddsratios($coeff, $stderr, alpha, $depvar, $xlist, 1)
+return b
+</code>
+</gretl-function>
+<gretl-function name="oddsratios_precheck" type="scalar" private="1" pkg-role="gui-precheck">
+<code>string cmd = $command
+if cmd != &quot;logit&quot;
+  print &quot;this function only works with logit models&quot;
+  return 1
+endif
+scalar m
+catch m = $[&quot;multinom&quot;]
+if $error == 0 &amp;&amp; m &gt; 0
+  print &quot;multinomial logit: not supported&quot;
+  return 1
+else
+  print &quot;logit model, OK&quot;
+  return 0
+endif
+</code>
+</gretl-function>
+<sample-script>
+include oddsratios.gfn
+open mroz87.gdt --quiet
+list X = const KL6 K618 WA WE HA 
+logit LFP X
+
+# bundle version, with automatic trimming of const plus printout
+bundle b = oddsratios($coeff, $stderr, 0.05, $depvar, $xlist)
+
+# &quot;do-it-yourself&quot; matrix version
+matrix OR = oddsratios_matrix($coeff[2:], $stderr[2:], 0.05)
+print OR
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

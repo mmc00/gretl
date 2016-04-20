@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="sols" ID="1" minver="0.9.13">
+<author>Allin Cottrell</author>
+<version>1.4</version>
+<date>2014-01-26</date>
+<description>OLS showing standardized coefficients</description>
+<help>
+The first parameter, y, is the dependent variable.  The second parameter,
+xlist, is the list of independent variables.  This function performs
+OLS estimation then calculates the &quot;standardized coefficients&quot;: these
+represent the estimated effect on the dependent variable, measured in 
+standard deviations, of a one-standard deviation change in the given 
+independent variable.
+
+If a constant is included in xlist, its coefficient is simply divided
+by the standard deviation of the dependent variable, so it represents
+the y-intercept measured in standard devations.
+
+The column vector of standardized coefficients is available as a return
+value.
+</help>
+<gretl-function name="sols" type="matrix">
+ <params count="2">
+  <param name="y" type="series"/>
+  <param name="xlist" type="list"/>
+ </params>
+<code># OLS showing standardized coefficients
+if nelem(xlist) == 0
+  funcerr &quot;xlist cannot be empty&quot;
+endif
+string yname = argname(y)
+if strlen(yname) &gt; 0
+  rename y @yname
+else
+  yname = &quot;y&quot;
+endif
+ols @yname xlist --simple-print
+matrix beta = $coeff
+scalar sdy = sd(@yname)
+printf &quot;Standard deviation of dependent var. = %g\n\n&quot;, sdy
+printf &quot;Independent variables:\n\n&quot;
+printf &quot;                    std. dev.    standardized coeff.\n\n&quot;
+loop foreach i xlist --quiet
+  scalar sdx = sd(xlist.$i)
+  if sdx == 0
+    beta[i] /= sdy
+  else
+    beta[i] *= sdx / sdy
+  endif
+  printf &quot;%16s %12.5g %16.5g\n&quot;, &quot;$i&quot;, sdx, beta[i]
+endloop
+printf &quot;\n&quot;
+return beta
+</code>
+</gretl-function>
+<sample-script>
+include sols.gfn
+open data4-1
+list xlist = const sqft bedrms
+matrix b = sols(price, xlist)
+print b
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

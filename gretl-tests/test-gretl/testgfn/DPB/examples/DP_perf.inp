@@ -1,0 +1,36 @@
+set echo off
+set messages off
+
+include DPB.gfn
+
+open DP_artdata.gdtb
+
+list X = const x
+list Z = X z
+
+
+b = DPB_setup("DP",y,X,Z)
+err1 = DPB_setoption(&b, "verbose", 2)
+err2 = DPB_setoption(&b, "vcv", 1)
+
+loop foreach i 16 24 32
+    set stopwatch
+    err_$i = DPB_setoption(&b, "nrep", $i)
+    DPB_estimate(&b)
+    DPB_printout(&b)
+    t_$i = $stopwatch
+    print t_$i
+endloop
+
+
+err3 = DPB_setoption(&b, "method", 1)
+
+loop foreach i 128 192 256
+    set stopwatch
+    err_$i = DPB_setoption(&b, "nrep", $i)
+    DPB_estimate(&b)
+    DPB_printout(&b)
+    t_$i = $stopwatch
+    print t_$i
+endloop
+

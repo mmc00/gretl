@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="cnumber" ID="1283303127" minver="1.8.4">
+<author email="sandro.monsueto@gmail.com">Monsueto, S.E</author>
+<version>1.0</version>
+<date>2010-08-31</date>
+<description>Calculate the conditional number</description>
+<help>
+This routine calculate the conditional number, an important multicollinearity indicator, based in Belsley, D.A.; Kuh, E. e Welsch, R.E. Regression diagnostics: Identifying influential data and sources of collienarity, New Jersey: Wiley-IEEE. 2004.
+
+The conditional number is computed by:
+CN= ((Maximum root)/(Minimum root))^(1/2)
+
+For details:
+Monsueto, S.E. Rotina de Cálculo do Conditional Number no GRETL. NEPEC/FACE/UFG. Notas Técnicas em Economia n. 1, 2010.
+</help>
+<gretl-function name="cnumber" type="scalar">
+ <params count="1">
+  <param name="xvars" type="matrix">
+<description>set a variables matrix</description>
+  </param>
+ </params>
+<code>set messages off
+matrix X = xvars
+colunas=cols(X) # account the number of variables
+n=1 # counter variable
+# make a norm of column vector
+loop while n&lt;=colunas --quiet
+  matrix e = X[,n] # a vector tha use the nth column of X
+  scalar E = (e'e)^(1/2) # NORM of 'e'
+  matrix P = e/E  # make a normalized column vector
+  # make a A normalized
+  if n=1
+    matrix A=P # make the first column of A
+  else
+    matrix A = A~P # concatenate the 'e'-vectors to make the A columns
+  endif
+  n=n+1
+endloop
+matrix AA = A'A # transposed A matrix
+matrix En = eigengen(AA) # compute the roots of AA
+# the maximum and the minimum roots of AA
+n=1
+enMAX=0
+enMIN=9E+99
+loop while n&lt;=colunas --quiet
+  scalar en=En[n,]
+  if (en&lt;enMIN)
+    enMIN=en
+  endif
+  if (en&gt;enMAX)
+    enMAX=en
+  endif
+  n=n+1
+endloop
+# Compute and display the Conditional Number
+cn=(enMAX/enMIN)^(1/2)
+printf &quot;Conditional Number = %12.2f\n&quot;,cn
+return cn
+</code>
+</gretl-function>
+<sample-script>
+include cnumber.gfn
+open greene12_1.gdt
+matrix X = {age, income, expend}
+cnumber(X)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

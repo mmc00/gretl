@@ -1,0 +1,11 @@
+include ./summary_ts.gfn
+open djclose
+series r=100*ldiff(djclose)
+ols r const r(-1) r(-2) r(-3)
+series u1=$uhat
+ols r const r(-2)
+series u2=$uhat
+garch 1 1; r const r(-1) r(-2) r(-4) --stdresid
+series stz_u1=$uhat
+list xlist = r u1 u2 stz_u1
+summary_ts(xlist,1,5,20)

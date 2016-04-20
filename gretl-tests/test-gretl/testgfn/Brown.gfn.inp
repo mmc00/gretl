@@ -1,0 +1,5 @@
+include ./Brown.gfn
+# sample function call for Brown
+open data3-6.gdt
+dataset addobs +4
+bundle bbrown=Brown(Ct,0.7)

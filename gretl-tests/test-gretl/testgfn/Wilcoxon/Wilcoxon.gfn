@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="Wilcoxon" ID="1435736289" minver="1.9.0" lives-in-subdir="true">
+<author email="g.palomba@univpm.it">Giulio Palomba</author>
+<version>1.0</version>
+<date>2015-07-15</date>
+<description>Wilcoxon Signed Rank Test</description>
+<label>Wilcoxon Signed Rank Test</label>
+<menu-attachment>MAINWIN/View</menu-attachment>
+<help>
+Help text:
+This is a function package for Wilcoxon Signed Rank Test, 
+a non parametric test for comparing two samples in 
+order to estabilish if they are dissimilar/different.
+
+Usage:
+   Wilcoxon(x,y)
+   where x and y are series to be tested.
+   H0: The two samples are not significantly dissimilar/different.
+
+Sample script:
+include Wilcoxon.gfn
+nulldata 20
+x1=normal()
+y1=normal()+1
+Wilcoxon(x1,y1)
+</help>
+<data-files count="1">
+WSRT_example.gdt </data-files>
+<gretl-function name="Wilcoxon" type="scalar">
+ <params count="2">
+  <param name="f1" type="series"/>
+  <param name="f2" type="series"/>
+ </params>
+<code>print &quot;&quot;
+print &quot;==========================================================&quot;
+series difference=f1-f2
+series absolute=abs(difference)
+series pm=(difference&lt;0?-1:1)
+matrix Start=msortby({absolute}~{pm},1)
+matrix ordinal=selifr(Start,Start[,1])
+scalar N=rows(ordinal)
+if N&lt;5
+  print &quot;The Wilcoxon Signed Rank Test is not carried out for a sample size smaller than N=5.&quot;
+  print&quot; There are no possible values of the test statistic that would be significant&quot;
+  matrix out=0
+else
+  scalar sigmaW=sqrt(N*(N+1)*(2*N+1)/6)
+  matrix distance=ordinal[,1]
+  matrix sign=ordinal[,2]
+  matrix initrank=ranking(distance)
+  matrix signedrank=sign.*initrank
+  scalar W=(sumc(signedrank)-0.5)/sigmaW
+  printf &quot; Wilcoxon Signed-Rank Test Statistic: %.4f (%g pairs)\n&quot;,W,N
+  if N=5
+    print &quot; Critical value: 15 (10%)&quot;
+    print &quot; (5% and 1% critical values are not available)&quot;
+  elif N=6
+    print &quot; Critical values: 17 (10%), 21 (5%)&quot;
+    print &quot; (1% critical value is not available)&quot;
+  elif N=7
+    print &quot; Critical values: 22 (10%), 24 (5%)&quot;
+    print &quot; (1% critical value is not available)&quot;
+  elif N=8
+    print &quot; Critical values: 26 (10%), 30 (5%), 36 (1%)&quot;
+  elif N=9
+    print &quot; Critical values: 29 (10%), 35 (5%), 43 (1%)&quot;
+  elif N&gt;9
+    print &quot; One-tailed p-value:&quot;
+    if W&lt;0
+      printf &quot;    Pr(Z &lt; %.4f) = %.4f\n&quot;,W,1-pvalue(z,W)
+      print &quot; Two-tailed p-value:&quot;
+      printf &quot;    2*Pr(|Z| &gt; %.4f) = %.4f\n&quot;,abs(W),2*pvalue(z,abs(W))
+    else
+      printf &quot;    Pr(Z &gt; %.4f) = %.4f\n&quot;,W,pvalue(z,W)
+      print &quot; Two-tailed p-value:&quot;
+      printf &quot;    2*Pr(|Z| &gt; %.4f) = %.4f\n&quot;,abs(W),2*pvalue(z,abs(W))
+    endif
+  endif
+endif
+print &quot;==========================================================&quot;
+print &quot;&quot;
+return W
+</code>
+</gretl-function>
+<sample-script>
+# Data taken from http://vassarstats.net/textbook/ch12a.html
+include Wilcoxon.gfn
+open WSRT_example.gdt  --quiet --frompkg=Wilcoxon
+scalar wt = Wilcoxon(x,y)
+print wt
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

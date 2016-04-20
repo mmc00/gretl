@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gretldata SYSTEM "gretldata.dtd">
+
+<gretldata version="1.2" name="almon" frequency="4" startobs="1952:1" endobs="1966:4" type="time-series">
+<description>National Industrial Conference Board Data
+(a variant of Shirley Almon's data)
+
+See Shirley Almon, &quot;The distributed lag between capital appropriations
+and expenditures&quot;, Econometrica 33(1), January 1965, pp. 178-196.
+</description>
+<variables count="2">
+<variable name="ce"
+ label="capital expenditures"
+/>
+<variable name="ca"
+ label="appropriations"
+/>
+</variables>
+<observations count="60" labels="false">
+<obs>2072 1660 </obs>
+<obs>2077 1926 </obs>
+<obs>2078 2181 </obs>
+<obs>2043 1897 </obs>
+<obs>2062 1695 </obs>
+<obs>2067 1705 </obs>
+<obs>1964 1731 </obs>
+<obs>1981 2151 </obs>
+<obs>1914 2556 </obs>
+<obs>1991 3152 </obs>
+<obs>2129 3763 </obs>
+<obs>2309 3903 </obs>
+<obs>2614 3912 </obs>
+<obs>2896 3571 </obs>
+<obs>3058 3199 </obs>
+<obs>3309 3262 </obs>
+<obs>3446 3476 </obs>
+<obs>3466 2993 </obs>
+<obs>3435 2262 </obs>
+<obs>3183 2011 </obs>
+<obs>2697 1511 </obs>
+<obs>2338 1631 </obs>
+<obs>2140 1990 </obs>
+<obs>2012 1993 </obs>
+<obs>2071 2520 </obs>
+<obs>2192 2804 </obs>
+<obs>2240 2919 </obs>
+<obs>2421 3024 </obs>
+<obs>2639 2725 </obs>
+<obs>2733 2321 </obs>
+<obs>2721 2131 </obs>
+<obs>2640 2552 </obs>
+<obs>2513 2234 </obs>
+<obs>2448 2282 </obs>
+<obs>2429 2533 </obs>
+<obs>2516 2517 </obs>
+<obs>2534 2772 </obs>
+<obs>2494 2380 </obs>
+<obs>2596 2568 </obs>
+<obs>2572 2944 </obs>
+<obs>2601 2629 </obs>
+<obs>2648 3133 </obs>
+<obs>2840 3449 </obs>
+<obs>2937 3764 </obs>
+<obs>3136 3983 </obs>
+<obs>3299 4381 </obs>
+<obs>3514 4786 </obs>
+<obs>3815 4094 </obs>
+<obs>4093 4870 </obs>
+<obs>4262 5344 </obs>
+<obs>4531 5433 </obs>
+<obs>4825 5911 </obs>
+<obs>5160 6109 </obs>
+<obs>5319 6542 </obs>
+<obs>5574 5785 </obs>
+<obs>5749 5707 </obs>
+<obs>5715 5412 </obs>
+<obs>5637 5465 </obs>
+<obs>5383 5550 </obs>
+<obs>5467 5465 </obs>
+</observations>
+</gretldata>

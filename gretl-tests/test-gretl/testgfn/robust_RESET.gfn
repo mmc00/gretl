@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="robust_RESET" ID="1446306494" model-requirement="ols" minver="2.1.10">
+<author email="oleg_komashko@ukr.net">Oleh Komashko</author>
+<version>0.1</version>
+<date>2015-10-31</date>
+<description>robust RESET test as in Wooldridge</description>
+<tags>C52</tags>
+<label>Robust RESET</label>
+<menu-attachment>MODELWIN/Tests</menu-attachment>
+<help>
+This package realize robust version of RESET test
+as in Wooldridge (2013).
+Output is organized after the template of
+the native reset command.
+The variant used when calculating Heteroskedasticity
+Consistent standard errors should be set externally
+via set hc_version.
+
+Functions description
+
+function void resetrb (series y &quot;dependent variable&quot;,
+                       list Z &quot;independent variables&quot;,
+                       int pows[1:3:1] &quot;powers of yhat, 1 = both&quot;,
+                       bool quiet[0] &quot;wheter to print aux. regression&quot;)
+
+function bundle GUI_resetrb (bool sqr[1] &quot;Squares&quot;,
+                             bool cu[1] &quot;Cubes&quot;)
+The auxialiary regression includes both yhat^2 and yhat^3 if
+sqr = 1 and cu = 1, or sqr = 0 and cu = 0.
+If sqr = 1 and cu = 0 only yhat^2 included.
+If sqr = 0 and cu = 1 only yhat^3 included.
+
+
+function void resetrb_print (bundle *b)
+a bundle-print function
+
+Reference
+Wooldridge, Jeffrey M. Introductory Econometrics: A Modern Approach,
+5th Edition, 2013.
+</help>
+<gretl-function name="resetrb" type="void">
+ <params count="4">
+  <param name="y" type="series">
+<description>dependent variable</description>
+  </param>
+  <param name="Z" type="list">
+<description>independent variables</description>
+  </param>
+  <param name="pows" type="int" min="1" max="3" default="1">
+<description>powers of yhat, 1 = both</description>
+  </param>
+  <param name="quiet" type="bool" default="0">
+<description>wheter to print aux. regression</description>
+  </param>
+ </params>
+<code>ols y Z -q
+yh = $yhat
+fi = firstobs($yhat)
+li = lastobs($yhat)
+if pows = 1
+  y2 = yh^2
+  y3 = yh^3
+  list Z2 = y2 y3
+  text2 = &quot;(squares and cubes)&quot;
+elif pows = 2
+  y2 = yh^2
+  list Z2 = y2
+  text2 = &quot;(squares only)&quot;
+else
+  y3 = yh^3
+  list Z2 = y3
+  text2 = &quot;(cubes only)&quot;
+endif
+ols y Z Z2 --robust -q
+b = $coeff
+se =$stderr
+cmt = b~se
+nms2 = strsub(varname(Z2),&quot;y2&quot;,&quot;yhat^2&quot;)
+nms2 = strsub(nms2,&quot;y3&quot;,&quot;yhat^3&quot;)
+nms = varname(Z)~&quot;,&quot;~nms2
+t1 = obslabel(fi)
+t2 = obslabel(li)
+tt = li-fi+1
+nny = argname(y)
+if !quiet
+  printf &quot;\nAuxiliary regression for robust RESET specification test\n&quot;
+  printf &quot;OLS, using observations %s-%s (T = %d)\n&quot;, t1,t2,tt
+  printf &quot;Dependent variable: %s\n&quot;, nny
+  modprint cmt nms
+else
+  printf &quot;robust RESET test for specification %s\n&quot;, text2
+endif
+nnbb = nelem($coeff)
+omit Z2 --silent
+ttt = $test
+df1 = nelem(Z2)
+df2 = tt-nnbb
+p2 = pvalue(F, df1, df2, ttt)
+printf &quot;Test statistic: F = %g, &quot;,ttt
+printf &quot;\nwith p-value = P(F(%d,%d) &gt; %6g) = %g\n&quot;, df1, df2, ttt, p2
+</code>
+</gretl-function>
+<gretl-function name="GUI_resetrb" type="bundle" no-print="1" menu-only="1" pkg-role="gui-main">
+ <params count="2">
+  <param name="sqr" type="bool" default="1">
+<description>Squares</description>
+  </param>
+  <param name="cu" type="bool" default="1">
+<description>Cubes</description>
+  </param>
+ </params>
+<code>spow = sqr+cu
+if spow = 1
+  pows = 2*sqr+3*cu
+else
+  pows = 1
+endif
+string cmd = $command
+list Y = $ylist
+string yname = $depvar
+loop foreach i Y
+  series @yname = Y.$i
+endloop
+list X =$xlist
+b = resetrb2 (@yname,X,pows,0)
+return b
+</code>
+</gretl-function>
+<gretl-function name="resetrb_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>quiet = b[&quot;quiet&quot;]
+t1 = b[&quot;t1&quot;]
+t2 = b[&quot;t2&quot;]
+tt = b[&quot;Tn&quot;]
+nny = b[&quot;yname&quot;]
+text2 = b[&quot;spec&quot;]
+ttt = b[&quot;Fstat&quot;]
+df1 = b[&quot;df1&quot;]
+df2 = b[&quot;df2&quot;]
+p2 = b[&quot;pv&quot;]
+cmt = b[&quot;cmt&quot;]
+nms = b[&quot;nms&quot;]
+if !quiet
+  printf &quot;\nAuxiliary regression for robust RESET specification test\n&quot;
+  printf &quot;OLS, using observations %s-%s (T = %d)\n&quot;, t1,t2,tt
+  printf &quot;Dependent variable: %s\n&quot;, nny
+  modprint cmt nms
+else
+  printf &quot;robust RESET test for specification %s\n&quot;, text2
+endif
+printf &quot;Test statistic: F = %g, &quot;,ttt
+printf &quot;\nwith p-value = P(F(%d,%d) &gt; %6g) = %g\n&quot;, df1, df2, ttt, p2
+</code>
+</gretl-function>
+<gretl-function name="resetrb2" type="bundle" private="1">
+ <params count="4">
+  <param name="y" type="series"/>
+  <param name="Z" type="list"/>
+  <param name="pows" type="int" min="1" max="3" default="1"/>
+  <param name="quiet" type="bool" default="0"/>
+ </params>
+<code>set messages off
+ddd1 &lt;- ols y Z -q
+yh = ddd1.$yhat
+fi = firstobs(yh)
+li = lastobs(yh)
+if pows = 1
+  y2 = yh^2
+  y3 = yh^3
+  list Z2 = y2 y3
+  text2 = &quot;(squares and cubes)&quot;
+elif pows = 2
+  y2 = yh^2
+  list Z2 = y2
+  text2 = &quot;(squares only)&quot;
+else
+  y3 = yh^3
+  list Z2 = y3
+  text2 = &quot;(cubes only)&quot;
+endif
+ddd1 &lt;- ols y Z Z2 --robust -q
+b = ddd1.$coeff
+se =ddd1.$stderr
+cmt = b~se
+nms2 = strsub(varname(Z2),&quot;y2&quot;,&quot;yhat^2&quot;)
+nms2 = strsub(nms2,&quot;y3&quot;,&quot;yhat^3&quot;)
+nms = varname(Z)~&quot;,&quot;~nms2
+t1 = obslabel(fi)
+t2 = obslabel(li)
+tt = li-fi+1
+nny = argname(y)
+nnbb = nelem(ddd1.$coeff)
+omit Z2 --silent
+ttt = $test
+df1 = nelem(Z2)
+df2 = tt-nnbb
+p2 = pvalue(F, df1, df2, ttt)
+bundle bbb
+bbb[&quot;yname&quot;] = nny
+bbb[&quot;xnames&quot;] = nms
+bbb[&quot;t1&quot;] = t1
+bbb[&quot;t2&quot;] = t2
+bbb[&quot;Fstat&quot;] = ttt
+bbb[&quot;df1&quot;] = df1
+bbb[&quot;df2&quot;] =df2
+bbb[&quot;spec&quot;] = text2
+bbb[&quot;Tn&quot;] = tt
+bbb[&quot;pv&quot;] = p2
+bbb[&quot;quiet&quot;] = quiet
+bbb[&quot;cmt&quot;] = cmt
+bbb[&quot;nms&quot;] = nms
+return bbb
+</code>
+</gretl-function>
+<sample-script>
+open denmark.gdt
+include robust_RESET.gfn
+list X = diff(LRY)
+resetrb(diff(LRM),X)
+
+
+# Wooldridge, ch. 9, C1, (ii) with
+# known answer
+# uncomment to run
+
+# dir = $dotdir~&quot;/data/wooldridge/ceosal1.gdt&quot;
+# open @dir
+# logs salary sales
+# rosneg = ros &lt; 0
+# list Z = 0 l_sales roe rosneg
+# ols l_salary Z
+# resetrb(l_salary,Z)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

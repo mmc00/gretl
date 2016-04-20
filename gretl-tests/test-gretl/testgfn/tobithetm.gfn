@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="tobithetm" ID="1438193903" minver="1.9.12">
+<author email="oleg_komashko@ukr.net">Oleh Komashko</author>
+<version>0.12</version>
+<date>2015-07-29</date>
+<description>Heteroscedastic tobit model</description>
+<label>Heteroscedastic tobit</label>
+<menu-attachment>MAINWIN/Model/LimdepModels</menu-attachment>
+<help>
+Heteroscedastic tobit model
+Package contains two public functions:
+tobithetm_estimate and tobithetm_print.
+
+GUI path (main) Model -&gt; Limited dependent variables -&gt; 
+Heteroscedastic tobit
+
+tobithetm_estimate
+
+Usage
+function bundle tobithetm_estimate 
+         (series y &quot;dependent variable&quot;,
+         list X &quot;list of independent variables&quot;,
+         list W[null] &quot;list of heteroscedasticity
+                                       variables&quot;)
+
+This function estimates heteroscedastic tobit model with
+heteroscedasticity term sigma^2 = exp(alpha*w) where w are
+some variables. By default, w are the same as regressors 
+including constant. If W list doesn'include constant,
+the function adds it by default.
+The current version deals with only simple tobit model, 
+left-censored at zero.
+
+Ouput is a bundle b:
+
+    b[&quot;model&quot;] = &quot;hettobit&quot;
+    b[&quot;coefmat&quot;] = regression coefficients and their s.e.
+    b[&quot;coeff&quot;] = regression coefficients
+    b[&quot;coefnames&quot;] = names of regression coefficients
+    b[&quot;hetmat&quot;] = heteroscedasticity model coefficients 
+                  and theirs s.e.
+    b[&quot;sigma&quot;] = tobit sigma evalueted at means of variables
+    b[&quot;hetnames&quot;] = names of heteroscedasticity model coefficients
+    b[&quot;depvname&quot;] = name of the dependent variable
+    b[&quot;t1&quot;] = starting observation
+    b[&quot;t2&quot;] = last observation
+    b[&quot;lnl&quot;] = log-likelihood
+    b[&quot;aic&quot;] = aic
+    b[&quot;bic&quot;] = bic
+    b[&quot;hqc&quot;] = hqc
+    b[&quot;leftc&quot;] = number of left censored observations
+    b[&quot;hetlrstat&quot;] = chi-squared statistics for a LR 
+                     heteroscedasticity test
+    b[&quot;het_df&quot;] = df number for the heteroscedasticity model
+    b[&quot;hetpval&quot;] = p-value for LR heteroscedasticity test
+    b[&quot;vcv&quot;] = covariance matrix for regression coefficients
+    b[&quot;bigvcv&quot;] = covariance matrix for all estimated 
+                  coefficients
+    b[&quot;yhat&quot;] = yhat as in the native tobit command
+    b[&quot;uhat&quot;] = generalized residuals, compatible with tobit 
+                command $uhat
+      For regression with constant only
+    b[&quot;lrchisq&quot;] = chi-squared statistics for the model 
+                   significance testing in contract with the 
+                   native tobit command it is LR-test
+
+    b[&quot;df_all&quot;] = df for chi-squared above
+    b[&quot;pval&quot;] = p-value for the above test
+
+tobithetm_print prints the results in the form similar to 
+that of tobit command
+Usage
+function void tobithetm_print (bundle *b)
+
+
+Refefences
+
+Gretl User's Guide
+
+Greene William H. (2003). Econometric Analysis, Upper Saddle
+ River, NJ: Prentice-Hall, fifth edn.
+
+Maddala, G. (1983). Limited Dependent and Qualitative 
+Variables in Econometrics. New York: Cambridge University Press.
+</help>
+<gretl-function name="tobithetm_estimate" type="bundle" no-print="1" pkg-role="gui-main">
+ <params count="3">
+  <param name="y" type="series">
+<description>dependent variable</description>
+  </param>
+  <param name="X" type="list">
+<description>list of independent variables</description>
+  </param>
+  <param name="W" type="list" optional="true">
+<description>list of heteroscedasticity variables</description>
+  </param>
+ </params>
+<code>nw = nelem(W)
+n = nelem(X)
+list W1 = null
+#print nw
+if (nw==0)
+  cx = inlist(X,0)
+  if cx
+    j = 2
+    wnames = varname(X)
+  else
+    j = 1
+    wnames = &quot;const,&quot;~varname(X)
+  endif
+  loop i=j..n -q
+    W1 += genseries(sprintf(&quot;hetvar%d&quot;,i+1-j),(X[i]-mean(X[i]))/sd(X[i]))
+  endloop
+else
+  nn = nelem(W)
+  cx = inlist(W,0)
+  if cx
+    j = 2
+    wnames = varname(W)
+  else
+    j = 1
+    wnames = &quot;const,&quot;~varname(W)
+  endif
+  loop i=j..nn -q
+    W1 += genseries(sprintf(&quot;hetvar%d&quot;,i+1-j),(W[i]-mean(W[i]))/sd(W[i]))
+  endloop
+endif
+W1 = const W1
+nh = nelem(W1)
+matrix model = zeros(n, 1)
+matrix hetvar = zeros(nh, 1)
+mle llll = ln_hettob(y, X, W1,model,hetvar)
+  series z = y &gt; 0
+  series walpha = lincomb(W1,hetvar)
+  series sisq = exp(walpha)
+  series si = exp(walpha/2)
+  series tt = exp(-walpha/2)
+  series xb = lincomb(X, model)
+  series ai = (y - xb)*tt
+  series deltai = xb*tt
+  series Fi = cnorm(deltai)
+  series fi = dnorm(deltai)
+  series lambdai = fi/(1-Fi)
+  matrix mb = (z*ai-(1-z)*lambdai)*tt
+  matrix malfa = (z*(ai^2-1))/2+(1-z)*lambdai*deltai/2
+  deriv model = mb.*{X}
+  deriv hetvar = malfa.*{W1}
+  #params coef1 coef2
+end mle --hessian  --lbfgs -q
+coefnames = varname(X)
+vcv = $vcv[1:n,1:n]
+sss = sqrt(diag(vcv))
+coefmat = model~sss
+sss2 = sqrt(diag($vcv[(n+1):,(n+1):]))
+hetmat = hetvar~sss2
+t1 = $t1
+t2 = $t2
+depnm = argname(y)
+lnl = $lnl
+aic = $aic
+bic = $bic
+hqc = $hqc
+bvcv = $vcv
+scalar lc = sum(y=0)
+series yhat = lincomb(X,model)
+series sigmai = exp(lincomb(W1,hetvar)/2)
+#print sigmai
+#     ggg = mean(sigmai)
+#     print ggg
+scalar ss = exp(hetvar[1]/2)
+#     print ss
+series z = y &gt; 0
+series xbs = yhat/sigmai
+series uhat = z*(y-yhat) -(1-z)*dnorm(xbs)/(1-cnorm(xbs))*sigmai
+tobit y X -q
+rlnl = $lnl
+lrstat = -2*(rlnl-lnl)
+hetpval = pvalue(X,nh-1,lrstat)
+bundle b
+b[&quot;model&quot;] = &quot;hettobit&quot;
+b[&quot;coefmat&quot;] = coefmat
+b[&quot;coeff&quot;] = model
+b[&quot;coefnames&quot;] = coefnames
+b[&quot;hetmat&quot;] = hetmat
+b[&quot;sigma&quot;] = ss
+b[&quot;hetnames&quot;] = wnames
+b[&quot;depvname&quot;] = depnm
+b[&quot;t1&quot;] = t1
+b[&quot;t2&quot;] = t2
+b[&quot;lnl&quot;] = lnl
+b[&quot;aic&quot;] = aic
+b[&quot;bic&quot;] = bic
+b[&quot;hqc&quot;] = hqc
+b[&quot;leftc&quot;] = lc
+b[&quot;hetlrstat&quot;] = lrstat
+b[&quot;het_df&quot;] = nh-1
+b[&quot;hetpval&quot;] = hetpval
+b[&quot;vcv&quot;] = vcv
+b[&quot;bigvcv&quot;] = bvcv
+b[&quot;yhat&quot;] = yhat
+b[&quot;uhat&quot;] = uhat
+b[&quot;is_const&quot;] = inlist(X,0)
+if inlist(X,0)
+  matrix model2 = zeros(1, 1)
+  matrix hetvar12 = zeros(nh, 1)
+  list KK = const
+  mle lllll = ln_hettob(y, KK, W1,model2,hetvar12)
+    series z = y &gt; 0
+    series walpha = lincomb(W1,hetvar12)
+    series sisq = exp(walpha)
+    series si = exp(walpha/2)
+    series tt = exp(-walpha/2)
+    series xb = lincomb(KK, model2)
+    series ai = (y - xb)*tt
+    series deltai = xb*tt
+    series Fi = cnorm(deltai)
+    series fi = dnorm(deltai)
+    series lambdai = fi/(1-Fi)
+    matrix mb = (z*ai-(1-z)*lambdai)*tt
+    matrix malfa = (z*(ai^2-1))/2+(1-z)*lambdai*deltai/2
+    deriv model2 = mb.*{KK}
+    deriv hetvar12 = malfa.*{W1}
+  end mle --hessian  --lbfgs -q
+  llnull = $lnl
+  lrchisq = -2*(llnull-lnl)
+  b[&quot;lrchisq&quot;] = lrchisq
+  df_all = n-1
+  pval = pvalue(X,df_all,lrchisq)
+  b[&quot;df_all&quot;] = df_all
+  b[&quot;pval&quot;] = pval
+endif
+return b
+</code>
+</gretl-function>
+<gretl-function name="tobithetm_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>string model = b[&quot;model&quot;]
+if model != &quot;hettobit&quot;
+  print &quot;tobithetm_estimate: not a heteroscedastic Tobit model&quot;
+else
+  printf &quot;\nModel: Heteroscedastic Tobit, using observations %d-%d&quot;,b[&quot;t1&quot;],b[&quot;t2&quot;]
+  printf &quot;\nDependent variable: %s&quot;,b[&quot;depvname&quot;]
+  printf &quot;\nStandard errors based on Hessian&quot;
+  printf &quot;\n\nEquation:&quot;
+  cfm = b[&quot;coefmat&quot;]
+  cfn = b[&quot;coefnames&quot;]
+  modprint cfm cfn
+  printf &quot;Heteroscedasticity (standardized variables):&quot;
+  htm = b[&quot;hetmat&quot;]
+  htn = b[&quot;hetnames&quot;]
+  modprint htm htn
+  if (b[&quot;is_const&quot;])
+    b1 = b[&quot;df_all&quot;]
+    b2 = b[&quot;lrchisq&quot;]
+    b3 = b[&quot;pval&quot;]
+    printf &quot;LR-Chi-square(%d)     %g     p-value           %g\n&quot;,b1,b2,b3
+  endif
+  printf &quot;Log-likelihood      %g     Akaike criterion  %g&quot;, b[&quot;lnl&quot;],b[&quot;aic&quot;]
+  printf &quot;\nSchwarz criterion    %g     Hannan-Quinn      %g&quot;,b[&quot;bic&quot;],b[&quot;hqc&quot;]
+  printf &quot;\n\nsigma(at means of hetm variables) = %g&quot;,b[&quot;sigma&quot;]
+  printf &quot;\nLeft-censored observations: %d\n&quot;, b[&quot;leftc&quot;]
+  if b[&quot;het_df&quot;]&gt;0
+    printf &quot;\nLR test for heteroscedasticity in restricted model -&quot;
+    printf &quot;\n  Null hypothesis: no heteroscedasticity&quot;
+    printf &quot;\n  Test statistic: Chi-square(%d) = %g&quot;,b[&quot;het_df&quot;],b[&quot;hetlrstat&quot;]
+    printf &quot;\n  with p-value = %6g\n\n&quot;,b[&quot;hetpval&quot;]
+  endif
+endif
+</code>
+</gretl-function>
+<gretl-function name="ln_hettob" type="series" private="1">
+ <params count="5">
+  <param name="y" type="series"/>
+  <param name="X" type="list"/>
+  <param name="W" type="list"/>
+  <param name="beta" type="matrix"/>
+  <param name="alpha" type="matrix"/>
+ </params>
+<code>series walpha = lincomb(W,alpha)
+series sisq = exp(walpha)
+series si = exp(walpha/2)
+series xb = lincomb(X, beta)
+series P = cnorm(xb/si)
+series Q = (y-xb)^2/sisq
+series z = y &gt; 0
+return -1/2*z*(ln(sisq)+Q+ln(2*$pi)) + (1-z)*ln(1-P)
+</code>
+</gretl-function>
+<sample-script>
+# load the data
+include tobithetm.gfn
+
+open greene22_2.gdt
+#list X = const male age yrsmarr
+list X = const Z1 Z2 Z3
+# estimation
+b1 = tobithetm_estimate (Y, X)
+# printing the results
+tobithetm_print(&amp;b1)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

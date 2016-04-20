@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="fe_stats" ID="1427122837" needs-panel-data="true" model-requirement="panel" minver="1.9.5">
+<author email="cottrell@wfu.edu">Allin Cottrell</author>
+<version>0.5</version>
+<date>2015-03-22</date>
+<description>Statistics for fixed-effects estimates</description>
+<label>fixed effects statistics</label>
+<menu-attachment>MODELWIN/Analysis</menu-attachment>
+<help>
+This function computes the standard errors of the estimates
+of the individual fixed effects for a panel-data model estimated
+via gretl's &quot;panel&quot; command. All of the required arguments may
+be obtained via accessors after fixed-effects estimation.
+
+The matrix that is returned has one row per included unit and
+three columns. The columns contain, respectively, the estimated
+intercept for the unit, its standard error, and the associated
+z-score.
+
+Arguments:
+
+series ahat: series containing the per-unit intercepts, available
+as $ahat
+
+list X: the list of regressors from the model, available as $xlist
+
+const matrix Vb: the covariance matrix for the estimates of the
+regular parameters, available via $vcv
+
+scalar s: the standard error of regression, available as $sigma
+</help>
+<gretl-function name="GUI_fe_stats" type="bundle" no-print="1" menu-only="1" pkg-role="gui-main">
+<code>## no-print ##
+bundle b
+b[&quot;Amat&quot;] = fe_stats($ahat, $xlist, $vcv, $sigma)
+return b
+</code>
+</gretl-function>
+<gretl-function name="fe_stats" type="matrix">
+ <params count="4">
+  <param name="ahat" type="series">
+<description>intercept series</description>
+  </param>
+  <param name="X" type="list">
+<description>list of regressors</description>
+  </param>
+  <param name="Vb" type="matrix" const="true">
+<description>covariance matrix</description>
+  </param>
+  <param name="sigma" type="scalar">
+<description>std error of regression</description>
+  </param>
+ </params>
+<code>scalar T = $pd
+# strip out the overall constant
+X -= 0
+matrix V = Vb[2:,2:]
+# the number of units in the sample range
+scalar N = ($t2 - $t1 + 1) / T
+scalar s2 = sigma^2
+scalar nx = nelem(X)
+matrix A = zeros(N, 3)
+matrix Xbar_i
+scalar Ti
+scalar s
+scalar i_min = min($unit)
+scalar i_max = max($unit)
+scalar k = 1
+loop i=i_min..i_max -q
+  Ti = 0
+  Xbar_i = zeros(1,nx)
+  loop t=1..T -q
+    s = (i-1)*T + t
+    if (ok(ahat[s]))
+      if Ti == 0
+        A[k,1] = ahat[s]
+      endif
+      loop foreach j X -q
+        Xbar_i[j] += X.$j[s]
+      endloop
+      Ti++
+    endif
+  endloop
+  if Ti &gt; 0
+    Xbar_i /= Ti
+    A[k,2] = sqrt(s2 / Ti + qform(Xbar_i, V))
+    A[k,3] = A[k,1] / A[k,2]
+  else
+    A[k,] = NA
+  endif
+  k++
+endloop
+colnames(A, &quot;a_i s.e.(a_i) z&quot;)
+return A
+</code>
+</gretl-function>
+<gretl-function name="fe_stats_print" type="void" pkg-role="bundle-print">
+ <params count="1">
+  <param name="b" type="bundleref"/>
+ </params>
+<code>matrix A = b[&quot;Amat&quot;]
+printf &quot;Per-unit intercepts:\n&quot;
+printf &quot;\n%#13.6g\n&quot;, A
+</code>
+</gretl-function>
+<gretl-function name="fe_stats_precheck" type="scalar" private="1" pkg-role="gui-precheck">
+<code>catch series ahat = $ahat
+scalar err = $error
+if err
+  print &quot;fe_stats: couldn't get $ahat&quot;
+endif
+return err
+</code>
+</gretl-function>
+<sample-script>
+include fe_stats.gfn
+open greene14_1.gdt
+logs C Q PF
+panel l_C 0 l_Q l_PF LF --fixed
+matrix A = fe_stats($ahat, $xlist, $vcv, $sigma)
+print A
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+

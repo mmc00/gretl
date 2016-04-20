@@ -1,0 +1,6 @@
+include ./LLTestim.gfn
+open australia.gdt
+matrix q
+list compon = LLTestim(IAU, &q)
+print q
+print compon --byobs

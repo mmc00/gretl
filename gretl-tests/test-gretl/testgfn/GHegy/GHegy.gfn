@@ -1,0 +1,558 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="GHegy" ID="1426182447" needs-time-series-data="true" minver="1.10.0" lives-in-subdir="true">
+<author email="ignacio.diaz-emparanza@ehu.es">Ignacio Diaz-Emparanza</author>
+<version>1.1</version>
+<date>2015-03-10</date>
+<description>General seasonal unit roots tests (HEGY) and P-values</description>
+<label>HEGY</label>
+<menu-attachment>MAINWIN/Variable/URTests</menu-attachment>
+<help>
+Seasonal unit roots tests, based on Hylleberg, Engle, Granger and Yoo,
+&quot;Seasonal integration and cointegration&quot;, Journal of Econometrics,
+vol. 44, 1990, pp. 215-238 (&quot;HEGY&quot;)
+
+For any seasonal periodicity and AR order the P-values are obtained 
+via a surface regression.
+
+Parameters:
+
+* series y Dependent variable
+
+* int crit[0:3:2] Automatic selection of AR lags?
+ 0: fixed number of lags
+ 1: Determined by AIC
+ 2: Determined by BIC
+ 3: Determined by HQC
+
+* scalar order[0] AR lags (if crit = 0) or max. AR lags (if crit &gt; 0)
+
+* int casedeterm[0:5:0] Deterministic component
+ 0: Constant
+ 1: Constant + trend
+ 2: Constant + dummies
+ 3: Constant + dummies + trend
+ 4: Constant + trigonometric terms
+ 5: Constant + trigonometric terms + trend
+
+* bool modelprint[0] Print regression: 0 (No) or 1(Yes)
+
+For more information please see Ignacio Díaz-Emparanza, 
+Numerical distribution functions for seasonal unit root tests, 
+Computational Statistics &amp; Data Analysis, Volume 76, August 2014, 
+Pages 237-247, ISSN 0167-9473, http://dx.doi.org/10.1016/j.csda.2013.03.006.
+(http://www.sciencedirect.com/science/article/pii/S0167947313001047)
+
+Note: This package makes use of 80 coefficient matrices.
+</help>
+<data-files count="1">
+coeffs </data-files>
+<gretl-function name="GHegy_test" type="bundle">
+ <params count="5">
+  <param name="y" type="series">
+<description>Dependent variable</description>
+  </param>
+  <param name="crit" type="int" min="0" max="3" default="2">
+<description>Automatic selection of AR lags?</description>
+<labels count="4">
+"No (fixed number of lags)" "Yes (Determined by AIC)" "Yes (Determined by BIC)" "Yes (Determined by HQC)" </labels>
+  </param>
+  <param name="order" type="scalar" default="0">
+<description>Maximum (if auto=yes) or fixed AR lags</description>
+  </param>
+  <param name="casedeterm" type="int" min="0" max="5" default="4">
+<description>Deterministic component</description>
+<labels count="6">
+"Constant" "Constant + trend" "Constant + dummies" "Constant + dummies + trend" "Constant + trigonometric terms" "Constant + trigonometric terms + trend" </labels>
+  </param>
+  <param name="modelprint" type="bool" default="0">
+<description>Print auxiliary regression</description>
+  </param>
+ </params>
+<code>catch smpl y --contiguous
+if $error
+  funcerr &quot;There are missing values in the sample.&quot;
+endif
+scalar order = (crit!=0 &amp;&amp; order==0) ? 2*$pd : order
+string sername = argname(y)
+scalar ns = floor($pd/2)+1
+matrix result = zeros(ns,2)
+scalar pd = $pd
+scalar iseven = $pd % 2 == 0
+scalar s_asterisk = iseven ? $pd/2-1 : floor($pd/2)
+list deterministic = determ(0)
+string sdeterm = &quot;Deterministic component: constant&quot;
+if casedeterm == 2 || casedeterm == 3
+  list deterministic = determ(1)
+  string sdeterm += &quot; + (s-1) seasonal dummies&quot;
+elif casedeterm == 4 || casedeterm == 5
+  list deterministic = determ(2)
+  string sdeterm += &quot; + (s-1) trigonometric terms&quot;
+endif
+if casedeterm == 1 || casedeterm == 3 || casedeterm == 5
+  genr time
+  list deterministic += time
+  string sdeterm += &quot; + trend&quot;
+endif
+list varst = seasfSTB(&amp;y)
+sdiff y
+# Minimum order calculated by AIC, BIC or HQC
+if crit != 0
+  scalar maxorder = order
+  matrix minio = indexcriterio(&amp;sd_y, order, deterministic, varst)
+  scalar order = minio[1,crit]
+endif
+if order &gt; 0
+  list varst += sd_y(-1 to -order)
+endif
+outfile @dotdir/tmpols.mod --write
+ols sd_y deterministic varst
+series uhat = $uhat
+outfile --close
+scalar t1 = $coeff(y0_1)/$stderr(y0_1)
+scalar nobsc = $df
+catch scalar Pval = GHegy_pvalue(1, nobsc, order, 15, t1, casedeterm, crit)
+if $error
+  funcerr &quot;Failed to find p-value&quot;
+endif
+result[1,1] = t1
+result[1,2] = Pval
+if iseven == 1
+  scalar t2 = $coeff(ypi_1)/$stderr(ypi_1)
+  scalar PvalS2 = GHegy_pvalue(2, nobsc, order, 15, t2, casedeterm, crit)
+  result[2,1] = t2
+  result[2,2] = PvalS2
+  list conj = ypi_1
+else
+  list conj = null
+endif
+loop i=1..s_asterisk --quiet
+  omit ya$i_1 yb$i_1 --silent --test-only
+  list conj += ya$i_1 yb$i_1
+  F$i = $test
+  scalar ntest = 2+i
+  scalar Pval$i = GHegy_pvalue(ntest, nobsc, order, 15, F$i, casedeterm, crit)
+  scalar ntest = iseven == 1 ? 2+i : 1+i
+  result[ntest,1] = F$i
+  result[ntest,2] = Pval$i
+endloop
+omit conj --silent --test-only
+Fs = $test
+catch scalar Pvals = GHegy_pvalue(1000, nobsc, order, 15, Fs, casedeterm, crit)
+if $error
+  funcerr &quot;Failed to find p-value&quot;
+endif
+matrix result = result | {Fs, Pvals}
+list conj += y0_1
+omit conj --silent --test-only
+Ft = $test
+scalar Pvalt = GHegy_pvalue(5000, nobsc, order, 15, Ft, casedeterm, crit)
+matrix result = result | {Ft, Pvalt}
+if crit == 0
+  # AR order: fixed
+  sprintf aro &quot;AR order = %g (fixed)\n&quot;, order
+elif crit == 1
+  # AR order: determined by AIC
+  sprintf aro &quot;AR order = %g (determined by AIC with max.order=%g)\n&quot;, order, maxorder
+elif crit == 2
+  # AR order: determined by BIC
+  sprintf aro &quot;AR order = %g (determined by BIC with max.order=%g)\n&quot;, order, maxorder
+else
+  # AR order: determined by HQC
+  sprintf aro &quot;AR order = %g (determined by HQC with max.order=%g)\n&quot;, order, maxorder
+endif
+bundle b
+b[&quot;yname&quot;] = &quot;@sername&quot;
+b[&quot;sdeterm&quot;] = &quot;@sdeterm&quot;
+b[&quot;ARcrit&quot;] = &quot;@aro&quot;
+b[&quot;ARorder&quot;] = order
+b[&quot;casedeterm&quot;] = casedeterm
+b[&quot;nobsc&quot;] = nobsc
+b[&quot;test_p&quot;] = result
+b[&quot;y&quot;] = y
+b[&quot;uhat&quot;] = uhat
+series @sername = y
+list varse = seasfSTB(&amp;@sername,1)
+loop foreach i varse --quiet
+  b[&quot;$i&quot;] = $i
+endloop
+setnote(b, &quot;y&quot;, &quot;original series&quot;)
+GHegy_bundle_print(&amp;b, modelprint)
+return b
+</code>
+</gretl-function>
+<gretl-function name="GHegy_bundle_print" type="void" pkg-role="bundle-print">
+ <params count="2">
+  <param name="b" type="bundleref"/>
+  <param name="modelprint" type="int" min="0" max="1" default="0"/>
+ </params>
+<code>scalar casedeterm = b[&quot;casedeterm&quot;]
+string sy = b[&quot;yname&quot;]
+string sdeterm = b[&quot;sdeterm&quot;]
+string aro = b[&quot;ARcrit&quot;]
+scalar nobsc = b[&quot;nobsc&quot;]
+scalar order = b[&quot;ARorder&quot;]
+matrix test_p = b[&quot;test_p&quot;]
+setnote(b, &quot;test_p&quot;, &quot;HEGY statistics and P-values&quot;)
+scalar s_asterisk = ($pd % 2 == 0) ? $pd/2-1 : floor($pd/2)
+matrix result = ($pd % 2 == 0) ? zeros(s_asterisk+2,2) : zeros(s_asterisk+1,2)
+scalar pd = $pd
+###
+string ask = asterisk(test_p[1,2])
+set echo off
+print &quot; &quot;
+print &quot;HEGY test of seasonal unit roots for series @sy:&quot;
+print &quot; &quot;
+print &quot;@aro&quot;
+print &quot;@sdeterm&quot;
+print &quot; &quot;
+printf &quot;Dof (T-k) = %g\n\n&quot;, nobsc
+print &quot;Statistic       p-value     Ang. Frequency       Period     &quot;
+print &quot;-----------------------------------------------------------&quot;
+printf &quot;t1= %4.2f    \t%.5f @ask      zero           infinity       \n&quot;, test_p[1,1], test_p[1,2]
+scalar prev = ($pd % 2==0) ? 2 : 1
+loop i=1..s_asterisk --quiet
+  scalar jota = i*2
+  scalar n = (pd/jota)-floor(pd/jota)
+  scalar ci = 1
+  scalar frac = 1
+  # The following division is for writing the frequencies in simplified form
+  string ask = asterisk(test_p[prev+i,2])
+  scalar denom = pd/jota
+  if n == 0
+    scalar num = 1
+    scalar per = 2*denom/num
+    printf &quot;F$i= %4.2f    \t%.5f @ask    +-pi/%.0f     \t%.0f          \n&quot;, test_p[prev+i,1], test_p[prev+i,2], denom, per
+  else
+    scalar pj = pd/jota
+    loop while (frac==1 &amp;&amp; ci&lt;jota) --quiet
+      ci ++
+      scalar nf = (pj*ci)-floor(pj*ci)
+      scalar frac = (nf==0) ? 0 : 1
+    endloop
+    scalar num = ci
+    scalar denom = (denom&lt;=pd) ? pj*ci : pd
+    scalar per = 2*denom/num
+    string snumper = ((2*denom)%num==0) ? &quot;%.0f&quot; : &quot;%.2f&quot;
+    printf &quot;F$i= %4.2f \t%.5f @ask    +-%.0f*pi/%.0f    \t@snumper         \n&quot;, test_p[prev+i,1], test_p[prev+i,2], num, denom, per
+  endif
+endloop
+if $pd % 2 == 0
+  string ask = asterisk(test_p[2,2])
+  printf &quot;t2= %4.2f    \t%.5f @ask      pi             2    \n&quot;, test_p[2,1], test_p[2,2]
+endif
+print &quot;-----------------------------------------------------------&quot;
+string ask = asterisk(test_p[prev+s_asterisk+2,2])
+printf &quot;Fs= %.2f    \t%.5f    All the seasonal cycles              \n&quot;, test_p[prev+s_asterisk+1,1], test_p[prev+s_asterisk+1,2]
+printf &quot;Ft= %.2f    \t%.5f    Delta_s (all the seas. + zero freq.)  \n&quot;, test_p[prev+s_asterisk+2,1], test_p[prev+s_asterisk+2,2]
+print &quot;-----------------------------------------------------------&quot;
+print &quot; &quot;
+if modelprint == 1
+  string modelop = readfile(&quot;@dotdir/tmpols.mod&quot;)
+  print modelop
+endif
+# If the next 3 lines are run, this function will fail on the
+# second or subsequent calls
+# delete b[&quot;casedeterm&quot;]
+# delete b[&quot;ARorder&quot;]
+# delete b[&quot;nobsc&quot;]
+</code>
+</gretl-function>
+<gretl-function name="GHegy_test_plot" type="void" pkg-role="bundle-plot">
+ <params count="2">
+  <param name="b" type="bundleref"/>
+  <param name="ptype" type="int" min="0" max="1" default="0">
+<description>Plot type</description>
+<labels count="2">
+"First six filtered series" "All filtered series" </labels>
+  </param>
+ </params>
+<code>string sy = b[&quot;yname&quot;]
+series @sy = b[&quot;y&quot;]
+series uhat = b[&quot;uhat&quot;]
+list varse = seasfSTB(&amp;@sy,1)
+list varse print
+scalar numelem = nelem(varse)
+scalar numgraf = floor(numelem/6)+1
+scalar j=0
+list x = null
+loop i=1..numgraf
+  list x$i = null
+endloop
+loop foreach i varse --quiet
+  j++
+  scalar n = floor((j-1)/6)+1
+  sprintf sn &quot;%.0f&quot;, n
+  list x@sn += $i
+  list x += $i
+endloop
+if ptype == 0
+  scatters x1 --with-lines --output=display
+else
+  scalar n3 = floor(nobs(@sy)/4)
+  scatters x --with-lines --output=display
+endif
+</code>
+</gretl-function>
+<gretl-function name="asterisk" type="string" private="1">
+ <params count="1">
+  <param name="pvalor" type="scalar"/>
+ </params>
+<code>if pvalor &lt; 0.01
+  return &quot;***&quot;
+elif pvalor &lt; 0.05
+  return &quot;** &quot;
+elif pvalor &lt; 0.01
+  return &quot;*  &quot;
+else
+  return &quot;   &quot;
+endif
+</code>
+</gretl-function>
+<gretl-function name="seasfSTB" type="list" private="1">
+ <params count="2">
+  <param name="y" type="seriesref" const="true"/>
+  <param name="only" type="bool" default="0"/>
+ </params>
+<code>string yn = argname(y)
+scalar s_asterisk = ($pd % 2==0) ? ($pd/2)-1 : floor($pd/2)
+matrix b0 = ones($pd,1)
+# all frequencies except zero
+series @yn0 = (obs&gt;=$pd) ? filter(y,b0) : NA
+list fil = @yn0(-1)
+loop j=1..s_asterisk --quiet
+  scalar w = 2*pi*j/$pd
+  matrix frq = seq(1,$pd) * w
+  series @yna$j = (obs &gt;= $pd) ? -filter(y,cos(frq)) : NA
+  series @ynb$j = (obs &gt;= $pd) ?  filter(y,sin(frq)) : NA
+  fil += (only) ? @yna$j(-1) : @yna$j(-1) @ynb$j(-1)
+endloop
+# all frequencies except pi
+if $pd % 2 == 0
+  matrix b2 = cos(pi * seq(1,$pd))
+  series @ynpi = (obs&gt;=$pd) ? filter(y,b2) : NA
+  list fil += @ynpi(-1)
+endif
+return fil
+</code>
+</gretl-function>
+<gretl-function name="determ" type="list" private="1">
+ <params count="1">
+  <param name="sdum" type="int" min="0" max="2" default="0"/>
+ </params>
+<code>list deterministic = const
+if sdum == 1
+  series u = (time-1)%$pd + 1
+  discrete u
+  deterministic += dummify(u)
+elif sdum == 2
+  loop j=1..ceil($pd/2-1) --quiet
+    series cos$j = cos((2*pi*j/$pd)*t)
+    series sin$j = sin((2*pi*j/$pd)*t)
+    deterministic += cos$j sin$j
+  endloop
+  if $pd % 2 == 0
+    series cospit = cos(pi*t)
+    deterministic += cospit
+  endif
+endif
+return deterministic
+</code>
+</gretl-function>
+<gretl-function name="indexcriterio" type="matrix" private="1">
+ <params count="4">
+  <param name="sd_y" type="seriesref"/>
+  <param name="Pmax" type="scalar"/>
+  <param name="determ_cd" type="list"/>
+  <param name="varf" type="list"/>
+ </params>
+<code>scalar Pmaxpd1 = $pd + Pmax + 1
+smpl Pmaxpd1 ;
+ols sd_y determ_cd varf --quiet
+matrix CRIT = {$aic, $bic, $hqc}
+loop i=1..Pmax --quiet
+  list xlags = lags(i,sd_y)
+  ols sd_y determ_cd varf xlags --quiet
+  CRIT |= {$aic, $bic, $hqc}
+endloop
+return iminc(CRIT) - {1, 1, 1}
+</code>
+</gretl-function>
+<gretl-function name="GHegy_pvalue" type="scalar" private="1">
+ <params count="7">
+  <param name="frec" type="scalar"/>
+  <param name="Nc" type="scalar"/>
+  <param name="orderc" type="scalar"/>
+  <param name="nobsreg" type="scalar"/>
+  <param name="valor" type="scalar"/>
+  <param name="casedeterm" type="int" min="0" max="5" default="0"/>
+  <param name="criter" type="int" min="0" max="3" default="0"/>
+ </params>
+<code># iseven = 1 for even periodicity, 0 for odd periodicity
+scalar iseven = $pd % 2 == 0
+if iseven == 0 &amp;&amp; frec == 2
+  print &quot;Periodicity is odd, there is no root at w=\pi frequency&quot;
+  scalar pvalor = NA
+else
+  # C is the matrix with the coeffs, similar to equation (6) in
+  # Harvey and van Dijk (2006) + sderr of the constant.
+  string CM = &quot;&quot;
+  # Zero frequency
+  if frec == 1
+    string CM += &quot;Ct1&quot;
+    # Pi frequency
+  elif frec == 2
+    string CM += &quot;Ct2&quot;
+    # All seasonal frequencies
+  elif frec == 1000
+    string CM += &quot;CFs&quot;
+    # All frequencies
+  elif frec == 5000
+    string CM += &quot;CFt&quot;
+    # Only a pair of complex-conjugate frequencies
+  else
+    string CM += &quot;CF&quot;
+  endif
+  scalar pd = $pd
+  if casedeterm == 0
+    # only constant
+    string CM += &quot;_c&quot;
+  elif casedeterm == 1
+    # constant + trend
+    string CM += &quot;_ct&quot;
+  elif casedeterm == 2 || casedeterm == 4
+    # constant+(s-1)seasonal dummies
+    string CM += &quot;_cD&quot;
+  else
+    # constant+(s-1)seasonal dummies+trend
+    string CM += &quot;_cDt&quot;
+  endif
+  if criter == 0
+    string CM += &quot;_fijo&quot;
+  elif criter == 1
+    string CM += &quot;_AIC&quot;
+  elif criter == 2
+    string CM += &quot;_BIC&quot;
+  else
+    string CM += &quot;_HQC&quot;
+    scalar ndet = pd + 1
+  endif
+  string mname = sprintf(&quot;%s/coeffs/%s.mat.gz&quot;, $pkgdir, CM)
+  # string mname = sprintf(&quot;coeffs/%s.mat.gz&quot;, CM)
+  matrix C = mread(mname)
+  scalar nc = cols(C)
+  scalar nc1 = nc-1
+  matrix Coeffs = C[,1:nc1]
+  matrix SdErrs = C[,nc]
+  # matrix rq has the 221 quantiles suggested in the above article and in MacKinnon (2001)
+  matrix r1 = {0.0001; 0.0002; 0.0005} | seq(1,10)'/1000
+  matrix r2 = sort(ones(13,1) .- r1)
+  matrix ri = seq(15,985,5)'/1000
+  matrix rq = r1 | ri | r2
+  scalar ns = floor(pd/2) + 1
+  matrix xeplc = {1 ; 1/Nc ; 1/(Nc^2) ; 1/(Nc^3) ; orderc/Nc ; orderc/(Nc^2) ; orderc/(Nc^3)}
+  matrix xeplc = xeplc | {(orderc^2)/Nc ; (orderc^2)/(Nc^2) ; (orderc^2)/(Nc^3)}
+  matrix xeplc = xeplc | {(orderc^3)/Nc ; (orderc^3)/(Nc^2) ; (orderc^3)/(Nc^3)}
+  matrix xeplc = xeplc | {pd/Nc ; pd/(Nc^2) ; pd/(Nc^3)}
+  if frec == 1000 || frec == 5000
+    matrix xeplc = xeplc | {1-iseven ; pd-1 ; (pd-1)^2 ; (pd-1)^3}
+  endif
+  matrix C1 = Coeffs
+  matrix sdC1 = SdErrs
+  catch matrix Q1 = C1 * xeplc
+  if $error
+    printf &quot; Computing Q1 = C1*xeplc, in GHegy_pvalue\n&quot;
+    printf &quot;   C1 is %d x %d\n&quot;, rows(C1), cols(C1)
+    printf &quot;   xeplc is %d x %d\n&quot;, rows(xeplc), cols(xeplc)
+    funcerr &quot;  computing Q1 = C1*xeplc&quot;
+  endif
+  matrix Q11 = C1[,1]
+  #
+  scalar masque = 0
+  scalar nrq = rows(rq)
+  scalar centro = floor(nobsreg/2)+1
+  # reversing the Q1 matrix for the F cases
+  matrix Q1 = (frec&lt;3) ? Q1 : mreverse(Q1)
+  matrix bin = zeros(nrq,1)
+  loop i=1..nrq --quiet
+    matrix bin[i,1] = (Q1[i,1]&lt;0) ? 0 : 1
+  endloop
+  matrix sbin = sumc(bin)
+  if frec &gt; 2 &amp;&amp; sbin &lt; 1
+    funcerr &quot;p or Pmax is too large, please select a smaller value&quot;
+  endif
+  matrix sdC1 = (frec&lt;3) ? sdC1 : mreverse(sdC1)
+  matrix Q1s = sort(Q1)
+  if valor &lt; Q1s[1]
+    scalar pvalor = (frec&lt;3) ? 0 : 1
+  elif valor &gt; Q1s[221]
+    scalar pvalor = (frec&lt;3) ? 1 : 0
+  else
+    loop i=1..nrq --quiet
+      if valor&gt;Q1[i]
+        scalar masque = i
+      else
+        scalar masque = masque
+      endif
+    endloop
+    scalar masque = (masque == 0) ? 1 : masque
+    if masque &lt; 221
+      scalar mascer = (valor-Q1[masque]&lt;Q1[masque+1]-valor) ? masque : masque+1
+    else
+      scalar mascer = 221
+    endif
+    scalar centroup = 221 - centro+1
+    scalar mascer = (mascer &lt;= centro) ? centro : mascer
+    scalar mascer = (mascer &gt;=centroup) ? centroup : mascer
+    # Local regressions with nobsreg = 9, 11, 13 or 15 obs.
+    matrix qi
+    matrix pri
+    matrix si
+    loop i=1..nobsreg --quiet
+      scalar j=mascer-centro+i
+      matrix qi = qi | Q1[j]
+      matrix pri = pri | rq[j]
+      matrix si = si | sdC1[j]
+    endloop
+    matrix Y = (frec==1 || frec==2) ? invcdf(N,pri) : invcdf(X,2,pri)
+    matrix X = ones(nobsreg,1) ~ qi ~ qi.*qi ~ (qi.*qi).*qi
+    matrix co = mols(Y,X)
+    # Now we susbstitute this by FGLS
+    # Build the Sigma matrix
+    matrix Sigma = zeros(nobsreg,nobsreg)
+    loop i=1..nobsreg --quiet
+      loop j=1..nobsreg --quiet
+        if i &lt;= j
+          Sigma[i,j]=(si[i]*si[j])*sqrt((pri[i]*(1-pri[j]))/(pri[j]*(1-pri[i])))
+        else
+          Sigma[i,j]=(si[i]*si[j])*sqrt((pri[j]*(1-pri[i]))/(pri[i]*(1-pri[j])))
+        endif
+      endloop
+    endloop
+    # FGLS
+    matrix P = cholesky(Sigma)
+    matrix PY = inv(P)*Y
+    matrix PX = inv(P)*X
+    matrix co = mols(PY,PX) # This is the FGLS estimator
+    scalar valorcomp = abs(co[1]+co[2]*valor+co[3]*(valor^2)+co[4]*(valor^3))
+    scalar pvalor = (frec&lt;3) ? cdf(N,co[1]+co[2]*valor+co[3]*(valor^2)+co[4]*(valor^3)) : 1-cdf(X,2,valorcomp)
+  endif
+endif
+return pvalor
+</code>
+</gretl-function>
+<sample-script>
+include GHegy.gfn
+   
+open data9-3.gdt
+
+# Tests with constant + dums + trend and fixed AR order 4, 
+# without printing the regression
+bundle H1 = GHegy_test(reskwh, 0, 4, 3, 0)
+
+# Tests with constant + dums, AR order determined by BIC with 
+# a maximum of 10, printing the regression
+bundle H2 = GHegy_test(reskwh, 2, 10, 2, 1)
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

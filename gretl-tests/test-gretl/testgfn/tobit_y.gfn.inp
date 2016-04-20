@@ -1,0 +1,7 @@
+include ./tobit_y.gfn
+open greene22_2.gdt
+list X = const Z*
+tobit Y X
+series Xb = $yhat
+series alt_yhat = tobit_y(Xb, $sigma)
+print Y Xb alt_yhat --byobs

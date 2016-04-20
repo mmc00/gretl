@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="genr_dates" ID="1372045390" needs-time-series-data="true" minver="1.9.4">
+<author email="yinung@cycu.edu.tw">Yi-Nung Yang</author>
+<version>0.2</version>
+<date>2013-06-26</date>
+<description>generate yyyy, mm, day,weekday</description>
+<help>
+This package is to generate year, quarter, month, day, and weekday from obslabel() in data sets. It is useful when dummy varialbes are needed for various time frequencies. For example, you may generate 'weeday' variable and specify a weeday dummy to investigate 'Weekday Effects&quot; in models.
+</help>
+<gretl-function name="genr_dates" type="list">
+ <params count="11">
+  <param name="nDateType" type="int" min="1" max="2" default="1">
+<description>obs label format</description>
+<labels count="2">
+"yyyy-mm-dd" "yyyy/mm/dd" </labels>
+  </param>
+  <param name="sv_yr" type="bool" default="1">
+<description>產生「年」變數 (save year as yyyy)</description>
+  </param>
+  <param name="sv_qtr" type="bool" default="1">
+<description>產生「季」變數 (save quarter as qtr )</description>
+  </param>
+  <param name="sv_mm" type="bool" default="1">
+<description>產生「月」變數 (save month as mm)</description>
+  </param>
+  <param name="sv_dd" type="bool" default="1">
+<description>產生「日」變數 (save day as dd)</description>
+  </param>
+  <param name="sv_wd" type="bool" default="1">
+<description>產生「星期」變數 (save weekday as wd)</description>
+  </param>
+  <param name="user_yyyy" type="string" optional="true">
+<description>自訂「年」變數名稱 (define variable names for 'year'</description>
+  </param>
+  <param name="user_qtr" type="string" optional="true">
+<description>自訂「季」變數名稱 (define variable names for 'quarter'</description>
+  </param>
+  <param name="user_mm" type="string" optional="true">
+<description>自訂「月」變數名稱 (define variable names for 'month'</description>
+  </param>
+  <param name="user_dd" type="string" optional="true">
+<description>自訂「日」變數名稱 (define variable names for 'day'</description>
+  </param>
+  <param name="user_wd" type="string" optional="true">
+<description>自訂「星期」變數名稱 (define variable names for 'weekday'</description>
+  </param>
+ </params>
+<code>#    set echo on
+#    set messages on
+# --- 判斷是否自訂名稱---
+if !isnull(user_yyyy)
+  string yyyy1=user_yyyy
+else
+  string yyyy1=&quot;yyyy&quot;
+endif
+if !isnull(user_qtr)
+  string qtr1=user_qtr
+else
+  string qtr1=&quot;qtr&quot;
+endif
+if !isnull(user_mm)
+  string mm1=user_mm
+else
+  string mm1=&quot;mm&quot;
+endif
+if !isnull(user_dd)
+  string dd1=user_dd
+else
+  string dd1=&quot;dd&quot;
+endif
+if !isnull(user_wd)
+  string wd1=user_wd
+else
+  string wd1=&quot;wd&quot;
+endif
+scalar T = $nobs
+scalar yr, mo, dy,qq
+series monday = 0
+set messages off
+series @yyyy1
+series @qtr1
+series @mm1
+series @dd1
+series @wd1
+setinfo @yyyy1 -d  &quot;year (年)        by genr_date()&quot;
+setinfo @qtr1 -d   &quot;quarter (季)     by genr_date()&quot;
+setinfo @mm1 -d    &quot;month (月)      by genr_date()&quot;
+setinfo @dd1 -d    &quot;day (日)         by genr_date()&quot;
+setinfo @wd1 -d    &quot;weekday (星期)  by genr_date()&quot;
+auto=1
+list retlist=const
+loop i=1..T -q
+  string date = obslabel(i)
+  if auto=1
+    # ----- 5-day daily data
+    if ($pd=5 || $pd=6 || $pd=7)
+      # djclose.gdt 檔的 obslabel 格式是 &quot;yyyy/mm/dd&quot;
+      if nDateType=1       # obslabel 格式 &quot;yyyy-mm-dd&quot;
+        sscanf date, &quot;%d-%d-%d&quot;, &amp;yr, &amp;mo, &amp;dy
+      else                 # obslabel 格式 &quot;yyyy/mm/dd&quot;
+        sscanf date, &quot;%d/%d/%d&quot;, &amp;yr, &amp;mo, &amp;dy
+      endif
+      # 如果 obslabel() 日期格式是 &quot;mm/dd/yyyy&quot;, 則須稍更動, 用以下語法
+      # sscanf date, &quot;%d/%d/%d&quot;, &amp;mo, &amp;dy, &amp;yr
+      @yyyy1[i]=yr
+      @qtr1[i]=ceil(mo/3)
+      @mm1[i]=mo
+      @dd1[i]=dy
+      #printf &quot;%d===%d====%d=====\n&quot;,yr,mo.dy
+      @wd1[i]=weekday(yr, mo, dy)
+    endif
+    # ----- quarterly data
+    if $pd=4
+      # obslabel 格式是 &quot;yyyy:q&quot;
+      sscanf date, &quot;%d:%d&quot;, &amp;yr, &amp;qq
+      @yyyy1[i]=yr
+      @qtr1[i]=qq
+    endif
+    # ----- monthly data
+    if $pd=12
+      # obslabel 格式是 &quot;yyyy:mm&quot;
+      sscanf date, &quot;%d:%d&quot;, &amp;yr, &amp;mo
+      @yyyy1[i]=yr
+      @qtr1[i]=ceil(mo/3)
+      @mm1[i]=mo
+    endif
+    # ----- 週 weekly data
+    if $pd=52
+      if nDateType=1       # obslabel 格式 &quot;yyyy-mm-dd&quot;
+        sscanf date, &quot;%d-%d-%d&quot;, &amp;yr, &amp;mo, &amp;dy
+      else                 # obslabel 格式 &quot;yyyy/mm/dd&quot;
+        sscanf date, &quot;%d/%d/%d&quot;, &amp;yr, &amp;mo, &amp;dy
+      endif
+      # 如果 obslabel() 日期格式是 &quot;mm/dd/yyyy&quot;, 則須稍更動, 用以下語法
+      # sscanf date, &quot;%d/%d/%d&quot;, &amp;mo, &amp;dy, &amp;yr
+      @yyyy1[i]=yr
+      @qtr1[i]=ceil(mo/3)
+      @mm1[i]=mo
+      @dd1[i]=dy
+      #printf &quot;%d=222==%d====%d=====\n&quot;,yr,mo,dy
+      @wd1[i]=weekday(yr, mo, dy)
+    endif
+    # ----- yearly data
+    if $pd=1
+      # obslabel 格式是 &quot;yyyy&quot;
+      sscanf date, &quot;%d&quot;, &amp;yr
+      @yyyy1[i]=yr
+    endif
+  endif
+endloop
+if ($pd=5 || $pd=6 || $pd=7)
+  if sv_yr=1
+    list retlist = retlist @yyyy1
+  endif
+  if sv_qtr=1
+    list retlist = retlist @qtr1
+  endif
+  if sv_mm=1
+    list retlist = retlist @mm1
+  endif
+  if sv_dd=1
+    list retlist = retlist @dd1
+  endif
+  if sv_wd=1
+    list retlist = retlist @wd1
+  endif
+endif
+if $pd=4
+  if sv_yr=1
+    list retlist = retlist @yyyy1
+  endif
+  if sv_qtr=1
+    list retlist = retlist @qtr1
+  endif
+endif
+if $pd=12
+  if sv_yr=1
+    list retlist = retlist @yyyy1
+  endif
+  if sv_qtr=1
+    list retlist = retlist @qtr1
+  endif
+  if sv_mm=1
+    list retlist = retlist @mm1
+  endif
+endif
+if $pd=52
+  if sv_yr=1
+    list retlist = retlist @yyyy1
+  endif
+  if sv_qtr=1
+    list retlist = retlist @qtr1
+  endif
+  if sv_mm=1
+    list retlist = retlist @mm1
+  endif
+  if sv_dd=1
+    list retlist = retlist @dd1
+  endif
+  if sv_wd=1
+    list retlist = retlist @wd1
+  endif
+endif
+if $pd=1
+  if sv_yr=1
+    list retlist = retlist @yyyy1
+  endif
+endif
+printf &quot;====================================================\n&quot;
+printf &quot;The series shown below have been generated.\n&quot;
+printf &quot;(已新增以下資料變數....)\n&quot;
+printf &quot;====================================================\n&quot;
+list retlist -= const
+retlist
+return retlist
+</code>
+</gretl-function>
+<sample-script>
+include genr_dates.gfn
+
+# The following gretl data can demonstrate the use of this package.
+#open djclose			# daily data
+open australia	  # quarterly data
+#open arma				# monthly data
+#open http://www.it.cycu.edu.tw/yaya20/files/2013/06/2005-CARR.gdt	# weekly data
+
+# Default date format 'yyyy-mm-dd'
+# Conversion of obslabel() will be automatically handled without any parameters for most of time sereies frequencies .
+
+list mylist = genr_dates()
+
+# if the date format is 'yyyy/mm/dd'and for user_defined variable names.
+
+/*
+nFormat = 2
+list mylist = genr_dates(nFormat, 1, 1, 1, 1, 1, &quot;year&quot;, &quot;quarter&quot;, &quot;month&quot;, &quot;day&quot;, &quot;weekday&quot;)
+*/
+</sample-script>
+</gretl-function-package>
+</gretl-functions>
+
