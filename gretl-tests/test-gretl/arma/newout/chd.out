@@ -1,0 +1,18 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run chd.inp
+ /home/cottrell/stats/test-gretl/arma/chd.inp
+? open data4-7
+
+Read datafile /opt/esl/share/gretl/data/data4-7.gdt
+periodicity: 1, maxobs: 34
+observations range: 1947 to 1980
+
+Listing 10 variables:
+  0) const      1) chd        2) cal        3) unemp      4) cig      
+  5) edfat      6) meat       7) spirits    8) beer       9) wine     
+
+? arma 1 1 ; chd -x
+Failed to execute x12arima

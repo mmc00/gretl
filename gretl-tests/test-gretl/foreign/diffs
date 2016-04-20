@@ -1,6 +1,10 @@
-=== /home/helio/test-gretl/foreign ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/foreign ===
 output/longley-julia.out vs newout/longley-julia.out:
-10,16c10,16
+6,19c6
+< 
+< Log-relative errors, Longley coefficients:
+< 
+<        gretl       julia
 <       12.228      8.0224
 <       10.920      7.5300
 <       11.797      7.5697
@@ -8,18 +12,11 @@ output/longley-julia.out vs newout/longley-julia.out:
 <       13.169      8.3801
 <       11.770      7.2368
 <       12.235      8.0333
----
->       12.241      8.0218
->       10.925      7.4109
->       11.821      7.5518
->       12.569      8.1276
->       13.218      8.3765
->       11.659      7.1809
->       12.248      8.0333
-19c19
+< 
+< Column means
 <       12.092      7.8449
 ---
->       12.097      7.8147
+> Failed to execute child process "julia" (No such file or directory)
 output/longley-python.out vs newout/longley-python.out:
 10,16c10,16
 <       12.228      12.241
@@ -30,17 +27,17 @@ output/longley-python.out vs newout/longley-python.out:
 <       11.770      11.735
 <       12.235      12.247
 ---
->       12.241      12.241
->       10.925      11.028
->       11.821      11.796
->       12.569      12.512
->       13.218      12.869
->       11.659      11.735
->       12.248      12.247
+>       12.241      12.014
+>       10.925      10.597
+>       11.821      12.216
+>       12.569      12.240
+>       13.218      12.114
+>       11.659      11.455
+>       12.248      12.015
 19c19
 <       12.092      12.061
 ---
->       12.097      12.061
+>       12.097      11.807
 output/longley-stata.out vs newout/longley-stata.out:
 27,88c27
 < 
@@ -108,22 +105,15 @@ output/longley-stata.out vs newout/longley-stata.out:
 ---
 > Failed to execute child process "stata" (No such file or directory)
 output/octcohere.out vs newout/octcohere.out:
-27a28,35
-> octave exited with status 256
-> stderr:
-> warning: docstring file '/usr/local/share/octave/4.0.1/etc/built-in-docstrings' not found
-> error: package signal is not installed
-> error: called from
->     load_packages at line 53 column 11
->     pkg at line 422 column 7
->     /home/cottrell/.gretl/gretltmp.m at line 2 column 1
-29,33d36
+27a28
+> Failed to execute child process "octave" (No such file or directory)
+29,102d29
 < ? h = mread("/home/cottrell/.gretl/h.mat")
 < Generated matrix h
 < ? colnames(h, "coherence")
 < ? print h
 < h (65 x 1)
-35,102d37
+< 
 <    coherence 
 <      0.31056 
 <      0.30882 
@@ -192,12 +182,62 @@ output/octcohere.out vs newout/octcohere.out:
 <     -0.15065 
 < 
 < Done
-output/oxdpd.out vs newout/oxdpd.out:
-84c84
-< DPD package version 1.24, object created on  4-02-2016
+output/octrcond.out vs newout/octrcond.out:
+69c69
+< c =  0.0032474
 ---
-> DPD package version 1.24, object created on 20-04-2016
-127,139c127,139
+> Failed to execute child process "octave" (No such file or directory)
+71d70
+< Done
+output/oxdpd.out vs newout/oxdpd.out:
+80a81
+> Failed to execute child process "oxl" (No such file or directory)
+82,141d82
+< Ox Console version 7.09 (Linux_64) (C) J.A. Doornik, 1994-2014
+< This version may be used for academic research and teaching only
+< DPD package version 1.24, object created on  4-02-2016
+< 
+< DPD( 1) Modelling n by 1-step
+<         The dataset is: abdata.csv
+< 
+<                   ----   1-step estimation using DPD ----
+<                   Coefficient  Std.Error  t-value  t-prob
+< Dn(-1)               0.534614     0.1664     3.21   0.001
+< Dn(-2)             -0.0750692    0.06798    -1.10   0.270
+< Dw                  -0.591573     0.1679    -3.52   0.000
+< Dw(-1)               0.291510     0.1411     2.07   0.039
+< Dk                   0.358502    0.05383     6.66   0.000
+< Dys                  0.597199     0.1719     3.47   0.001
+< Dys(-1)             -0.611705     0.2118    -2.89   0.004
+< Constant           0.00542720   0.009714    0.559   0.577
+< T1980              0.00560768    0.01538    0.365   0.715
+< T1981              -0.0383049    0.01745    -2.20   0.028
+< T1982              -0.0277852    0.01791    -1.55   0.121
+< T1983             -0.00685022    0.02206   -0.311   0.756
+< T1984              0.00631375    0.01971    0.320   0.749
+< 
+< sigma               0.1172381  sigma^2            0.01374478
+< sigma levels       0.08289989
+< RSS              8.2193799368  TSS                12.5999784
+< no. of observations       611  no. of parameters          13
+< Using robust standard errors
+< 
+< Transformation used:      first differences
+< Transformed instruments:  w  w(-1)  k  ys  ys(-1)
+< Level instruments:        Dummies  Gmm("n",2,99)
+< 
+< constant:                 yes  time dummies:               5
+< number of individuals     140 (derived from year)
+< longest time series         6 [1979 - 1984]
+< shortest time series        4 (unbalanced panel)
+< 
+< Sargan test:    Chi^2(25) =     73.86 [0.000] **
+< AR(1) test:        N(0,1) =    -2.493 [0.013] *
+< AR(2) test:        N(0,1) =   -0.3594 [0.719]
+< 
+< ? matrix oxparm = mread("/home/cottrell/.gretl/oxparm.mat")
+< Generated matrix oxparm
+< ? eval abs((parm - oxparm) ./ oxparm)
 <   5.0090e-13 
 <   9.9495e-13 
 <   6.6436e-14 
@@ -211,20 +251,31 @@ output/oxdpd.out vs newout/oxdpd.out:
 <   2.7596e-13 
 <   2.6468e-12 
 <   1.3646e-12 
----
->   1.6115e-13 
->   4.1133e-13 
->   1.0322e-14 
->   1.5786e-13 
->   1.5639e-14 
->   1.2809e-13 
->   3.3032e-14 
->   1.0308e-12 
->   6.1297e-13 
->   2.9237e-13 
->   8.9904e-14 
->   3.5635e-12 
->   1.3729e-12 
+< 
+< Done
+output/oxtriv.out vs newout/oxtriv.out:
+24a25
+> Failed to execute child process "oxl" (No such file or directory)
+26,44d26
+< Ox Console version 7.09 (Linux_64) (C) J.A. Doornik, 1994-2014
+< This version may be used for academic research and teaching only
+< 
+<        199.90       1065.0       3.0000       1.7500
+<        228.00       1254.0       3.0000       2.0000
+<        235.00       1300.0       3.0000       2.0000
+<        285.00       1577.0       4.0000       2.5000
+<        239.00       1600.0       3.0000       2.0000
+<        293.00       1750.0       4.0000       2.0000
+<        285.00       1800.0       4.0000       2.7500
+<        365.00       1870.0       4.0000       2.0000
+<        295.00       1935.0       4.0000       2.5000
+<        290.00       1948.0       4.0000       2.0000
+<        385.00       2254.0       4.0000       3.0000
+<        505.00       2600.0       3.0000       2.5000
+<        425.00       2800.0       4.0000       3.0000
+<        415.00       3000.0       4.0000       3.0000
+< 
+< Done
 output/pancorr.out vs newout/pancorr.out:
 79a80
 > Failed to execute child process "stata" (No such file or directory)
@@ -366,7 +417,7 @@ output/Rloclev.out vs newout/Rloclev.out:
 < *** Rlib time = 0.229581
 ---
 > 
-> *** Rlib time = 0.356469
+> *** Rlib time = 0.385856
 output/Rsink.out vs newout/Rsink.out:
 35c35
 < Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1

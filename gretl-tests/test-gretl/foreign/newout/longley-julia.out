@@ -1,0 +1,9 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run longley-julia.inp
+ /home/cottrell/stats/test-gretl/foreign/longley-julia.inp
+Read datafile /opt/esl/share/gretl/data/misc/longley.gdt
+Failed to execute child process "julia" (No such file or directory)
+

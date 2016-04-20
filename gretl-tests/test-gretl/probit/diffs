@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/probit ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/probit ===
 output/C17.1.out vs newout/C17.1.out:
 6,129c6
 < Read datafile /opt/esl/share/gretl/data/wooldridge/pntsprd.gdt

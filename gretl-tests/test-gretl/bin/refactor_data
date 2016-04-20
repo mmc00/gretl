@@ -14,9 +14,16 @@ CURRENT_GRETL=`echo "open data4-1" | gretlcli -e -b  - | grep "Read datafile " |
 
 #DEBUG
 #printf "Current DATA DIR is: %s\n" $CURRENT_GRETL
+#printf "test dir is: %s\n" `dirname $PWD`
+BASE=`dirname $PWD`
+#stats/test-gretl
+#Sorry must be hardcoded for now (the - in gretl-tests)!
+BASE2="$HOME/github/gretl/gretl-tests/test-gretl"
+
 for f in $(ls newout/*) ; do 
     `sed -i "s:$CURRENT_GRETL:/opt/esl/share/gretl/:g" $f`
-    `sed -i "s:$HOME/test\-gretl:/home/cottrell/stats/test\-gretl:g" $f`
+    #`sed -i "s:$BASE/test\-gretl:/home/cottrell/stats/test\-gretl:g" $f`
+    `sed -i "s:$BASE2:/home/cottrell/stats/test\-gretl:g" $f`
     `sed -i "s:$HOME:/home/cottrell:g" $f`
     # Known unharmonized paths
     if [ "$f" == "newout/ivreg.out" ]; 

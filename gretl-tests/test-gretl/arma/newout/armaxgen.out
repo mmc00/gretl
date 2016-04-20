@@ -1,0 +1,24 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run armaxgen.inp
+ /home/cottrell/stats/test-gretl/arma/armaxgen.inp
+? nulldata 500
+periodicity: 1, maxobs: 500
+observations range: 1 to 500
+? setobs 12 1950:01
+Full data range: 1950:01 - 1991:08 (n = 500)
+
+? set seed 371
+Pseudo-random number generator seeded with 371
+? genr eps = normal()
+Generated series eps (ID 2)
+? genr x = uniform()
+Generated series x (ID 3)
+? genr u = eps + .4 * eps(-1)
+Generated series u (ID 4)
+? genr y = 10.0 + 3.0*x + u
+Generated series y (ID 5)
+? arma 0 1 ; y 0 x --x-12-arima
+Failed to execute x12arima

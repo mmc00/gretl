@@ -1,26 +1,13 @@
-=== /home/helio/test-gretl/matrix ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/matrix ===
 output/balatime.out vs newout/balatime.out:
 16c16
 < assignment in series mode: 0.0272666 secs
 ---
-> assignment in series mode: 0.0299883 secs
+> assignment in series mode: 0.037913 secs
 23c23
 < assignment in matrix mode: 0.0125501 secs
 ---
-> assignment in matrix mode: 0.0117315 secs
-output/eigengen2.out vs newout/eigengen2.out:
-40,44c40,44
-<     -0.10038     -0.54520     -0.47163    -0.027939    -0.076855 
-<     0.061775     -0.15765     -0.10859     -0.11511     -0.92904 
-<     -0.75664       0.0000      0.48092     -0.11302    -0.089873 
-<     -0.16774      0.15266     -0.50564       0.0000      0.34448 
-<    -0.072610     -0.18656     -0.25350     -0.43330    -0.065124 
----
->     -0.10038     -0.54520      0.47163     0.027939    -0.076855 
->     0.061775     -0.15765      0.10859      0.11511     -0.92904 
->     -0.75664       0.0000     -0.48092      0.11302    -0.089873 
->     -0.16774      0.15266      0.50564       0.0000      0.34448 
->    -0.072610     -0.18656      0.25350      0.43330    -0.065124 
+> assignment in matrix mode: 0.0104587 secs
 output/ginv.out vs newout/ginv.out:
 58,60c58,60
 <  -4.4409e-16  -1.7764e-15  -1.7764e-15   2.2204e-16 
@@ -160,8 +147,8 @@ output/toeplitz.out vs newout/toeplitz.out:
 < By hand: 0.022679
 < Through function: 0.0043256
 ---
-> By hand: 0.0161929
-> Through function: 0.00891087
+> By hand: 0.0224068
+> Through function: 0.00513454
 15,17c15,17
 <    -0.079950    -0.079950   2.3176e-14 
 <     -0.24675     -0.24675   9.9643e-15 

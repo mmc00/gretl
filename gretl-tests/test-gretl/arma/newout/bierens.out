@@ -1,0 +1,89 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run bierens.inp
+ /home/cottrell/stats/test-gretl/arma/bierens.inp
+? open bierens.gdt
+
+Read datafile /home/cottrell/stats/test-gretl/arma/bierens.gdt
+periodicity: 4, maxobs: 200
+observations range: 1950:1 to 1999:4
+
+Listing 2 variables:
+  0) const    1) y      
+
+? diff y
+Listing 3 variables:
+  0) const    1) y        2) d_y    
+
+? smpl 1950:2 1997:1
+Full data range: 1950:1 - 1999:4 (n = 200)
+Current sample: 1950:2 - 1997:1 (n = 188)
+
+# BHHH
+? arma 1 1 ; 0 1 ; d_y -c
+
+Function evaluations: 26
+Evaluations of gradient: 13
+
+Model 1: ARMA, using observations 1950:3-1997:1 (T = 187)
+Estimated using BHHH method (conditional ML)
+Dependent variable: d_y
+
+             coefficient   std. error      z      p-value 
+  --------------------------------------------------------
+  const      -0.0101514    0.0904944    -0.1122   0.9107  
+  phi_1       0.738837     0.0650414    11.36     6.65e-30 ***
+  theta_1     0.492063     0.0640689     7.680    1.59e-14 ***
+  Theta_1    -0.194657     0.0806410    -2.414    0.0158   **
+
+Mean dependent var  -0.029849   S.D. dependent var   1.980823
+Mean of innovations -0.001411   S.D. of innovations  1.020544
+Log-likelihood      -269.1442   Akaike criterion     548.2885
+Schwarz criterion    564.4440   Hannan-Quinn         554.8347
+
+                        Real  Imaginary    Modulus  Frequency
+  -----------------------------------------------------------
+  AR
+    Root  1           1.3535     0.0000     1.3535     0.0000
+  MA
+    Root  1          -2.0323     0.0000     2.0323     0.5000
+  MA (seasonal)
+    Root  1           5.1372     0.0000     5.1372     0.0000
+  -----------------------------------------------------------
+
+? arima 1 1 1 ; 0 0 1 ; y -c
+
+Function evaluations: 26
+Evaluations of gradient: 13
+
+Model 2: ARIMA, using observations 1950:3-1997:1 (T = 187)
+Estimated using BHHH method (conditional ML)
+Dependent variable: (1-L) y
+
+             coefficient   std. error      z      p-value 
+  --------------------------------------------------------
+  const      -0.0101514    0.0904944    -0.1122   0.9107  
+  phi_1       0.738837     0.0650414    11.36     6.65e-30 ***
+  theta_1     0.492063     0.0640689     7.680    1.59e-14 ***
+  Theta_1    -0.194657     0.0806410    -2.414    0.0158   **
+
+Mean dependent var  -0.029849   S.D. dependent var   1.980823
+Mean of innovations -0.001411   S.D. of innovations  1.020544
+Log-likelihood      -269.1442   Akaike criterion     548.2885
+Schwarz criterion    564.4440   Hannan-Quinn         554.8347
+
+                        Real  Imaginary    Modulus  Frequency
+  -----------------------------------------------------------
+  AR
+    Root  1           1.3535     0.0000     1.3535     0.0000
+  MA
+    Root  1          -2.0323     0.0000     2.0323     0.5000
+  MA (seasonal)
+    Root  1           5.1372     0.0000     5.1372     0.0000
+  -----------------------------------------------------------
+
+# X12A
+? arma 1 1 ; 0 1 ; d_y -x
+Failed to execute x12arima

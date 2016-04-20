@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/gmm ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/gmm ===
 output/CKLS.out vs newout/CKLS.out:
 69c69
 < Function evaluations: 11

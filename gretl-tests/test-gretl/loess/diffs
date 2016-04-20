@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/loess ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/loess ===
 output/bwght.out vs newout/bwght.out:
 6,18c6
 < 
@@ -16,3 +16,19 @@ output/bwght.out vs newout/bwght.out:
 < Done
 ---
 > bwght.gdt: No such file or directory
+output/loess_nist_na.out vs newout/loess_nist_na.out:
+42c42,45
+< Done
+---
+> Fatal Error: Mismatch between the program and library build versions detected.
+> The library used 2.8 (no debug,Unicode,compiler with C++ ABI 1002,wx containers,compatible with 2.6),
+> and your program used 2.8 (no debug,Unicode,compiler with C++ ABI 1008,wx containers,compatible with 2.4,compatible with 2.6).
+> 
+output/loess_nist.out vs newout/loess_nist.out:
+38c38,41
+< Done
+---
+> Fatal Error: Mismatch between the program and library build versions detected.
+> The library used 2.8 (no debug,Unicode,compiler with C++ ABI 1002,wx containers,compatible with 2.6),
+> and your program used 2.8 (no debug,Unicode,compiler with C++ ABI 1008,wx containers,compatible with 2.4,compatible with 2.6).
+> 

@@ -1,0 +1,37 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run sarma1a.inp
+ /home/cottrell/stats/test-gretl/sarma/sarma1a.inp
+? nulldata 640
+periodicity: 1, maxobs: 640
+observations range: 1 to 640
+? setobs 12 1920:01
+Full data range: 1920:01 - 1973:04 (n = 640)
+
+? set seed 371
+Pseudo-random number generator seeded with 371
+? scalar phi_1 = 0.5
+Generated scalar phi_1 = 0.5
+? scalar Phi_1 = 0.1
+Generated scalar Phi_1 = 0.1
+? scalar theta_1 = 0.3
+Generated scalar theta_1 = 0.3
+? genr eps = normal()
+Generated series eps (ID 2)
+? genr u = eps + theta_1 * eps(-1)
+Generated series u (ID 3)
+? series y = 0
+Generated series y (ID 4)
+? genr y = phi_1*y(-1) + Phi_1*y(-12) - phi_1*Phi_1*y(-13) + u
+Replaced series y (ID 4)
+? genr y = y + 500 / (1 - phi_1 - Phi_1 + phi_1*Phi_1)
+Replaced series y (ID 4)
+? smpl +20 ;
+Full data range: 1920:01 - 1973:04 (n = 640)
+Current sample: 1921:09 - 1973:04 (n = 620)
+
+? arma 1 1 ; 1 0 ; y -cx
+X-13-ARIMA can't handle more than 600 observations.
+Please select a smaller sample.

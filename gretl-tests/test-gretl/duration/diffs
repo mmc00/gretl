@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/duration ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/duration ===
 output/recid.out vs newout/recid.out:
 41c41
 < Generated series wpred (ID 19)

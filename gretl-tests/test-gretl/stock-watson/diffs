@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/stock-watson ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/stock-watson ===
 output/ch10.out vs newout/ch10.out:
 4c4
 <  /opt/esl/share/gretl/scripts/stock_watson/ch10.inp

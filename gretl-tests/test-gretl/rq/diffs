@@ -1,13 +1,13 @@
-=== /home/helio/test-gretl/rq ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/rq ===
 output/bweight.out vs newout/bweight.out:
 52c52
 < ols time = 0.0561832
 ---
-> ols time = 0.173415
+> ols time = 0.0596468
 84c84
 < F-N time = 11.2518
 ---
-> F-N time = 2.66572
+> F-N time = 2.71871
 output/wages.out vs newout/wages.out:
 79,85c79,85
 <   const        2.17123       0.0362308     59.93     0.0000   ***

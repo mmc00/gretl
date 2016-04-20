@@ -1,0 +1,10 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run readfile2.inp
+ /home/cottrell/stats/test-gretl/strings/readfile2.inp
+? sprintf fname "%s/QNC.rts", $x12adir
+Generated string fname
+? string foo = readfile(fname)
+Failed to open file '/home/cottrell/.gretl/x12arima/QNC.rts.gdt': No such file or directory

@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/arbond ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/arbond ===
 output/test_few.out vs newout/test_few.out:
 52,56c52,56
 <              coefficient   std. error    t-ratio   p-value 

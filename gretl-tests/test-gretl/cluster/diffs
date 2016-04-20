@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/cluster ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/cluster ===
 output/binary-cluster.out vs newout/binary-cluster.out:
 78a79
 > Failed to execute child process "stata" (No such file or directory)

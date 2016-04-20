@@ -1,0 +1,18 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run cars100.inp
+ /home/cottrell/stats/test-gretl/arma/cars100.inp
+? open cars100.gdt
+
+Read datafile /home/cottrell/stats/test-gretl/arma/cars100.gdt
+periodicity: 1, maxobs: 41
+observations range: 1970 to 2010
+
+Listing 4 variables:
+  0) const       1) Cars100     2) DIFF1_Ca    3) DIFF2_Ca  
+
+? set bhhh_toler .0002
+? arima 1 2 1 ; Cars100 --nc --x-12-arima
+Failed to execute x12arima

@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/mle ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/mle ===
 output/probit-derivs.out vs newout/probit-derivs.out:
 370,371c370,371
 < Gradients:   -1.0668e-07  2.1124e-07 -3.7841e-07 -6.1019e-06 -2.5661e-07 -6.8545e-06
@@ -25,6 +25,6 @@ output/probit-derivs.out vs newout/probit-derivs.out:
 < Newton time:            0.0975984 seconds
 < Newton + hessian time:  0.0111296 seconds
 ---
-> BFGS time:              0.110561 seconds
-> Newton time:            0.151765 seconds
-> Newton + hessian time:  0.024472 seconds
+> BFGS time:              0.0877733 seconds
+> Newton time:            0.122647 seconds
+> Newton + hessian time:  0.05781 seconds

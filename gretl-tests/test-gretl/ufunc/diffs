@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/ufunc ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/ufunc ===
 output/BFGS_analytical.out vs newout/BFGS_analytical.out:
 5,6c5,6
 < Function evaluations: 142
@@ -21,7 +21,7 @@ output/BFGS_analytical.out vs newout/BFGS_analytical.out:
 18c18
 < Elapsed time: numerical = 0.0338977, analytical = 0.00541451
 ---
-> Elapsed time: numerical = 0.0366539, analytical = 0.00656658
+> Elapsed time: numerical = 0.0324935, analytical = 0.00467009
 output/BSMestim.out vs newout/BSMestim.out:
 6,349c6,7
 <  /opt/esl/share/gretl/functions/BSMestim.gfn
@@ -375,14 +375,14 @@ output/egarch.out vs newout/egarch.out:
 36c36
 < Elapsed: 1.62925 seconds
 ---
-> Elapsed: 6.38556 seconds
+> Elapsed: 1.58921 seconds
 output/kpsw_testfrontend.out vs newout/kpsw_testfrontend.out:
 51c51
 < elapsed time: 0.633340
 ---
-> elapsed time: 0.879939
+> elapsed time: 0.319580
 output/RBC_small.out vs newout/RBC_small.out:
 27c27
 < elapsed: 2.24208 secs
 ---
-> elapsed: 3.03694 secs
+> elapsed: 1.72031 secs

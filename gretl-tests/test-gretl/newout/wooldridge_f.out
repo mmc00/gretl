@@ -1,0 +1,8 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run wooldridge_f.inp
+ /home/cottrell/stats/test-gretl/wooldridge_f.inp
+? open gpa3.gdt
+gpa3.gdt: No such file or directory

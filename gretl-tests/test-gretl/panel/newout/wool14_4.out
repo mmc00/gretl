@@ -1,0 +1,8 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run wool14_4.inp
+ /home/cottrell/stats/test-gretl/panel/wool14_4.inp
+? open wagepan.gdt
+wagepan.gdt: No such file or directory

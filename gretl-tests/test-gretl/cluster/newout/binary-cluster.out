@@ -1,0 +1,82 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run binary-cluster.inp
+ /home/cottrell/stats/test-gretl/cluster/binary-cluster.inp
+? open greene19_1.gdt
+
+Read datafile /opt/esl/share/gretl/data/greene/greene19_1.gdt
+periodicity: 1, maxobs: 32
+observations range: 1 to 32
+
+Listing 5 variables:
+  0) const    1) GPA      2) TUCE     3) PSI      4) GRADE  
+
+# check that this works with missing values
+# GPA[14] = NA
+? logit GRADE 0 GPA TUCE PSI --cluster=PSI
+
+Model 1: Logit, using observations 1-32
+Dependent variable: GRADE
+Standard errors clustered by 2 values of PSI
+
+             coefficient   std. error     z        slope  
+  --------------------------------------------------------
+  const      -13.0213      6.14735      -2.118            
+  GPA          2.82611     1.43862       1.964   0.533859 
+  TUCE         0.0951577   0.0525054     1.812   0.0179755
+  PSI          2.37869     0.496664      4.789   0.456498 
+
+Mean dependent var   0.343750   S.D. dependent var   0.482559
+McFadden R-squared   0.374038   Adjusted R-squared   0.179786
+Log-likelihood      -12.88963   Akaike criterion     33.77927
+Schwarz criterion    39.64221   Hannan-Quinn         35.72267
+
+Number of cases 'correctly predicted' = 26 (81.2%)
+f(beta'x) at mean of independent vars = 0.189
+Likelihood ratio test: Chi-square(3) = 15.4042 [0.0015]
+
+           Predicted
+             0    1
+  Actual 0  18    3
+         1   3    8
+
+? probit GRADE 0 GPA TUCE PSI --cluster=PSI
+
+Model 2: Probit, using observations 1-32
+Dependent variable: GRADE
+Standard errors clustered by 2 values of PSI
+
+             coefficient   std. error     z        slope  
+  --------------------------------------------------------
+  const      -7.45232      2.96536      -2.513            
+  GPA         1.62581      0.704840      2.307   0.533347 
+  TUCE        0.0517289    0.0259247     1.995   0.0169697
+  PSI         1.42633      0.210686      6.770   0.464426 
+
+Mean dependent var   0.343750   S.D. dependent var   0.482559
+McFadden R-squared   0.377478   Adjusted R-squared   0.183225
+Log-likelihood      -12.81880   Akaike criterion     33.63761
+Schwarz criterion    39.50055   Hannan-Quinn         35.58101
+
+Number of cases 'correctly predicted' = 26 (81.2%)
+f(beta'x) at mean of independent vars = 0.328
+Likelihood ratio test: Chi-square(3) = 15.5459 [0.0014]
+
+           Predicted
+             0    1
+  Actual 0  18    3
+         1   3    8
+
+Test for normality of residual -
+  Null hypothesis: error is normally distributed
+  Test statistic: Chi-square(2) = 3.61059
+  with p-value = 0.164426
+
+? foreign language=stata --send-data
+?   logit grade gpa tuce psi, vce(cluster psi)
+?   probit grade gpa tuce psi, vce(cluster psi)
+? end foreign
+Failed to execute child process "stata" (No such file or directory)
+

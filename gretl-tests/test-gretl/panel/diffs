@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/panel ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/panel ===
 output/arelbond.out vs newout/arelbond.out:
 136,152c136,152
 <   const       1.79212      0.624614      2.869    0.0048   ***

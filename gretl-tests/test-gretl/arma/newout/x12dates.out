@@ -1,0 +1,53 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run x12dates.inp
+ /home/cottrell/stats/test-gretl/arma/x12dates.inp
+Read datafile /home/cottrell/stats/test-gretl/arma/Exemplo.gdt
+
+Function evaluations: 46
+Evaluations of gradient: 12
+
+Model 1: ARMA, using observations 2004:10-2011:10 (T = 85)
+Estimated using Kalman filter (exact ML)
+Dependent variable: ipc_dive_m
+Standard errors based on Hessian
+
+             coefficient   std. error      z      p-value 
+  --------------------------------------------------------
+  const       0.407476     0.0742870     5.485    4.13e-08 ***
+  Phi_1      -0.0507680    0.108371     -0.4685   0.6395  
+  theta_1     0.549245     0.0886597     6.195    5.83e-10 ***
+
+Mean dependent var   0.410204   S.D. dependent var   0.544479
+Mean of innovations  0.001229   S.D. of innovations  0.463257
+Log-likelihood      -55.39961   Akaike criterion     118.7992
+Schwarz criterion    128.5698   Hannan-Quinn         122.7292
+
+                        Real  Imaginary    Modulus  Frequency
+  -----------------------------------------------------------
+  AR (seasonal)
+    Root  1         -19.6974     0.0000    19.6974     0.5000
+  MA
+    Root  1          -1.8207     0.0000     1.8207     0.5000
+  -----------------------------------------------------------
+
+
+ For 95% confidence intervals, z(0.025) = 1.96
+
+          ipc_dive_m    prediction    std. error        95% interval
+
+2011:11         0.23         0.36        0.463        -0.55 -     1.27
+
+  Forecast evaluation statistics
+
+  Mean Error                       -0.13221
+  Mean Squared Error                0.017479
+  Root Mean Squared Error           0.13221
+  Mean Absolute Error               0.13221
+  Mean Percentage Error            -57.482
+  Mean Absolute Percentage Error    57.482
+  Theil's U                         0
+
+Failed to execute x12arima

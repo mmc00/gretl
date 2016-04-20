@@ -1,0 +1,92 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run sun-activity.inp
+ /home/cottrell/stats/test-gretl/arma/sun-activity.inp
+? open sun-activity.gdt
+
+Read datafile /home/cottrell/stats/test-gretl/arma/sun-activity.gdt
+periodicity: 1, maxobs: 309
+observations range: 1700 to 2008
+
+Listing 2 variables:
+  0) const          1) sunactivity  
+
+? arima 9 0 0 ; sunactivity
+
+Function evaluations: 62
+Evaluations of gradient: 18
+
+Model 1: ARMA, using observations 1700-2008 (T = 309)
+Estimated using Kalman filter (exact ML)
+Dependent variable: sunactivity
+Standard errors based on Hessian
+
+             coefficient   std. error      z      p-value 
+  --------------------------------------------------------
+  const      48.3243       6.87346       7.031    2.06e-12 ***
+  phi_1       1.16071      0.0550797    21.07     1.40e-98 ***
+  phi_2      -0.395382     0.0859104    -4.602    4.18e-06 ***
+  phi_3      -0.166341     0.0887903    -1.873    0.0610   *
+  phi_4       0.150446     0.0895534     1.680    0.0930   *
+  phi_5      -0.0943926    0.0898922    -1.050    0.2937  
+  phi_6       0.00906281   0.0899696     0.1007   0.9198  
+  phi_7       0.0520530    0.0910305     0.5718   0.5674  
+  phi_8      -0.0858436    0.0879007    -0.9766   0.3288  
+  phi_9       0.252392     0.0559029     4.515    6.34e-06 ***
+
+Mean dependent var   49.75210   S.D. dependent var   40.45259
+Mean of innovations  0.159856   S.D. of innovations  14.85883
+Log-likelihood      -1274.311   Akaike criterion     2570.623
+Schwarz criterion    2611.689   Hannan-Quinn         2587.041
+
+                        Real  Imaginary    Modulus  Frequency
+  -----------------------------------------------------------
+  AR
+    Root  1           1.0490     0.0000     1.0490     0.0000
+    Root  2           0.8485    -0.5759     1.0255    -0.0949
+    Root  3           0.8485     0.5759     1.0255     0.0949
+    Root  4          -1.1772    -0.4453     1.2586    -0.4424
+    Root  5          -1.1772     0.4453     1.2586     0.4424
+    Root  6           0.4205    -1.0894     1.1677    -0.1914
+    Root  7           0.4205     1.0894     1.1677     0.1914
+    Root  8          -0.4463    -1.2098     1.2895    -0.3062
+    Root  9          -0.4463     1.2098     1.2895     0.3062
+  -----------------------------------------------------------
+
+? fcast 1709 1720 gretl_fc --dynamic
+Generated series gretl_fc (ID 2)
+? smpl 1709 1719
+Full data range: 1700 - 2008 (n = 309)
+Current sample: 1709 - 1719 (n = 11)
+
+? print sunactivity gretl_fc --byobs
+
+      sunactivity     gretl_fc
+
+1709            8     11.23047
+1710            3     13.23731
+1711            0     19.66407
+1712            0     27.00373
+1713            2     33.57858
+1714           11     44.90784
+1715           27     47.95866
+1716           47     45.09347
+1717           63     36.50656
+1718           60     28.78818
+1719           39     23.48711
+
+? smpl --full
+Full data range: 1700 - 2008 (n = 309)
+
+? genr year = time + 1699
+Generated series year (ID 4)
+? foreign language=stata --send-data
+?   tsset year
+?   arima sunactivity, arima(9,0,0)
+?   predict stata_fc, dyn(1709)
+?   list year sunactivity stata_fc in 10/20
+? end foreign
+Failed to execute child process "stata" (No such file or directory)
+

@@ -1,0 +1,8 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run biptest.inp
+ /home/cottrell/stats/test-gretl/biptest.inp
+? open ~/stats/stata/school.gdt
+/home/cottrell/stats/stata/school.gdt: No such file or directory

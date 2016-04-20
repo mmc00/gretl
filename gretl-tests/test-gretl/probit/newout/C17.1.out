@@ -1,0 +1,8 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run C17.1.inp
+ /home/cottrell/stats/test-gretl/probit/C17.1.inp
+? open pntsprd.gdt --quiet
+pntsprd.gdt: No such file or directory

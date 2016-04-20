@@ -1,0 +1,54 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run sarma3a.inp
+ /home/cottrell/stats/test-gretl/sarma/sarma3a.inp
+# Seasonal ARMA test script
+? nulldata 620
+periodicity: 1, maxobs: 620
+observations range: 1 to 620
+? setobs 4 1920:1
+Full data range: 1920:1 - 2074:4 (n = 620)
+
+? set seed 3711113
+Pseudo-random number generator seeded with 3711113
+? scalar phi_1 = 0.5
+Generated scalar phi_1 = 0.5
+? scalar phi_2 = -0.2
+Generated scalar phi_2 = -0.2
+? scalar phi_3 = 0.3
+Generated scalar phi_3 = 0.3
+? scalar phi_4 = -0.1
+Generated scalar phi_4 = -0.1
+? scalar Phi_1 = 0.1
+Generated scalar Phi_1 = 0.1
+? scalar theta_1 = 0.2
+Generated scalar theta_1 = 0.2
+? scalar Theta_1 = 0.2
+Generated scalar Theta_1 = 0.2
+? genr eps = normal()
+Generated series eps (ID 2)
+# Artificial error process
+? genr u = eps + theta_1*eps(-1) + Theta_1*eps(-4) + theta_1*Theta_1*eps(-5)
+Generated series u (ID 3)
+? series y = 0
+Generated series y (ID 4)
+# Artificial seasonal series
+? genr y = phi_1*y(-1) + phi_2*y(-2) + phi_3*y(-3) + (phi_4+Phi_1)*y(-4) - \
+  phi_1*Phi_1*y(-5) - phi_2*Phi_1*y(-6) - phi_3*Phi_1*y(-7) - \
+  phi_4*Phi_1*y(-8) + u
+Replaced series y (ID 4)
+? scalar phisum = phi_1 + phi_2 + phi_3 + phi_4
+Generated scalar phisum = 0.5
+? scalar phiprod = phisum * Phi_1
+Generated scalar phiprod = 0.05
+? genr y = y + 500 / (1 - phisum - Phi_1 + phiprod)
+Replaced series y (ID 4)
+? smpl +20 ;
+Full data range: 1920:1 - 2074:4 (n = 620)
+Current sample: 1925:1 - 2074:4 (n = 600)
+
+# X12, conditional
+? arma 4 1 ; 1 1 ; y --conditional --x-12-arima
+Failed to execute x12arima

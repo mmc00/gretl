@@ -1,0 +1,24 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run jackgap1.inp
+ /home/cottrell/stats/test-gretl/arma/jackgap1.inp
+? function series genarma22(series e, scalar a1, scalar a2, scalar \
+  ma1, scalar ma2)
+? nulldata 128
+periodicity: 1, maxobs: 128
+observations range: 1 to 128
+? setobs 4 1980:1
+Full data range: 1980:1 - 2011:4 (n = 128)
+
+? set seed 2340897
+Pseudo-random number generator seeded with 2340897
+? genr e = normal()
+Generated series e (ID 2)
+? y = genarma22(e, 0, 0.8, 0.1, 0)
+Generated series y (ID 3)
+? matrix sel = { 2 }
+Generated matrix sel = {2}
+? arma sel 2 ; y -xc
+Failed to execute x12arima

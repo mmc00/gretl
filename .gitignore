@@ -22,7 +22,8 @@
 
 # Executables
 *.exe
-*.out
+# This is an exception because the .out files are important for test-gretl
+# *.out
 *.app
 *.i*86
 *.x86_64

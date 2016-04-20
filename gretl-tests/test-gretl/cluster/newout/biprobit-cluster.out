@@ -1,0 +1,43 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run biprobit-cluster.inp
+ /home/cottrell/stats/test-gretl/cluster/biprobit-cluster.inp
+? open school.dta -q
+Read datafile /home/cottrell/stats/test-gretl/cluster/school.dta
+? biprobit private vote 0 logptax loginc years --cluster=pub12
+Gradient within tolerance (1e-05)
+
+Model 1: Bivariate probit, using observations 1-95
+Standard errors clustered by 2 values of pub12
+
+             coefficient   std. error      z       p-value 
+  ---------------------------------------------------------
+ private:
+  const      -4.18469      1.22019       -3.430    0.0006   ***
+  logptax    -0.106696     0.0627831     -1.699    0.0892   *
+  loginc      0.376204     0.0865775      4.345    1.39e-05 ***
+  years      -0.0118884    0.0191260     -0.6216   0.5342  
+
+ vote:
+  const      -0.536057     1.00074       -0.5357   0.5922  
+  logptax    -1.28871      0.130448      -9.879    5.13e-23 ***
+  loginc      0.998286     0.00503244   198.4      0.0000   ***
+  years      -0.0168561    0.00163841   -10.29     7.97e-25 ***
+
+Log-likelihood      -89.25403   Akaike criterion     196.5081
+Schwarz criterion    219.4929   Hannan-Quinn         205.7957
+
+rho = -0.269619
+
+Test of independence -
+  Null hypothesis: rho = 0
+  Test statistic: Chi-square(1) = 1.38444
+  with p-value = 0.239347
+
+? foreign language=stata --send-data
+?   biprobit private vote logptax loginc years, vce(cluster pub12)
+? end foreign
+Failed to execute child process "stata" (No such file or directory)
+

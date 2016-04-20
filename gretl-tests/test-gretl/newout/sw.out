@@ -1,0 +1,13 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run sw.inp
+ /home/cottrell/stats/test-gretl/sw.inp
+# Reproduce some of the time-series material in Stock and Watson,
+# Introduction to Econometrics, chapter 12
+# Note that S and W seem to use "robust" standard errors throughout
+# Read from RATS database
+? open ~/stats/hamilton/macrodat.rat
+Couldn't open /home/cottrell/stats/hamilton/macrodat.rat.gdt
+/home/cottrell/stats/hamilton/macrodat.rat.gdt: No such file or directory

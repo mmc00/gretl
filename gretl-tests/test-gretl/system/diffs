@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/system ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/system ===
 output/bs75d.out vs newout/bs75d.out:
 293c293
 < Tolerance 1e-12, criterion 5.68434e-13

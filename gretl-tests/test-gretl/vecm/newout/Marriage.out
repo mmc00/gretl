@@ -1,0 +1,149 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:54
+? run Marriage.inp
+ /home/cottrell/stats/test-gretl/vecm/Marriage.inp
+? open Marriage.csv -q
+Read datafile /home/cottrell/stats/test-gretl/vecm/Marriage.csv
+? setobs 1 1947 --time-series
+Full data range: 1947 - 2010 (n = 64)
+
+? genr time
+Generated series time (ID 3)
+? genr I76 = (t == 30)
+Generated series I76 (ID 4)
+? lags 1; I76
+Listing 6 variables:
+  0) const    1) Men      2) Women    3) time     4) I76    
+  5) I76_1  
+
+? genr Sh76 = (t >= 30)
+Generated series Sh76 (ID 6)
+? lags 2; Sh76
+Listing 9 variables:
+  0) const     1) Men       2) Women     3) time      4) I76     
+  5) I76_1     6) Sh76      7) Sh76_1    8) Sh76_2  
+
+? genr Tr76 = time * Sh76
+Generated series Tr76 (ID 9)
+? lags 2; Tr76
+Listing 12 variables:
+  0) const     1) Men       2) Women     3) time      4) I76     
+  5) I76_1     6) Sh76      7) Sh76_1    8) Sh76_2    9) Tr76    
+ 10) Tr76_1   11) Tr76_2  
+
+# With restricted broken trend
+? coint2 2 Men Women; Sh76_2 I76 I76_1; Tr76_2 --crt --verbose
+
+Johansen test:
+Number of equations = 2
+Lag order = 2
+Estimation period: 1949 - 2010 (T = 62)
+
+Coefficients, VAR in differences (6 x 2)
+
+  -0.0022515     0.034154 
+    -0.20362     0.069889 
+     0.23103     -0.30036 
+     0.12004      0.13052 
+     0.38370      0.13789 
+     0.21713      0.30495 
+
+Coefficients, eqns in lagged levels (6 x 4)
+
+      22.931       20.493       15.147      0.21086 
+     0.15536     -0.31333       3.2180      -1.3095 
+     -1.0772     -0.83634      -3.3796      -10.798 
+      3.4685       3.7855       31.916       47.534 
+     0.50676      0.73223       12.566      0.31294 
+      1.0377       1.0682       14.564       2.3416 
+
+Sample variance-covariance matrices for residuals
+
+ VAR system in first differences (S00)
+
+    0.037356   0.0064548
+   0.0064548    0.016002
+
+ System with levels as dependent variable (S11)
+
+     0.58779     0.70697      5.4337      4.9264
+     0.70697     0.88419      7.1494      6.1583
+      5.4337      7.1494      74.204      47.979
+      4.9264      6.1583      47.979      46.153
+
+ Cross-products (S01)
+
+   -0.032344   -0.021227    0.098361    -0.12601
+   -0.030003   -0.039106    -0.13681    -0.27645
+
+Case 4: Restricted trend, unrestricted constant
+Exogenous regressor(s): Sh76_2 I76 I76_1 
+
+Log-likelihood = 256.194 (including constant term: 80.2456)
+
+Cointegration tests, ignoring exogenous variables
+Rank Eigenvalue Trace test  p-value  Lmax test  p-value
+   0    0.34214     47.725 [0.0000]     25.963 [0.0034]
+   1    0.29601     21.762 [0.0008]     21.762 [0.0007]
+
+Cointegration tests conditional on 1 I(1) variable(s)
+Rank Eigenvalue Trace test  p-value  pval(T)
+   0    0.34214     47.725 [0.0002] [0.0003]
+   1    0.29601     21.762 [0.0040] [0.0047]
+
+eigenvalue     0.34214      0.29601 
+
+beta (cointegrating vectors)
+Men             7.2514     -0.41746 
+Women          -6.8717      -2.8609 
+trend          0.10833      0.20574 
+Tr76_2       -0.010121      0.13692 
+
+alpha (adjustment vectors)
+Men          -0.076747     0.077213 
+Women         0.039141     0.058406 
+
+renormalized beta
+Men             1.0000      0.14592 
+Women         -0.94763       1.0000 
+trend         0.014939    -0.071913 
+Tr76_2      -0.0013957    -0.047859 
+
+renormalized alpha
+Men           -0.55653     -0.22090 
+Women          0.28383     -0.16709 
+
+long-run matrix (alpha * beta')
+                   Men        Women        trend       Tr76_2
+Men           -0.58876      0.30648    0.0075716     0.011349 
+Women          0.25944     -0.43605     0.016256    0.0076007 
+
+? foreign language=Ox
+? #include <oxstd.h>
+? #import <pcfiml>
+? main()
+? {
+?     decl model = new PcFiml();
+?     model.Load("Marriage.csv");
+?     model.Deterministic(FALSE);
+?     println(rows(model.GetAll()));
+?     model.Append(zeros(29, 1) | ones(2010 - 1947 - 29 + 1, 1), "Sh76");
+?     model.Append(model.GetVar("Sh76") .* model.GetVar("Trend"), "Tr76");
+?     model.Append(zeros(29, 1) | 1 | zeros(2010 - 1947 - 29, 1), "I76");
+?     model.Info();
+?     // Model with restricted broken trend
+?     model.Select(Y_VAR, {"Men", 0, 2});
+?     model.Select(Y_VAR, {"Women", 0, 2});
+?     model.Select(X_VAR, {"Trend", 0, 0, "Tr76", 2, 2});
+?     model.Select(U_VAR, {"Constant", 0, 0, "Sh76", 2, 2, "I76", 0, 1});
+?     model.SetSelSample(-1, 1, -1, 1);
+?     model.Estimate();
+?     model.Cointegration();
+?     model.DeSelect();
+?     delete model;
+? }
+? end foreign
+Failed to execute child process "oxl" (No such file or directory)
+

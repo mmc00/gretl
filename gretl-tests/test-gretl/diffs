@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl ===
 output/biptest.out vs newout/biptest.out:
 6,369c6
 < 
@@ -474,46 +474,6 @@ output/gappy_arima.out vs newout/gappy_arima.out:
 >   phi_4       0.773950     0.0619051    12.50     7.26e-36 ***
 >   phi_5      -0.738433     0.0990038    -7.459    8.74e-14 ***
 >   theta_1     0.151626     0.205566      0.7376   0.4608  
-output/greene22_2.out vs newout/greene22_2.out:
-42c42
-< Gradient within tolerance (1e-07)
----
-> Successive criterion values within tolerance (1e-07)
-44c44
-< Convergence achieved after 8 iterations
----
-> Convergence achieved after 34 iterations
-52,57c52,57
-<   const        8.17420     2.74145       2.982   0.0029   ***
-<   Z2          -0.179333    0.0790932    -2.267   0.0234   **
-<   Z3           0.554142    0.134518      4.119   3.80e-05 ***
-<   Z5          -1.68622     0.403752     -4.176   2.96e-05 ***
-<   Z7           0.326053    0.254425      1.282   0.2000  
-<   Z8          -2.28497     0.407828     -5.603   2.11e-08 ***
----
->   const        8.17412     2.74302       2.980   0.0029   ***
->   Z2          -0.179326    0.0794683    -2.257   0.0240   **
->   Z3           0.554124    0.136337      4.064   4.82e-05 ***
->   Z5          -1.68616     0.409576     -4.117   3.84e-05 ***
->   Z7           0.326043    0.254715      1.280   0.2005  
->   Z8          -2.28489     0.418932     -5.454   4.92e-08 ***
-59c59
-< Chi-square(5)        67.70738   p-value              3.07e-13
----
-> Chi-square(5)        60.82439   p-value              8.21e-12
-63c63
-< sigma = 8.24708 (0.553364)
----
-> sigma = 8.24666 (0.757785)
-69,70c69,70
-<   Test statistic: Chi-square(2) = 4.31149
-<   with p-value = 0.115817
----
->   Test statistic: Chi-square(2) = 4.30491
->   with p-value = 0.116199
-output/heckit.out vs newout/heckit.out:
-74d73
-< Standard errors based on Hessian
 output/klein.out vs newout/klein.out:
 265c265
 < Tolerance 1e-12, criterion 6.96332e-13
@@ -541,6 +501,10 @@ output/longley_vif.out vs newout/longley_vif.out:
 <      0.000 43275.044     1.000     0.038     0.655     0.689     0.302     0.160     1.000
 ---
 >      0.000 43275.043     1.000     0.038     0.655     0.689     0.302     0.160     1.000
+output/MK.out vs newout/MK.out:
+50,51d49
+< P-value was highest for variable 3 (outz_5)
+< 
 output/nlswitch.out vs newout/nlswitch.out:
 5,66c5
 < Read datafile /home/cottrell/stats/test-gretl/gretl_plant.gdt
@@ -872,102 +836,10 @@ output/sw.out vs newout/sw.out:
 > Couldn't open /home/cottrell/stats/hamilton/macrodat.rat.gdt
 > /home/cottrell/stats/hamilton/macrodat.rat.gdt: No such file or directory
 output/tobittest.out vs newout/tobittest.out:
-22,40c22,48
-< Iteration 1: loglikelihood = -552.888852163 (steplength = 1)
-< Parameters:      0.13001     0.83873     0.27205     0.23832    -0.29497
-< Gradients:       -145.12     -21.093     -36.978     -37.978      227.79 (norm 4.96e+00)
-< 
-< Iteration 2: loglikelihood = -549.035138793 (steplength = 1)
-< Parameters:     0.019410     0.93203     0.30468     0.28226    -0.21950
-< Gradients:       -44.129     -6.4429     -11.258     -11.525      48.755 (norm 2.20e+00)
-< 
-< Iteration 3: loglikelihood = -548.954455312 (steplength = 1)
-< Parameters:   -0.0018853     0.95012     0.31106     0.29097    -0.20792
-< Gradients:       -6.4298    -0.93082     -1.6363     -1.6673      5.4930 (norm 7.79e-01)
-< 
-< Iteration 4: loglikelihood = -548.954403593 (steplength = 1)
-< Parameters:   -0.0024580     0.95061     0.31123     0.29121    -0.20763
-< Gradients:      -0.16442   -0.023388   -0.041634   -0.042183     0.12973 (norm 1.22e-01)
-< 
-< Iteration 5: loglikelihood = -548.954403593 (steplength = 1)
-< Parameters:   -0.0024584     0.95061     0.31123     0.29121    -0.20763
-< Gradients:   -0.00010909 -1.5215e-05 -2.7470e-05 -2.7670e-05  8.5739e-05 (norm 3.13e-03)
----
-> Iteration 1: loglikelihood = -554.976228795 (steplength = 1)
-> Parameters:      0.12410     0.84451     0.27418     0.24091    -0.33113
-> Gradients:       -145.12     -21.093     -36.978     -37.978      227.79 (norm 5.11e+00)
-> 
-> Iteration 2: loglikelihood = -549.313913814 (steplength = 1)
-> Parameters:     0.027097     0.92608     0.30269     0.27941    -0.24001
-> Gradients:       -38.775     -5.6157     -9.8697     -10.101      75.849 (norm 2.46e+00)
-> 
-> Iteration 3: loglikelihood = -548.962735445 (steplength = 1)
-> Parameters:   0.00065961     0.94809     0.31037     0.28999    -0.21286
-> Gradients:       -6.7740    -0.98776     -1.7274     -1.7604      18.188 (norm 1.08e+00)
-> 
-> Iteration 4: loglikelihood = -548.954542664 (steplength = 1)
-> Parameters:   -0.0021850     0.95039     0.31116     0.29110    -0.20831
-> Gradients:      -0.42181   -0.062720    -0.10814    -0.10974      3.0161 (norm 3.88e-01)
-> 
-> Iteration 5: loglikelihood = -548.954405813 (steplength = 1)
-> Parameters:   -0.0024256     0.95058     0.31122     0.29119    -0.20772
-> Gradients:    -0.0056361 -0.00088995  -0.0014693  -0.0014864     0.40576 (norm 1.31e-01)
-> 
-> Iteration 6: loglikelihood = -548.954403628 (steplength = 1)
-> Parameters:   -0.0024543     0.95060     0.31123     0.29121    -0.20764
-> Gradients:   -3.6736e-05 -6.5427e-06 -9.9139e-06 -1.0024e-05    0.051432 (norm 4.62e-02)
-> 
-> Iteration 7: loglikelihood = -548.954403593 (steplength = 1)
-> Parameters:   -0.0024579     0.95061     0.31123     0.29121    -0.20763
-> Gradients:   -4.8322e-07 -8.8414e-08 -1.3145e-07 -1.3296e-07   0.0064743 (norm 1.64e-02)
-45,46c53,54
-< Parameters:   -0.0024584     0.95061     0.31123     0.29121    -0.20763
+46c46
 < Gradients:   -4.8094e-11 -6.5742e-12 -1.2047e-11 -1.2063e-11  3.8029e-11 (norm 2.07e-06)
 ---
-> Parameters:   -0.0024579     0.95061     0.31123     0.29121    -0.20763
-> Gradients:   -7.5765e-09 -1.3868e-09 -2.0613e-09 -2.0850e-09  0.00081451 (norm 5.82e-03)
-48c56
-< Gradient within tolerance (1e-07)
----
-> Successive criterion values within tolerance (1e-07)
-50c58
-< Convergence achieved after 5 iterations
----
-> Convergence achieved after 7 iterations
-58,61c66,69
-<   const      -0.00245841   0.0811694    -0.03029   0.9758  
-<   x1          0.950607     0.134277      7.079     1.45e-12 ***
-<   x2          0.311230     0.131367      2.369     0.0178   **
-<   x3          0.291207     0.133672      2.179     0.0294   **
----
->   const      -0.00245789   0.0809826    -0.03035   0.9758  
->   x1          0.950607     0.134209      7.083     1.41e-12 ***
->   x2          0.311230     0.131359      2.369     0.0178   **
->   x3          0.291207     0.133656      2.179     0.0293   **
-63c71
-< Chi-square(3)        61.86464   p-value              2.35e-13
----
-> Chi-square(3)        61.94980   p-value              2.25e-13
-67c75
-< sigma = 0.812507 (0.0332826)
----
-> sigma = 0.812506 (0.0311188)
-74,77c82,85
-<     0.00658847   -0.00492544   -0.00535318   -0.00602446  const
-<                    0.0180303  -8.26814e-04  -7.79092e-05  x1
-<                                  0.0172572   6.84735e-04  x2
-<                                                0.0178682  x3
----
->     0.00655819   -0.00490185   -0.00534523   -0.00601313  const
->                    0.0180119  -8.32995e-04  -8.67246e-05  x1
->                                  0.0172551   6.81765e-04  x2
->                                                0.0178639  x3
-81,82c89,90
-<   Test statistic: Chi-square(2) = 19.3765
-<   with p-value = 6.20088e-05
----
->   Test statistic: Chi-square(2) = 19.3754
->   with p-value = 6.20428e-05
+> Gradients:   -4.8084e-11 -6.5853e-12 -1.2053e-11 -1.2063e-11  3.8046e-11 (norm 2.08e-06)
 output/wooldridge_f.out vs newout/wooldridge_f.out:
 6,141c6
 < 

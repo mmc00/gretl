@@ -1,0 +1,9 @@
+gretl version 2016b-git
+Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
+This is free software with ABSOLUTELY NO WARRANTY
+Current session: 2016-04-21 00:53
+? run gmm2.inp
+ /home/cottrell/stats/test-gretl/gmm/gmm2.inp
+? function series mrate (series cons, scalar discrat, scalar riskad)
+? open pricing.gdt
+pricing.gdt: No such file or directory

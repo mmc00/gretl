@@ -1,4 +1,4 @@
-=== /home/helio/test-gretl/count ===
+=== /home/helio/github/gretl/gretl-tests/test-gretl/count ===
 output/camtriv.out vs newout/camtriv.out:
 76,77c76,77
 <   3.6862e-12 
