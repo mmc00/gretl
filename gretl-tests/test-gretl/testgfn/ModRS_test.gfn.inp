@@ -1,5 +1,0 @@
-include ./ModRS_test.gfn
-
-open data9-7
-# the "2" accounts for the level of the test (5% in this case)
-TRIAL = ModRS_test(QNC,2)

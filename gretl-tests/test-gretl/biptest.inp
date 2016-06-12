@@ -1,4 +1,4 @@
-open ~/stats/stata/school.gdt
+open stata/school.gdt
 
 biprobit private vote 0 logptax loginc years
 matrix yh = $yhat

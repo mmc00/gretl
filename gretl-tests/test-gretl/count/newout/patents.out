@@ -1,8 +1,0 @@
-gretl version 2016b-git
-Copyright Ramu Ramanathan, Allin Cottrell and Riccardo "Jack" Lucchetti
-This is free software with ABSOLUTELY NO WARRANTY
-Current session: 2016-04-21 00:53
-? run patents.inp
- /home/cottrell/stats/test-gretl/count/patents.inp
-? open patents.gdt
-patents.gdt: No such file or directory

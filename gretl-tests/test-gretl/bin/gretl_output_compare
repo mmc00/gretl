@@ -5,7 +5,7 @@ for f in newout/*.out ; do
   if [ -f $orig ] ; then
     cat $f | grep -v 'Current sess' | grep -v 'gretl versi' > tmp1
     cat $orig | grep -v 'Current sess' | grep -v 'gretl versi' > tmp0
-    DIFF=`diff -bB tmp0 tmp1`
+    DIFF=`diff -b -B -E -w tmp0 tmp1`
     if [ "x$DIFF" != "x" ] ; then
        echo "$orig vs $f:"
        echo "$DIFF"

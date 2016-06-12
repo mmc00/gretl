@@ -1,7 +1,0 @@
-include ./lp-mfx.gfn
-
-open keane.gdt -q
-smpl (year==87) --restrict
-logit status 0 educ exper expersq black --multinomial
-bundle b = mlogit_mfx(status, $xlist, $coeff, $vcv, $sample)
-lp_mfx_print(&b)

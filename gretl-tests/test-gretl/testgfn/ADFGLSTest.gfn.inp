@@ -1,4 +1,0 @@
-include ./ADFGLSTest.gfn
-open denmark.gdt
-ADFGLSTest(LRM)
-ADFGLSTest(LRM,1)

@@ -1,8 +1,0 @@
-include ./gnuplot_piechart.gfn
-nulldata 8
-#Results of election for European Parliament 2014
-matrix A = {221; 191; 70;  67; 52; 50; 48; 52}
-string S = "EPP PASD ECR ALDE EUL-NGL Greens-EFA EFDD NI"
-string pie1 = gnuplot_piechart(A, S, 0.3, 1.15) 
-print "@pie1"
-quit

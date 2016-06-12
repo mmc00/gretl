@@ -1,9 +1,0 @@
-include ./loss_functions.gfn
-
-open arma.gdt
-
-d = (u<0)
-
-bundle evaluate = loss_functions(100, y, u, eps, d, .2)
-#'a' is a scalar such that a<.5. See Hwang, S., Knight, J. L., & Satchell, S. (1999). 
-print evaluate

@@ -1,6 +1,0 @@
-include ./armax.gfn
-open djclose
-series r=ldiff(djclose)*100
-list xlist = const
-myM=armax(3,3,r,xlist)
-myMatrix = armax(4, 0, r, null, 1, 1, 1, 1, 0)

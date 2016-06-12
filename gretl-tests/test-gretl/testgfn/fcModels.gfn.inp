@@ -1,5 +1,0 @@
-include ./fcModels.gfn
-open djclose
-L = autoMA(djclose, 10, 1, null, 30)
-smpl 1989-08-01 ;
-gnuplot djclose djclose_ma1_out --with-lines --time-series --output=display

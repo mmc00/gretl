@@ -1,7 +1,0 @@
-include ./vecmI2.gfn
-open denmark
-genr time
-list yvars = LRM LRY IBO IDE
-tmp = vecmI2(1, 2, 3, yvars, time)
-cointI2(3, yvars, time)
-print tmp

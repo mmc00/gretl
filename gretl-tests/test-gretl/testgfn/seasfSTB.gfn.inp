@@ -1,5 +1,0 @@
-include ./seasfSTB.gfn
-
-open data9-3.gdt
-list reskwh_filters = seasfSTB(reskwh, 0)
-print reskwh_filters --byobs

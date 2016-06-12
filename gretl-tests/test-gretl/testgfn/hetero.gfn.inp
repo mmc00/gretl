@@ -1,5 +1,0 @@
-include ./hetero.gfn
-
-open keane.gdt
-list xlist = const educ exper expersq
-hetero(wage, xlist, 1, 1, 1, 1, 1, 1, 0)

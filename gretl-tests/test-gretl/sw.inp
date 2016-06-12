@@ -2,7 +2,7 @@
 # Introduction to Econometrics, chapter 12
 # Note that S and W seem to use "robust" standard errors throughout
 # Read from RATS database
-open ~/stats/hamilton/macrodat.rat
+open hamilton/macrodat.rat
 setobs 4 1959:1
 smpl 1959:1 1999:4
 data (compact=average) LHUR PUNEW

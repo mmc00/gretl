@@ -1,9 +1,0 @@
-include ./R2_decompose.gfn
-open np.gdt --quiet
-#y is the explained variable and X are the explaining variables
-series Y = rgnp
-list X = unemp money rwage
-
-#adding 1 as if the constant where selected
-
-matrix r = R2_decompose(1,X,Y)

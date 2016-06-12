@@ -1,9 +1,0 @@
-include ./criteria.gfn
-# Demonstrate that the criteria() function produces the
-# same results as gretl does for a given model.
-open data4-10
-ols 1 0 2 3 4
-matrix cr = criteria($ess, $T, $ncoeff)
-# printing cr is somewhat redundant, but this is just an
-# illustration
-print cr

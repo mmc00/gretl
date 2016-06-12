@@ -1,4 +1,0 @@
-include ./cnumber.gfn
-open greene12_1.gdt
-matrix X = {age, income, expend}
-cnumber(X)

@@ -6,7 +6,7 @@ function series GDV(series x, scalar m, scalar s)
      return 1/(1+den)
 end function
 
-open ~/stats/test-gretl/gretl_plant.gdt -q
+open gretl_plant.gdt -q
 
 # apply scaling (though not for HHI)
 Price /=100

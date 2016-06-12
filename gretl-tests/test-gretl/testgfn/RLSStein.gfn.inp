@@ -1,9 +1,0 @@
-include ./RLSStein.gfn
-open data4-1
-series sqft = sqft/1000
-square sqft bedrms
-list xlist = const sqft sq_sqft bedrms baths
-matrix Rmat = zeros(4,1)~I(4)
-matrix r = { 350 ; -50 ; 0 ; 0}
-
-Stein = RLSStein(price, xlist, Rmat, r, 1, 1, 200)

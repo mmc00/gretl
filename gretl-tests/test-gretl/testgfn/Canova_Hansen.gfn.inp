@@ -1,9 +1,0 @@
-include ./Canova_Hansen/Canova_Hansen.gfn
-open data9-9.gdt
-
-list X_list = null
-
-bundle CH=Canova_Hansen(nocars, 0, 0,0, 1, X_list,0)
-bundle CH=Canova_Hansen(nocars, 0, 1,0, 1, X_list,0)
-matrix MCH=CH["SCH"]
-MCH

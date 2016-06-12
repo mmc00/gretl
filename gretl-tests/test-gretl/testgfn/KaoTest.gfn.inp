@@ -1,5 +1,0 @@
-include ./KaoTest.gfn
-open penngrow.gdt
-series h=Y
-list j=X
-KaoTest(h, j, 1)

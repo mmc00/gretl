@@ -1,5 +1,0 @@
-include ./sols.gfn
-open data4-1
-list xlist = const sqft bedrms
-matrix b = sols(price, xlist)
-print b

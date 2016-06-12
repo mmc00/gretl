@@ -1,4 +1,0 @@
-include ./DP.gfn
-open np.gdt
-series y=ngnp
-DP(y)

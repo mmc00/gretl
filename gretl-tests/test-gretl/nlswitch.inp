@@ -17,7 +17,7 @@ function void mprint(matrix b, scalar m, scalar s, matrix V,
   printf "SSR = %g, R-squared = %g\n\n", SSR, R2
 end function
 
-open ~/stats/test-gretl/gretl_plant.gdt -q
+open gretl_plant.gdt -q
 
 # CHOICE here: do we want fixed effects or not?
 scalar FE = 1

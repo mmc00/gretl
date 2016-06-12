@@ -1,5 +1,5 @@
 # Read from RATS database
-open /home/cottrell/stats/hamilton/macrodat.rat
+open hamilton/macrodat.rat
 setobs 4 1959:1
 smpl 1959:1 1999:4
 data (compact=average) LHUR PUNEW
