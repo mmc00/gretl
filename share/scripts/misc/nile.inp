@@ -1,0 +1,48 @@
+# open the dataset
+
+open nile.gdt
+
+# set up the local linear trend model with the Nile data
+
+Nile = ksetup({nile}, {1}, {1}, {1})
+Nile.diffuse = 1
+Nile.obsvar = {1}
+
+# initialize the parameters via the reduced form
+# \Delta y_t = \eta_t + \Delta \epsilon_t
+
+series dnile = diff(nile)
+scalar    vd = var(dnile)
+scalar  veps = -cov(dnile,dnile(-1))
+scalar s_eps = sqrt(veps)
+scalar s_eta = sqrt(vd - 2*veps)
+
+# estimate the variances via MLE
+
+scalar err = 0
+mle loglik = err ? NA : Nile.llt
+    matrix Nile.statevar = s_eta^2
+    matrix Nile.obsvar = s_eps^2
+    err = kfilter(&Nile)
+    params s_eta s_eps
+end mle
+
+# extract the smoothed trend
+
+ksmooth(&Nile)
+series nile_trend = Nile.state
+
+# plot series with trend and associated 95% confidence band
+
+series nile_trend_se = sqrt(Nile.statevar)
+series hi = nile_trend + 1.96 * nile_trend_se
+series lo = nile_trend - 1.96 * nile_trend_se
+list X = nile nile_trend hi lo
+
+plot X
+    options with-lines time-series
+    literal set linetype 3 lc rgb "#00c0c0"
+    literal set linetype 4 lc rgb "#00c0c0"
+    literal set key right top
+    printf "set title \"%s\"", "Nile data and trend with 95\% confidence band"
+end plot --output=display

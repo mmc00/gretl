@@ -1,0 +1,64 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<html> <head>
+<title>Gnuplot for gretl</title>
+<LINK REL=STYLESHEET TYPE="text/css" HREF="./css-gretl.html">
+</head>
+
+<body>
+<p>[<a href="./index.html">gretl main page</a>]</p>
+
+<center>
+<h1>Gnuplot for gretl on Linux</h1>
+</center>
+
+<p>
+Hopefully these instructions will become redundant before long, but 
+if you're running gretl on Linux the version of
+gnuplot available via your Linux distribution may not be sufficiently
+up to date to work optimally with gretl.  For best results, we 
+recommend the 5.0 release or higher, or current CVS.
+</p>
+
+<p>
+To get an up-to-date build of gnuplot for use with gretl you can
+build gnuplot from the CVS source yourself.
+</p>
+
+<h2>Build from source</h2>
+
+<p>
+Note that for this to succeed you will need to have the "devel" packages
+for GTK+ and Xorg installed.
+</p>
+
+<pre>
+ export CVSROOT=:pserver:anonymous@gnuplot.cvs.sourceforge.net:/cvsroot/gnuplot
+ cvs login
+ cvs -z3 checkout gnuplot
+</pre>
+
+<p>Just hit Enter when asked for a password.  Then</p>
+
+<pre>
+ sh ./prepare
+ ./configure --prefix=/opt/gnuplot
+ make
+ sudo make install
+</pre>
+
+<p>The choice of installing to <kbd>/opt/gnuplot</kbd> is designed to
+avoid collisions with gnuplot as installed by your Linux distro.</p>
+
+<h2>Using the new gnuplot</h2>
+
+<p>
+In gretl, go to Tools/Preferences/General/Programs and change the
+"gnuplot" entry to read
+</p>
+
+<pre>
+ /opt/gnuplot/bin/gnuplot
+</pre>
+
+<p>Then re-start gretl.</p>
+

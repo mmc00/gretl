@@ -1,0 +1,59 @@
+topsrc = @top_srcdir@
+datarootdir = @datarootdir@
+
+prefix = @prefix@
+
+CC = @CC@
+CFLAGS = @CFLAGS@
+LDFLAGS = @LDFLAGS@
+MAKE = @MAKE@
+INSTALL = @INSTALL@
+INSTALL_DATA = ${INSTALL} -m 644
+
+vpath %.c $(topsrc)/addons
+
+tooldir = $(topsrc)/tools
+funcsdir = $(prefix)/share/gretl/functions
+
+SUBDIRS = gig ivpanel SVAR HIP
+ALLSUBDIRS = gig ivpanel SVAR HIP
+
+.PHONY : subdirs $(SUBDIRS) clean installdirs install install-private
+
+subdirs: $(SUBDIRS)
+
+$(SUBDIRS):
+	$(MAKE) -C $@
+
+addons.xml: gfnindex $(SUBDIRS)
+	./gfnindex $(SUBDIRS) > $@
+
+addons-i18n.c: gfnstrings $(SUBDIRS)
+	./gfnstrings $(SUBDIRS) > $@
+
+gfnindex: gfnindex.c
+	$(CC) -o $@ $<
+
+gfnstrings: gfnstrings.c
+	$(CC) -o $@ $<
+
+clean:
+	for d in $(ALLSUBDIRS) ; do $(MAKE) -C $$d clean; done
+	@rm -f gfnindex addons.xml gfnstrings addons-i18n.c
+
+installdirs:
+	$(tooldir)/mkinstalldirs $(DESTDIR)$(funcsdir)/gig 
+	$(tooldir)/mkinstalldirs $(DESTDIR)$(funcsdir)/gig/examples 
+	$(tooldir)/mkinstalldirs $(DESTDIR)$(funcsdir)/ivpanel
+	$(tooldir)/mkinstalldirs $(DESTDIR)$(funcsdir)/SVAR
+	$(tooldir)/mkinstalldirs $(DESTDIR)$(funcsdir)/HIP
+	$(tooldir)/mkinstalldirs $(DESTDIR)$(funcsdir)/HIP/examples
+
+install: $(SUBDIRS) installdirs
+	for d in $(SUBDIRS) ; do $(MAKE) -C $$d install; done
+
+install-private: addons-i18n.c
+	$(INSTALL_DATA) $< $(topsrc)/plugin	
+
+check: $(SUBDIRS)
+	for d in $(SUBDIRS) ; do $(MAKE) -C $$d check; done

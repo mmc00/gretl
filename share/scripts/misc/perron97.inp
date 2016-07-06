@@ -1,0 +1,122 @@
+function scalar perron_test (series y, int maxlag, scalar testsig, 
+                             int verbose)
+
+   # generate trend, first lag, first difference
+   genr time
+   series y_1 = y(-1)
+   series dyt = diff(y)
+
+   # starting year for the series (the first non-missing obs)
+   scalar startyr = firstobs(y)
+    
+   scalar t_a_min = 1.0E20
+   scalar Tbstar = 0
+   scalar Tbk = 0
+
+   # loop across possible breakpoints
+
+   scalar Tbmin = startyr + maxlag + 2
+   scalar Tbmax = max(time) - 3
+
+   loop for (Tb=Tbmin; Tb<=Tbmax; Tb+=1) --quiet
+
+      if verbose > 1
+         printf "Trying break in %s:\n", obslabel(Tb)
+      endif
+
+      series DU = (time > Tb)
+      series DT = (time = (Tb + 1))
+      scalar kstar = 0
+
+      # Try trimming the list of lags
+      loop for (k=maxlag; k>0; k-=1) --quiet
+         ols y 0 DU time DT y_1 dyt(-1 to -k) --quiet
+
+         # test significance of the last lag
+         scalar tstat = $coeff(dyt_$k) / $stderr(dyt_$k)
+         scalar pv = 2 * pvalue(z, abs(tstat))
+
+         if verbose > 2
+            printf "\tlast lag (%2d): t = %8.4f, asy. p-value = %6.4f\n", \ 
+            k, tstat, pv
+         endif
+
+         if pv < testsig
+            kstar = k
+            break
+         endif
+      endloop
+
+      # Re-run the regression with zero lags if need be
+      if kstar = 0
+         ols y 0 DU time DT y_1 --quiet
+      endif
+   
+      scalar t_alpha = ($coeff(y_1) - 1.0) / $stderr(y_1)
+      if verbose > 1
+         printf "\tt_alpha = %8g (k=%d)\n\n", t_alpha, kstar
+      endif
+   
+      if t_alpha < t_a_min
+         t_a_min = t_alpha
+         Tbstar = Tb
+         Tbk = kstar
+      endif
+   
+   endloop
+
+   series DU = time > Tbstar
+   series DT = time == (Tbstar + 1)
+   # print -o time yr DU DT
+
+   printf "\n*** min(t_alpha) = %g in %s (k=%d) ***\n", \
+   t_a_min, obslabel(Tbstar), Tbk
+
+   # print the regression ("Model 1") with the selected break year
+
+   if verbose > 0
+      if Tbk > 0
+         ols y 0 DU time DT y_1 dyt(-1 to -Tbk)
+      else
+         ols y 0 DU time DT y_1
+      endif
+   else
+      if Tbk > 0
+         ols y 0 DU time DT y_1 dyt(-1 to -Tbk) --quiet
+      else
+         ols y 0 DU time DT y_1 --quiet
+      endif
+   endif
+
+   # just checking
+   scalar t_alpha = ($coeff(y_1) - 1.0) / $stderr(y_1)
+   printf "check: t_alpha = %g\n", t_alpha
+
+   return t_alpha
+    
+end function
+
+# -------------------------------------------------------------------
+
+/*
+ Replicate the analysis of Perron, "Further evidence on
+ breaking trend functions in macroeconomic variables" (Journal
+ of Econometrics, 1997, pp. 355-385), Table 3.
+*/
+
+# Open Nelson-Plosser data (supplied with gretl)
+open np.gdt
+
+# Select the variable to test (here, the natural log of real GNP)
+series y = log(rgnp)
+
+# Maximum lag to try for the first difference of y
+scalar maxlag = 10
+
+# Max significance level for retaining the last lag
+scalar testsig = 0.10
+
+# Verbosity level (1 = not much)
+scalar verbosity = 1
+
+perron_test(y, maxlag, testsig, verbosity)
