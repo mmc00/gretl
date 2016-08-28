@@ -120,7 +120,8 @@ static struct gretl_cmd gretl_cmds[] = {
     { GRAPHPG,  "graphpg",  CI_PARM1 }, 
     { HAUSMAN,  "hausman",  CI_NOOPT },
     { HECKIT,   "heckit",   CI_LIST },
-    { HELP,     "help",     CI_PARM1 },    
+    { HELP,     "help",     CI_PARM1 },
+    { HFPLOT,   "hfplot",   CI_LIST | CI_EXTRA },
     { HSK,      "hsk",      CI_LIST }, 
     { HURST,    "hurst",    CI_LIST | CI_LLEN1 },
     { IF,       "if",       CI_EXPR },
@@ -145,6 +146,7 @@ static struct gretl_cmd gretl_cmds[] = {
     { MAKEPKG,  "makepkg",  CI_PARM1 },
     { MARKERS,  "markers",  0 },
     { MEANTEST, "meantest", CI_LIST | CI_LLEN2 },
+    { MIDASREG, "midasreg", CI_LIST },
     { MLE,      "mle",      CI_EXPR | CI_BLOCK },
     { MODELTAB, "modeltab", CI_PARM1 | CI_INFL },
     { MODPRINT, "modprint", CI_PARM1 | CI_PARM2 | CI_EXTRA },
@@ -182,7 +184,7 @@ static struct gretl_cmd gretl_cmds[] = {
     { SCATTERS, "scatters", CI_LIST },
     { SDIFF,    "sdiff",    CI_LIST | CI_NOOPT },
     { SET,      "set",      CI_PARM1 | CI_PARM2 | CI_INFL },
-    { SETINFO,  "setinfo",  CI_LIST | CI_LLEN1 }, /* + special: handled later */
+    { SETINFO,  "setinfo",  CI_LIST | CI_LLEN1 | CI_INFL }, /* + special: handled later */
     { SETOBS,   "setobs",   CI_PARM1 | CI_PARM2 },
     { SETOPT,   "setopt",   CI_PARM1 | CI_PARM2 },
     { SETMISS,  "setmiss",  CI_PARM1 | CI_LIST | CI_DOALL },
@@ -2214,6 +2216,7 @@ static int check_list_sepcount (int ci, int nsep)
     case GARCH:
     case HECKIT:
     case IVREG:
+    case MIDASREG:
 	minsep = maxsep = 1;
 	break;
     case ARBOND:
@@ -2236,6 +2239,7 @@ static int check_list_sepcount (int ci, int nsep)
     case XTAB:
     case LAGS:
     case SCATTERS:
+    case HFPLOT:
 	maxsep = 1;
 	break;
     default:
@@ -2598,6 +2602,17 @@ static int panel_gmm_special (CMD *cmd, const char *s)
     return 0;
 }
 
+static int midas_term_special (CMD *cmd, const char *s)
+{
+    if (cmd->ci == MIDASREG) {
+	if (!strcmp(s, "mds") || !strcmp(s, "mdsl")) {
+	    return 1;
+	}
+    }
+
+    return 0;
+}
+
 static void rejoin_list_toks (CMD *c, int k1, int *k2,
 			      char *lstr, int j)
 {
@@ -2633,6 +2648,15 @@ static void rejoin_list_toks (CMD *c, int k1, int *k2,
 	    free(tmp);
 	    mark_token_done(c->toks[i]);
 	    *k2 = ++i;
+	} else if (i < c->ntoks - 1 && midas_term_special(c, tok->s)) {
+	    cmd_token *next = &c->toks[i+1];
+	    char *tmp;
+
+	    tmp = gretl_strdup_printf("%s(%s)", tok->s, next->s);
+	    c->param = gretl_str_expand(&c->param, tmp, " ");
+	    free(tmp);
+	    mark_token_done(c->toks[i]);
+	    *k2 = ++i;	    
 	} else {
 	    strcat(lstr, tok->s);
 	}
@@ -2752,9 +2776,9 @@ static int process_command_list (CMD *c, DATASET *dset)
 
     if (!c->err && *lstr != '\0') {
 	tailstrip(lstr);
-	if (c->ci == ARBOND || c->ci == DPANEL) {
+	if (c->ci == ARBOND || c->ci == DPANEL || c->ci == MIDASREG) {
 	    /* We may have a ';' separator that's not followed
-	       by any regular second list, just GMM() terms; so
+	       by any regular second list, just special terms; so
 	       don't error out on a trailing ';' in defining a
 	       list.
 	    */
@@ -2921,7 +2945,7 @@ static int handle_command_extra (CMD *c)
     cmd_token *tok;
     int i;
 
-    if (c->ci == GNUPLOT || c->ci == BXPLOT) {
+    if (c->ci == GNUPLOT || c->ci == BXPLOT || c->ci == HFPLOT) {
 	/* if present, 'extra' goes into param */
 	for (i=c->cstart+1; i<c->ntoks; i++) {
 	    tok = &c->toks[i];
@@ -3539,6 +3563,14 @@ static void handle_option_inflections (CMD *cmd)
 	if (cmd->opt == OPT_O) {
 	    /* --output: no arg needed */
 	    cmd->ciflags &= ~CI_PARM1;
+	}
+    } else if (cmd->ci == SETINFO) {
+	if (cmd->opt & (OPT_M | OPT_C | OPT_D)) {
+	    /* midas, continuous or discrete */
+	    if (!(cmd->opt & (OPT_G | OPT_I))) {
+		/* but not graph-name or description */
+		cmd->ciflags &= ~CI_LLEN1;
+	    }
 	}
     }
 }

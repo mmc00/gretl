@@ -20,6 +20,7 @@
 #include "libgretl.h"
 #include "matrix_extra.h"
 #include "uservar.h"
+#include "gretl_midas.h"
 #include "forecast.h"
 #include "var.h"
 #include "system.h"
@@ -47,13 +48,12 @@
 
 #define FCAST_SPECIAL(c) (c == LOGIT || \
                           c == LOGISTIC || \
+			  c == MIDASREG || \
 			  c == NEGBIN || \
                           c == NLS || \
                           c == POISSON || \
                           c == PROBIT || \
                           c == TOBIT)
-
-#define CHECK_LAGGED_DEPVAR(c) (c != NLS && c != ARMA)
 
 typedef struct Forecast_ Forecast;
 
@@ -709,6 +709,8 @@ static int fixed_effects_fcast (Forecast *fc, MODEL *pmod,
     return err;
 }
 
+#define NLS_DEBUG 0
+
 /* Generate forecasts from nonlinear least squares model, using the
    string specification of the regression function that was saved as
    data on the model (see nls.c).  If the NLS formula is dynamic and
@@ -723,7 +725,7 @@ static int nls_fcast (Forecast *fc, const MODEL *pmod,
 {
     int oldt1 = dset->t1;
     int oldt2 = dset->t2;
-    int fcv = dset->v;
+    int origv = dset->v;
     int yno = 0;
     const char *nlfunc;   
     double *y = NULL;
@@ -735,6 +737,11 @@ static int nls_fcast (Forecast *fc, const MODEL *pmod,
 	err = E_DATA;
     }
 
+#if NLS_DEBUG
+    fprintf(stderr, "nls_fcast: method=%d, nlfunc='%s'\n",
+	    fc->method, nlfunc);
+#endif
+
     if (fc->method == FC_AUTO) {
 	yno = pmod->list[1];
 	y = copyvec(dset->Z[yno], dset->n);
@@ -743,17 +750,32 @@ static int nls_fcast (Forecast *fc, const MODEL *pmod,
 	} 
     }
 
+    /* The computation of $nl_y below may depend on computing
+       some auxiliary quantities used within the nls block, so
+       try that first below: nl_model_run_aux_genrs().
+    */
+
     if (!err) {
 	/* upper limit of static forecast */
 	int t2 = (fc->method == FC_STATIC)? fc->t2 : pmod->t2;
 
 	if (t2 >= fc->t1) {
 	    /* non-null static range */
+	    int fcv;
+	    
 	    dset->t1 = fc->t1;
 	    dset->t2 = t2;
-	    sprintf(formula, "$nl_y = %s", nlfunc);
-	    err = generate(formula, dset, GRETL_TYPE_SERIES,
-			   OPT_P, NULL);
+	    err = nl_model_run_aux_genrs(pmod, dset);
+	    fcv = dset->v;
+#if NLS_DEBUG
+	    fprintf(stderr, " static range %d to %d, fcv=%d\n",
+		    dset->t1, dset->t2, fcv);
+#endif
+	    if (!err) {
+		sprintf(formula, "$nl_y = %s", nlfunc);
+		err = generate(formula, dset, GRETL_TYPE_SERIES,
+			       OPT_P, NULL);
+	    }
 	    if (!err) {
 		for (t=dset->t1; t<=dset->t2; t++) {
 		    fc->yhat[t] = dset->Z[fcv][t];
@@ -763,14 +785,20 @@ static int nls_fcast (Forecast *fc, const MODEL *pmod,
 
 	if (!err && fc->method == FC_AUTO && fc->t2 > pmod->t2) {
 	    /* dynamic forecast out of sample: in this context
-	       pmod->depvar is actually the expression to generate
-	       the series in question 
+	       pmod->depvar is the expression to generate
+	       the series in question under its own name
 	    */
 	    dset->t1 = pmod->t2 + 1;
 	    dset->t2 = fc->t2;
-	    strcpy(formula, pmod->depvar);
-	    err = generate(formula, dset, GRETL_TYPE_SERIES,
-			   OPT_P, NULL);
+#if NLS_DEBUG
+	    fprintf(stderr, " dynamic range %d to %d\n", dset->t1, dset->t2);
+#endif
+	    err = nl_model_run_aux_genrs(pmod, dset);
+	    if (!err) {
+		strcpy(formula, pmod->depvar);
+		err = generate(formula, dset, GRETL_TYPE_SERIES,
+			       OPT_P, NULL);
+	    }
 	    if (!err) {
 		for (t=dset->t1; t<=dset->t2; t++) {
 		    fc->yhat[t] = dset->Z[yno][t];
@@ -779,23 +807,21 @@ static int nls_fcast (Forecast *fc, const MODEL *pmod,
 	}
     }
 
-    if (dset->v > fcv) {
-	err = dataset_drop_last_variables(dset, dset->v - fcv);
+    /* restore dataset state */
+    if (dset->v > origv) {
+	err = dataset_drop_last_variables(dset, dset->v - origv);
     }
-
     dset->t1 = oldt1;
     dset->t2 = oldt2;
 
     if (y != NULL) {
 	/* restore original dependent variable */
-	for (t=0; t<dset->n; t++) {
-	    dset->Z[yno][t] = y[t];
-	}
+	memcpy(dset->Z[yno], y, dset->n * sizeof *y);
 	free(y);
     }
 
     if (!err && fc->method == FC_STATIC && fc->sderr != NULL) {
-#if 1   /* not fully tested! */
+#if 0   /* Not much tested: FIXME make this an option? */
 	err = nls_boot_calc(pmod, dset, fc->t1, fc->t2, fc->sderr);
 	if (!err) {
 	    double et, s2 = pmod->sigma * pmod->sigma;
@@ -816,6 +842,103 @@ static int nls_fcast (Forecast *fc, const MODEL *pmod,
     }
 
     return err;
+}
+
+#define MIDAS_DEBUG 0
+
+static int midas_fcast (Forecast *fc, const MODEL *pmod, 
+			DATASET *dset)
+{
+    int oldt1 = dset->t1;
+    int oldt2 = dset->t2;
+    int origv = dset->v;
+    char formula[MAXLINE];
+    char *mdsfunc = NULL;
+    double *y = NULL;
+    int yno = pmod->list[1];
+    int t, err;
+
+    err = midas_forecast_setup(pmod, dset, fc->method, &mdsfunc);
+
+#if MIDAS_DEBUG
+    fprintf(stderr, "mdas_fcast: method %d\n", fc->method);
+#endif    
+
+    if (!err && fc->method == FC_AUTO) {
+	y = copyvec(dset->Z[yno], dset->n);
+	if (y == NULL) {
+	    err = E_ALLOC;
+	} 
+    }
+
+    if (!err) {
+	/* upper limit of static forecast */
+	int t2 = (fc->method == FC_STATIC)? fc->t2 : pmod->t2;
+
+	if (t2 >= fc->t1) {
+	    /* non-null static range */
+	    int fcv = dset->v;
+	    
+	    dset->t1 = fc->t1;
+	    dset->t2 = t2;
+	    sprintf(formula, "$midas_y=%s", mdsfunc);
+	    err = generate(formula, dset, GRETL_TYPE_SERIES,
+			   OPT_P, NULL);
+#if MIDAS_DEBUG
+	    fprintf(stderr, " static range %d to %d, fcv=%d\n",
+		    dset->t1, dset->t2, fcv);
+#endif
+	    if (!err) {
+		for (t=dset->t1; t<=dset->t2; t++) {
+		    fc->yhat[t] = dset->Z[fcv][t];
+		}
+	    }
+	}
+
+	if (!err && fc->method == FC_AUTO && fc->t2 > pmod->t2) {
+	    /* dynamic forecast out of sample */
+	    dset->t1 = pmod->t2 + 1;
+	    dset->t2 = fc->t2;
+	    sprintf(formula, "%s=%s", dset->varname[yno], mdsfunc);
+#if MIDAS_DEBUG
+	    fprintf(stderr, " dynamic range %d to %d\n %s\n", dset->t1,
+		    dset->t2, formula);
+#endif
+	    err = generate(formula, dset, GRETL_TYPE_SERIES,
+			   OPT_P, NULL);
+	    if (!err) {
+		for (t=dset->t1; t<=dset->t2; t++) {
+		    fc->yhat[t] = dset->Z[yno][t];
+		}
+	    }
+	}
+    }
+
+    /* restore dataset state */
+    if (dset->v > origv) {
+	err = dataset_drop_last_variables(dset, dset->v - origv);
+    }
+    dset->t1 = oldt1;
+    dset->t2 = oldt2;
+
+    if (y != NULL) {
+	/* restore original dependent variable */
+	memcpy(dset->Z[yno], y, dset->n * sizeof *y);
+	free(y);
+    }
+
+    if (!err && fc->method == FC_STATIC && fc->sderr != NULL) {
+	for (t=fc->t1; t<=fc->t2; t++) {
+	    fc->sderr[t] = pmod->sigma;
+	}
+    }
+
+    /* clean up any uservars the MIDAS mechanism created */
+    destroy_private_uvars();	
+
+    free(mdsfunc);
+
+    return err;    
 }
 
 #if AR_DEBUG
@@ -2068,7 +2191,8 @@ static int linear_fcast (Forecast *fc, const MODEL *pmod, int yno,
     return 0;
 }
 
-#define dynamic_nls(m) (m->ci == NLS && gretl_model_get_int(m, "dynamic"))
+#define dynamic_nls(m) ((m->ci == NLS || m->ci == MIDASREG) \
+			&& gretl_model_get_int(m, "dynamic"))
 
 static int get_forecast_method (Forecast *fc,
 				MODEL *pmod, 
@@ -2341,6 +2465,8 @@ static int real_get_fcast (FITRESID *fr, MODEL *pmod,
 	err = static_fcast_with_errs(&fc, pmod, dset, opt);
     } else if (pmod->ci == NLS) {
 	err = nls_fcast(&fc, pmod, dset);
+    } else if (pmod->ci == MIDASREG) {
+	err = midas_fcast(&fc, pmod, dset);
     } else if (SIMPLE_AR_MODEL(pmod->ci) || dummy_AR) {
 	err = ar_fcast(&fc, pmod, dset);
     } else if (pmod->ci == ARMA) {

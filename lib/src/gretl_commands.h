@@ -74,7 +74,8 @@ typedef enum {
     GRAPHPG,
     HAUSMAN,
     HECKIT,
-    HELP,    
+    HELP,
+    HFPLOT,
     HSK,
     HURST,
     IF,
@@ -99,6 +100,7 @@ typedef enum {
     MAKEPKG,
     MARKERS,
     MEANTEST,
+    MIDASREG,
     MLE,
     MODELTAB,
     MODPRINT,
@@ -232,6 +234,7 @@ typedef enum {
 			     c == XCORRGM || \
 			     c == PERGM || \
 			     c == RMPLOT || \
+			     c == HFPLOT || \
 			     c == HURST || \
 			     c == LEVERAGE || \
 			     c == QLRTEST ||  \

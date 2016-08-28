@@ -35,7 +35,7 @@
 #include "gretl_xml.h"
 #include "gretl_string_table.h"
 #include "gretl_typemap.h"
-#include "gretl_array.h"
+#include "gretl_midas.h"
 #include "dbread.h"
 #include "gretl_foreign.h"
 #include "boxplots.h"
@@ -694,10 +694,14 @@ void gretl_record_command (CMD *cmd, const char *line, PRN *prn)
     real_echo_command(cmd, line, 1, prn);
 }
 
-static int set_var_info (int v, const char *parm1, const char *parm2,
-			 gretlopt opt, DATASET *dset)
+static int set_var_info (const int *list,
+			 const char *parm1,
+			 const char *parm2,
+			 gretlopt opt,
+			 DATASET *dset)
 {
-    int err = 0;
+    int v = list[1];
+    int i, err = 0;
 
     if (dset == NULL || dset->varinfo == NULL) {
 	return E_NODATA;
@@ -705,11 +709,25 @@ static int set_var_info (int v, const char *parm1, const char *parm2,
 	return E_DATA;
     }
 
-    if (opt & OPT_D) {
-	series_set_discrete(dset, v, 1);
-    } else if (opt & OPT_C) {
-	series_set_discrete(dset, v, 0);
+    if (opt & OPT_M) {
+	err = gretl_list_set_midas(list, dset);
+	if (err) {
+	    return err;
+	}
     }
+
+    for (i=1; i<=list[0]; i++) {
+	if (opt & OPT_D) {
+	    series_set_discrete(dset, list[i], 1);
+	} else if (opt & OPT_C) {
+	    series_set_discrete(dset, list[i], 0);
+	}
+    }
+
+    /* below: we'll accept multi-series lists, but the
+       string-setting facility will apply to just the
+       first member, as "representative" of the list
+    */
 
     if (opt & OPT_I) {
 	const char *s = get_optval_string(SETINFO, OPT_I);
@@ -2321,6 +2339,8 @@ static int execute_plot_call (CMD *cmd, DATASET *dset,
 	err = multi_scatters(cmd->list, dset, opt);
     } else if (cmd->ci == BXPLOT) {
 	err = boxplots(cmd->list, cmd->param, dset, opt);
+    } else if (cmd->ci == HFPLOT) {
+	err = hf_plot(cmd->list, cmd->param, dset, opt);
     }
 
     return err;
@@ -2572,7 +2592,8 @@ int gretl_cmd_exec (ExecState *s, DATASET *dset)
 	break;
 
     case LAGS:
-	err = list_laggenr(&listcpy, cmd->order, NULL, dset, 0, cmd->opt); 
+	err = list_laggenr(&listcpy, 1, cmd->order, NULL,
+			   dset, 0, cmd->opt); 
 	if (!err) {
 	    maybe_list_series(dset, prn);
 	    set_dataset_is_changed();
@@ -2628,7 +2649,7 @@ int gretl_cmd_exec (ExecState *s, DATASET *dset)
 	break;
 
     case SETINFO:
-	err = set_var_info(cmd->list[1], cmd->param, cmd->parm2, 
+	err = set_var_info(cmd->list, cmd->param, cmd->parm2, 
 			   cmd->opt, dset);
 	break;
 
@@ -2655,7 +2676,9 @@ int gretl_cmd_exec (ExecState *s, DATASET *dset)
 	break;
 
     case VARLIST:
-	if (cmd->opt & OPT_S) {
+	if (cmd->opt & OPT_T) {
+	    list_user_vars_of_type(dset, prn);
+	} else if (cmd->opt & OPT_S) {
 	    print_scalars(prn);
 	} else if (cmd->opt & OPT_A) {
 	    list_ok_dollar_vars(dset, prn);
@@ -2858,6 +2881,7 @@ int gretl_cmd_exec (ExecState *s, DATASET *dset)
     case TOBIT:
     case DURATION:
     case BIPROBIT:
+    case MIDASREG:
 	clear_model(model);
 	if (cmd->ci == LOGIT || cmd->ci == PROBIT) {
 	    *model = logit_probit(cmd->list, dset, cmd->ci, cmd->opt, prn);
@@ -2894,6 +2918,9 @@ int gretl_cmd_exec (ExecState *s, DATASET *dset)
 	    *model = interval_model(cmd->list, dset, cmd->opt, prn);
 	} else if (cmd->ci == BIPROBIT) {
 	    *model = biprobit_model(cmd->list, dset, cmd->opt, prn);
+	} else if (cmd->ci == MIDASREG) {
+	    *model = midas_model(cmd->list, cmd->param, dset,
+				 cmd->opt, prn);
 	} else {
 	    /* can't happen */
 	    err = 1;
@@ -3174,6 +3201,7 @@ int gretl_cmd_exec (ExecState *s, DATASET *dset)
     case GNUPLOT:
     case BXPLOT:
     case SCATTERS:
+    case HFPLOT:
 	err = execute_plot_call(cmd, dset, NULL, prn);
 	break;
 

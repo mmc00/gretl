@@ -36,11 +36,12 @@ struct VARINFO_ {
     char display_name[MAXDISP];
     char parent[VNAMELEN];
     VarFlags flags;
-    int transform;
-    int lag;
     char compact_method;
     gint64 mtime;
-    char stack_level; /* FIXME should be int? */
+    short transform;    /* note: command index of transform */
+    short lag;
+    short stack_level;
+    short midas_period;
     series_table *st;
 };
 
@@ -303,6 +304,7 @@ static void gretl_varinfo_init (VARINFO *vinfo)
     vinfo->flags = 0;
     vinfo->transform = 0;
     vinfo->lag = 0;
+    vinfo->midas_period = 0;
     vinfo->compact_method = COMPACT_NONE;
     vinfo->mtime = 0;
     vinfo->stack_level = gretl_function_depth();
@@ -329,6 +331,7 @@ void copy_varinfo (VARINFO *targ, const VARINFO *src)
     targ->flags = src->flags;
     targ->transform = src->transform;
     targ->lag = src->lag;
+    targ->midas_period = src->midas_period;
     targ->compact_method = src->compact_method;
     targ->stack_level = src->stack_level;
     if (src->st != NULL) {
@@ -2933,7 +2936,7 @@ int series_record_label (DATASET *dset, int i,
 }
 
 int series_record_display_name (DATASET *dset, int i,
-			  const char *s) 
+				const char *s) 
 {
     char *targ = dset->varinfo[i]->display_name;
 
@@ -3082,8 +3085,10 @@ static int dataset_int_param (const char **ps, int op,
 	    ok = 1;
 	} else if (dated_daily_data(dset) && (k == 52 || k == 12)) {
 	    ok = 1;
-	} else if (dataset_is_daily(dset) && k == 52) {
-	    ok = 1;
+	} else if (dataset_is_daily(dset) && k == 4) {
+	    if (strstr(*ps, "spread")) {
+		ok = 1;
+	    }
 	}
 
 	if (!ok) {
@@ -3238,44 +3243,60 @@ int dataset_resample (DATASET *dset, int n, unsigned int seed)
     return err;
 }
 
-/* note: @s should be a string containing a varname and new
-   number (it is originally obtained as the "param" string
-   from the dataset command); @fixmax is the greatest series 
-   ID number that cannot be changed (based on saved models, 
-   etc., as determined by the caller)
+/* note: @list should contain a single series ID, that of the
+   target series, and @param should hold a numeric string
+   giving the position to which @targ should be moved;
+   @fixmax is the greatest series ID number that cannot be 
+   changed (based on saved models, etc., as determined by the
+   caller)
 */
 
-int renumber_series_with_checks (const char *s, int fixmax,
-				 DATASET *dset, PRN *prn)
+int renumber_series_with_checks (const int *list,
+				 const char *param,
+				 int fixmax,
+				 DATASET *dset,
+				 PRN *prn)
 {
     char vname[VNAMELEN];
     int v_old, v_new;
-    int n, err = 0;
-    
-    n = sscanf(s, "%s %d", vname, &v_new);
-    if (n != 2) {
-	err = E_PARSE;
-    } else {
-	v_old = current_series_index(dset, vname);
-	if (v_old < 0) {
-	    err = E_UNKVAR;
-	} else {
-	    int f1 = max_varno_in_saved_lists();
+    int f1, err = 0;
 
-	    if (f1 > fixmax) {
-		fixmax = f1;
-	    }
+    if (list == NULL || list[0] != 1 ||
+	param == NULL || *param == '\0') {
+	return E_INVARG;
+    }
 
-	    if (v_old <= fixmax) {
-		gretl_errmsg_sprintf(_("Variable %s cannot be renumbered"), vname);
-		err = E_DATA;
-	    } else if (v_new <= fixmax) {
-		gretl_errmsg_sprintf(_("Target ID %d is not available"), v_new);
-		err = E_DATA;
-	    } else {		
-		err = dataset_renumber_variable(v_old, v_new, dset);
-	    }
-	}
+    if (sscanf(param, "%d", &v_new) != 1) {
+	return E_INVARG;
+    }
+
+    v_old = list[1];
+
+    if (v_old < 1 || v_old > dset->v - 1 ||
+	v_new < 1 || v_new > dset->v - 1) {
+	/* out of bounds */
+	return E_INVARG;
+    } else if (v_new == v_old) {
+	/* no-op */
+	return 0;
+    }
+
+    f1 = max_varno_in_saved_lists();
+
+    if (f1 > fixmax) {
+	fixmax = f1;
+    }
+
+    strcpy(vname, dset->varname[v_old]);
+
+    if (v_old <= fixmax) {
+	gretl_errmsg_sprintf(_("Variable %s cannot be renumbered"), vname);
+	err = E_DATA;
+    } else if (v_new <= fixmax) {
+	gretl_errmsg_sprintf(_("Target ID %d is not available"), v_new);
+	err = E_DATA;
+    } else {		
+	err = dataset_renumber_variable(v_old, v_new, dset);
     }
 
     if (!err && gretl_messages_on()) {
@@ -3423,10 +3444,6 @@ int modify_dataset (DATASET *dset, int op, const int *list,
     } else {
 	err = E_PARSE;
     }
-
-    if (!err && op != DS_RENUMBER) {
-	print_smpl(dset, get_full_length_n(), prn);
-    }  
 
     return err;
 }
@@ -3735,7 +3752,7 @@ void series_unset_flag (DATASET *dset, int i, VarFlags flag)
  * Returns: the flags set series @i.
  */
 
-VarFlags series_get_flags (DATASET *dset, int i)
+VarFlags series_get_flags (const DATASET *dset, int i)
 {
     if (i >= 0 && i < dset->v) {
 	return dset->varinfo[i]->flags;
@@ -4583,3 +4600,41 @@ static int pad_daily_data (DATASET *dset, int pd, PRN *prn)
 
     return err;
 }
+
+/* MIDAS-related functions */
+
+int series_get_midas_period (const DATASET *dset, int i)
+{
+    if (i > 0 && i < dset->v) {
+	return dset->varinfo[i]->midas_period;
+    }
+
+    return 0;
+}
+
+void series_set_midas_period (const DATASET *dset, int i,
+			      int period)
+{
+    if (i > 0 && i < dset->v) {
+	dset->varinfo[i]->midas_period = period;
+    }
+}
+
+int series_is_midas_anchor (const DATASET *dset, int i)
+{
+    if (i > 0 && i < dset->v &&
+	(dset->varinfo[i]->flags & VAR_HFANCHOR)) {
+	return dset->varinfo[i]->midas_period;
+    }
+
+    return 0;
+}
+
+void series_set_midas_anchor (const DATASET *dset, int i)
+{
+    if (i > 0 && i < dset->v) {
+	dset->varinfo[i]->flags |= VAR_HFANCHOR;
+    }
+}
+
+/* end MIDAS-related functions */

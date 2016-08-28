@@ -82,6 +82,58 @@ static int output_json_node_value (JsonNode *node,
     return err;
 }
 
+/* for passing deep into callbacks */
+struct jsdata {
+    int *n_objects;
+    int *err;
+    PRN *prn;
+};
+
+static void show_obj_value (gpointer data, gpointer p)
+{
+    JsonNode *node = data;
+    struct jsdata *jsd = p;
+
+    if (JSON_NODE_HOLDS_ARRAY(node)) {
+	fprintf(stderr, " show_obj_value: got array!\n");
+    }
+
+    if (node != NULL && !*jsd->err) {
+	*jsd->err = output_json_node_value(node, jsd->prn);
+	if (!*jsd->err) {
+	    *jsd->n_objects += 1;
+	    pputc(jsd->prn, '\n');
+	}
+    }
+}
+
+static int excavate_json_object (JsonNode *node,
+				 int *n_objects,
+				 PRN *prn)
+{
+    JsonObject *obj = json_node_get_object(node);
+    int err = 0;
+
+    if (obj == NULL) {
+	return E_DATA;
+    }
+
+    if (json_object_get_size(obj) > 0) {
+	GList *list = json_object_get_values(obj);
+	struct jsdata jsd = {
+	    n_objects,
+	    &err,
+	    prn
+	};
+
+	list = json_object_get_values(obj);
+	g_list_foreach(list, show_obj_value, &jsd);
+	g_list_free(list);
+    }
+
+    return err;
+}
+
 static int real_json_get (JsonParser *parser, const char *pathstr,
 			  int *n_objects, PRN *prn)
 {
@@ -126,11 +178,12 @@ static int real_json_get (JsonParser *parser, const char *pathstr,
     gretl_push_c_numeric_locale();
 
     if (JSON_NODE_HOLDS_ARRAY(match)) {
-	JsonArray *array;
+	JsonArray *array = json_node_get_array(match);
+	int len = 0, index = 0;
 
-	array = json_node_get_array(match);
 	if (non_empty_array(array)) {
-	    node = json_array_get_element(array, 0);
+	    len = json_array_get_length(array);
+	    node = json_array_get_element(array, index);
 	} else {
 	    node = NULL;
 	}
@@ -148,10 +201,19 @@ static int real_json_get (JsonParser *parser, const char *pathstr,
 
 	if (node != NULL && !handled_type(ntype)) {
 	    if (JSON_NODE_HOLDS_ARRAY(node)) {
+		/* recurse on array type */
 		array = json_node_get_array(node);
 		if (non_empty_array(array)) {
 		    node = json_array_get_element(array, 0);
 		    goto repeat;
+		}
+	    } else if (json_node_get_node_type(node) == JSON_NODE_OBJECT) {
+		err = excavate_json_object(node, n_objects, prn);
+		if (!err) {
+		    if (index < len - 1) {
+			node = json_array_get_element(array, ++index);
+			goto repeat;
+		    }
 		}
 	    } else {
 		gretl_errmsg_sprintf("jsonget: unhandled array type '%s'", 

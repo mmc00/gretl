@@ -30,7 +30,6 @@
 #include "gretl_panel.h"
 #include "missing_private.h"
 #include "gretl_string_table.h"
-#include "gretl_array.h"
 #include "uservar.h"
 
 #ifdef WIN32
@@ -407,8 +406,17 @@ static int gp_set_non_point_info (gnuplot_info *gi,
 
 static int plain_lines_spec (gretlopt opt)
 {
-    if ((opt & OPT_O) && !(opt & (OPT_B | OPT_M | OPT_P))) {
+    if ((opt & OPT_O) && !(opt & (OPT_M | OPT_B | OPT_P))) {
 	return get_optval_string(plot_ci, OPT_O) == NULL;
+    } else {
+	return 0;
+    }
+}
+
+static int plain_impulses_spec (gretlopt opt)
+{
+    if ((opt & OPT_M) && !(opt & (OPT_O | OPT_B | OPT_P))) {
+	return get_optval_string(plot_ci, OPT_M) == NULL;
     } else {
 	return 0;
     }
@@ -460,12 +468,9 @@ static int get_gp_flags (gnuplot_info *gi, gretlopt opt,
 	    /* there's no xvar in @list */
 	    n_yvars++;
 	}
-	if (opt & OPT_O) {
-	    gi->flags |= GPT_LINES;
-	}
 	gi->flags |= GPT_FIT_OMIT;
 	gi->band = 1;
-	return 0;
+	goto linespec;
     }
 
     if (opt & OPT_S) {
@@ -480,11 +485,6 @@ static int get_gp_flags (gnuplot_info *gi, gretlopt opt,
     } else if (opt & OPT_A) {
 	/* internal option for fitted-actual plot */
 	gi->flags |= GPT_FA;
-    }
-
-    if (opt & OPT_G) {
-	/* internal option, saving as icon */
-	gi->flags |= GPT_ICON;
     }
 
     if (opt & OPT_Z) {
@@ -502,9 +502,14 @@ static int get_gp_flags (gnuplot_info *gi, gretlopt opt,
 	}
     }
 
+ linespec:
+
     if (plain_lines_spec(opt)) {
 	/* just using lines */
 	gi->flags |= GPT_LINES;
+    } else if (plain_impulses_spec(opt)) {
+	/* just using impulses */
+	gi->flags |= GPT_IMPULSES;
     } else if (opt & (OPT_M | OPT_O | OPT_P | OPT_B)) {
 	/* for handling per-variable "plot with" options */
 	gi->withlist = gretl_list_new(n_yvars);
@@ -528,6 +533,11 @@ static int get_gp_flags (gnuplot_info *gi, gretlopt opt,
 	    gp_set_non_point_info(gi, list, dset, OPT_B);
 	}
     }
+
+    if (opt & OPT_G) {
+	/* internal option, saving as icon */
+	gi->flags |= GPT_ICON;
+    }    
 
     gi->fit = PLOT_FIT_NONE;
 
@@ -1530,20 +1540,24 @@ static const char *plot_output_option (PlotType p, int *pci)
     return s;
 }
 
-/* Open a file into which gnuplot commands will be written.
+/**
+ * open_plot_input_file:
+ * @ptype: indication of the sort of plot to be made.
+ * @flags: may inflect some characteristics of plot.
+ * @err: location to receive error code.
+ *
+ * Opens a file into which gnuplot commands will be written.
+ * Depending on the prospective use of the stream, some
+ * header-type material may be written into it (the primary
+ * case being when we're going to produce PNG output
+ * for display in the gretl GUI). The prospective use is
+ * figured out based on the program state, @ptype and
+ * @flags.
+ *
+ * Returns: writable stream on success, %NULL on failure.
+ */
 
-   Depending on the prospective use of the stream, we
-   may write some header-type stuff into it, the primary
-   case being when we're going to produce PNG output
-   for display in the GUI.
-
-   This internal function allows specification of non-zero
-   GptFlags -- cf. open_plot_input_file(), which is a simpler
-   wrapper for open_gp_stream().
-*/
-
-static FILE *open_gp_stream (PlotType ptype, GptFlags flags, 
-			     int *err)
+FILE *open_plot_input_file (PlotType ptype, GptFlags flags, int *err)
 {
     char fname[FILENAME_MAX] = {0};
     const char *optname = NULL;
@@ -1630,28 +1644,6 @@ int gnuplot_graph_wanted (PlotType ptype, gretlopt opt)
     }
 
     return ret;
-}
-
-/**
- * open_plot_input_file:
- * @ptype: indication of the sort of plot to be made.
- * @err: location to receive error code.
- *
- * Opens a file into which gnuplot commands will be written.
- * Depending on the prospective use of the stream, some
- * header-type material may be written into it (the primary
- * case being when we're going to produce PNG output
- * for display in the gretl GUI). The prospective use is
- * figured out based on the program state and @ptype.
- *
- * Returns: writable stream on success, %NULL on failure.
- */
-
-FILE *open_plot_input_file (PlotType ptype, int *err)
-{
-    FILE *fp = open_gp_stream(ptype, 0, err);
-
-    return fp;
 }
 
 /**
@@ -2003,7 +1995,7 @@ static int loess_plot (gnuplot_info *gi, const char *literal,
 	return err;
     }
 
-    fp = open_gp_stream(PLOT_REGULAR, gi->flags, &err);
+    fp = open_plot_input_file(PLOT_REGULAR, gi->flags, &err);
     if (err) {
 	return E_FOPEN;
     } 
@@ -2205,7 +2197,7 @@ static int time_fit_plot (gnuplot_info *gi, const char *literal,
 
     gi->flags |= GPT_LETTERBOX;
 
-    fp = open_gp_stream(PLOT_REGULAR, gi->flags, &err);
+    fp = open_plot_input_file(PLOT_REGULAR, gi->flags, &err);
     if (err) {
 	return err;
     } 
@@ -2580,6 +2572,10 @@ static int use_lines (gnuplot_info *gi)
     return 0;
 }
 
+/* list of series IDs for which we should skip observations
+   with NAs when printing the plot data */
+static int *na_skiplist;
+
 static void print_gp_data (gnuplot_info *gi, const DATASET *dset,
 			   FILE *fp)
 {
@@ -2624,6 +2620,11 @@ static void print_gp_data (gnuplot_info *gi, const DATASET *dset,
 	    const char *label = NULL;
 	    const char *date = NULL;
 	    char obs[OBSLEN];
+
+	    if (in_gretl_list(na_skiplist, datlist[ynum]) &&
+		na(dset->Z[datlist[ynum]][t])) {
+		continue;
+	    }
 
 	    if (gi->flags & GPT_TIMEFMT) {
 		ntodate(obs, t, dset);
@@ -2824,6 +2825,8 @@ static void set_withstr (gnuplot_info *gi, int i, char *str)
 	}
     } else if (gi->flags & GPT_LINES) {
         strcpy(str, "w lines");
+    } else if (gi->flags & GPT_IMPULSES) {
+	strcpy(str, "w impulses");
     } else {
 	strcpy(str, "w points");
     }
@@ -3433,7 +3436,7 @@ int gnuplot (const int *plotlist, const char *literal,
     /* open file and dump the prn into it: we delay writing
        the file header till we know a bit more about the plot
     */
-    fp = open_gp_stream(ptype, gi.flags, &err);
+    fp = open_plot_input_file(ptype, gi.flags, &err);
     if (err) {
 	gretl_print_destroy(prn);
 	goto bailout;
@@ -3673,7 +3676,7 @@ int theil_forecast_plot (const int *plotlist, const DATASET *dset,
 	goto bailout;
     }
 
-    fp = open_gp_stream(PLOT_REGULAR, gi.flags, &err);
+    fp = open_plot_input_file(PLOT_REGULAR, gi.flags, &err);
     if (err) {
 	goto bailout;
     } 
@@ -3795,7 +3798,7 @@ int multi_scatters (const int *list, const DATASET *dset,
 	flags |= GPT_XL;
     }
 
-    fp = open_gp_stream(PLOT_MULTI_SCATTER, flags, &err);
+    fp = open_plot_input_file(PLOT_MULTI_SCATTER, flags, &err);
     if (err) {
 	return err;
     }
@@ -4055,7 +4058,7 @@ int matrix_scatters (const gretl_matrix *m, const int *list,
 	flags |= GPT_XL;
     }
 
-    fp = open_gp_stream(PLOT_MULTI_SCATTER, flags, &err);
+    fp = open_plot_input_file(PLOT_MULTI_SCATTER, flags, &err);
     if (err) {
 	return err;
     }
@@ -4270,7 +4273,7 @@ int gnuplot_3d (int *list, const char *literal,
     if (interactive) {
 	fp = get_3d_output_file(&err);
     } else {
-	fp = open_plot_input_file(PLOT_3D, &err);
+	fp = open_plot_input_file(PLOT_3D, 0, &err);
     }
 
     if (err) {
@@ -4457,7 +4460,7 @@ int plot_freq (FreqDist *freq, DistCode dist, gretlopt opt)
 	plottype = PLOT_FREQ_SIMPLE;
     }
 
-    fp = open_plot_input_file(plottype, &err);
+    fp = open_plot_input_file(plottype, 0, &err);
     if (err) {
 	return err;
     }  
@@ -4886,7 +4889,7 @@ int plot_fcast_errs (const FITRESID *fr, const double *maxerr,
 	return E_ALLOC;
     }
 
-    fp = open_gp_stream(PLOT_FORECAST, flags, &err);
+    fp = open_plot_input_file(PLOT_FORECAST, flags, &err);
     if (err) {
 	return err;
     }    
@@ -5358,11 +5361,13 @@ static int plot_with_band (int mode, gnuplot_info *gi,
     char yname[MAXDISP];
     char xname[MAXDISP];
     char rgb[10] = {0};
+    char wspec[16] = {0};
     int *biglist = NULL;
     int style = BAND_LINE;
     int show_zero = 0;
     int t1 = dset->t1;
     int t2 = dset->t2;
+    int nmiss = 0;
     int i, n_yvars = 0;
     int err = 0;
 
@@ -5382,11 +5387,11 @@ static int plot_with_band (int mode, gnuplot_info *gi,
     
     if (!err) {
 	if (biglist != NULL) {
-	    err = list_adjust_sample(biglist, &t1, &t2, dset, NULL);
+	    err = list_adjust_sample(biglist, &t1, &t2, dset, &nmiss);
 	} else {
-	    err = list_adjust_sample(gi->list, &t1, &t2, dset, NULL);
+	    err = list_adjust_sample(gi->list, &t1, &t2, dset, &nmiss);
 	}
-	if (!err && t2 - t1 < 3) {
+	if (!err && t2 - t1 - nmiss < 3) {
 	    err = E_DATA;
 	}
     }
@@ -5417,7 +5422,7 @@ static int plot_with_band (int mode, gnuplot_info *gi,
 
     n_yvars = gi->list[0] - 1;
 
-    fp = open_gp_stream(PLOT_BAND, gi->flags, &err);
+    fp = open_plot_input_file(PLOT_BAND, gi->flags, &err);
     if (err) {
 	return err;
     }
@@ -5455,34 +5460,29 @@ static int plot_with_band (int mode, gnuplot_info *gi,
 	if (show_zero) {
 	    fputs("0 notitle w lines lt 0, \\\n", fp);
 	}
-	for (i=0; i<n_yvars; i++) {
-	    const char *iname = series_get_graph_name(dset, gi->list[i+1]);
-	    
-	    if (gi->flags & GPT_LINES) {
-		fprintf(fp, "'-' using 1:2 title '%s' w lines lt %d", iname, i+1);
-	    } else {
-		fprintf(fp, "'-' using 1:2 title '%s' lt %d", iname, i+1);
-	    }
-	    if (i == n_yvars - 1) {
+	/* plot the non-band data */
+	for (i=1; i<=n_yvars; i++) {
+	    const char *iname = series_get_graph_name(dset, gi->list[i]);
+
+	    set_withstr(gi, i, wspec);
+	    fprintf(fp, "'-' using 1:2 title '%s' %s lt %d", iname, wspec, i);
+	    if (i == n_yvars) {
 		fputc('\n', fp);
 	    } else {
 		fputs(", \\\n", fp);
 	    }
 	}
     } else {
-	/* plot confidence band last */
 	char lspec[24], dspec[8];
 
 	*lspec = *dspec = '\0';
 
-	for (i=0; i<n_yvars; i++) {
-	    const char *iname = series_get_graph_name(dset, gi->list[i+1]);
-	
-	    if (gi->flags & GPT_LINES) {
-		fprintf(fp, "'-' using 1:2 title '%s' w lines lt %d, \\\n", iname, i+1);
-	    } else {
-		fprintf(fp, "'-' using 1:2 title '%s' lt %d, \\\n", iname, i+1);
-	    }
+	/* plot the non-band data first */
+	for (i=1; i<=n_yvars; i++) {
+	    const char *iname = series_get_graph_name(dset, gi->list[i]);
+
+	    set_withstr(gi, i, wspec);
+	    fprintf(fp, "'-' using 1:2 title '%s' %s lt %d, \\\n", iname, wspec, i);
 	}
 	if (*rgb != '\0') {
 	    sprintf(lspec, "lc rgb \"%s\"", rgb);
@@ -5492,6 +5492,7 @@ static int plot_with_band (int mode, gnuplot_info *gi,
 	if (style == BAND_DASH) {
 	    strcpy(dspec, " dt 2");
 	}
+	/* then the confidence band */
 	fprintf(fp, "'-' using 1:($2-%g*$3) notitle w lines %s%s, \\\n",
 		pm.factor, lspec, dspec);
 	fprintf(fp, "'-' using 1:($2+%g*$3) notitle w lines %s%s\n",
@@ -5608,7 +5609,7 @@ static int plot_with_band (gnuplot_info *gi,
 	strcpy(xname, series_get_graph_name(dset, xno));
     }
 
-    fp = open_gp_stream(PLOT_BAND, gi->flags, &err);
+    fp = open_plot_input_file(PLOT_BAND, gi->flags, &err);
     if (err) {
 	return err;
     }
@@ -5812,7 +5813,7 @@ int plot_simple_fcast_bands (const MODEL *pmod,
 	return E_ALLOC;
     }
 
-    fp = open_gp_stream(PLOT_FORECAST, flags, &err);
+    fp = open_plot_input_file(PLOT_FORECAST, flags, &err);
     if (err) {
 	return err;
     }    
@@ -5895,7 +5896,7 @@ int plot_tau_sequence (const MODEL *pmod, const DATASET *dset,
 	return E_DATA;
     }
 
-    fp = open_plot_input_file(PLOT_RQ_TAU, &err);
+    fp = open_plot_input_file(PLOT_RQ_TAU, 0, &err);
     if (err) {
 	return err;
     } 
@@ -6027,7 +6028,7 @@ int garch_resid_plot (const MODEL *pmod, const DATASET *dset)
 	return E_ALLOC;
     }
 
-    fp = open_plot_input_file(PLOT_GARCH, &err);
+    fp = open_plot_input_file(PLOT_GARCH, 0, &err);
     if (err) {
 	return err;
     }
@@ -6594,7 +6595,7 @@ static int panel_grid_ts_plot (int vnum, DATASET *dset,
 
     maybe_set_small_font(nunits);
 
-    fp = open_plot_input_file(PLOT_PANEL, &err);
+    fp = open_plot_input_file(PLOT_PANEL, 0, &err);
     if (err) {
 	return err;
     }
@@ -6825,7 +6826,7 @@ gretl_VAR_plot_impulse_response (GRETL_VAR *var,
 	int confint = (resp->cols > 1);
 	FILE *fp;
 
-	fp = open_plot_input_file((confint)? PLOT_IRFBOOT : PLOT_REGULAR, &err);
+	fp = open_plot_input_file((confint)? PLOT_IRFBOOT : PLOT_REGULAR, 0, &err);
 	if (!err) {
 	    real_irf_print_plot(resp, dset->varname[vtarg],
 				dset->varname[vshock],
@@ -6858,7 +6859,7 @@ int gretl_VAR_plot_FEVD (GRETL_VAR *var, int targ, int periods,
     histo = (opt & OPT_H)? 1 : 0;
     ptype = histo ? PLOT_STACKED_BAR : PLOT_REGULAR;
 
-    fp = open_plot_input_file(ptype, &err);
+    fp = open_plot_input_file(ptype, 0, &err);
     if (err) {
 	gretl_matrix_free(V);
 	return err;
@@ -6940,7 +6941,7 @@ int gretl_VAR_plot_multiple_irf (GRETL_VAR *var,
 	flags |= GPT_XL;
     }
 
-    fp = open_gp_stream(PLOT_MULTI_IRF, flags, &err);
+    fp = open_plot_input_file(PLOT_MULTI_IRF, flags, &err);
     if (err) {
 	return err;
     }
@@ -7078,7 +7079,7 @@ int gretl_system_residual_plot (void *p, int ci, int eqn, const DATASET *dset)
 	single = (nvars == 1);
     }
 
-    fp = open_plot_input_file(PLOT_REGULAR, &err);
+    fp = open_plot_input_file(PLOT_REGULAR, 0, &err);
     if (err) {
 	return err;
     }
@@ -7160,7 +7161,7 @@ int gretl_VECM_combined_EC_plot (GRETL_VAR *var,
 
     t1 = gretl_matrix_get_t1(EC);
 
-    fp = open_plot_input_file(PLOT_REGULAR, &err);
+    fp = open_plot_input_file(PLOT_REGULAR, 0, &err);
     if (err) {
 	return err;
     }
@@ -7251,7 +7252,7 @@ int gretl_system_residual_mplot (void *p, int ci, const DATASET *dset)
     nobs = gretl_matrix_rows(E);
     t1 = gretl_matrix_get_t1(E);
 
-    fp = open_plot_input_file(PLOT_MULTI_SCATTER, &err);
+    fp = open_plot_input_file(PLOT_MULTI_SCATTER, 0, &err);
     if (err) {
 	return err;
     }
@@ -7319,7 +7320,7 @@ int gretl_VAR_roots_plot (GRETL_VAR *var)
 	return err;
     }
 
-    fp = open_plot_input_file(PLOT_ROOTS, &err);
+    fp = open_plot_input_file(PLOT_ROOTS, 0, &err);
     if (err) {
 	return err;
     }
@@ -7406,7 +7407,7 @@ int confidence_ellipse_plot (gretl_matrix *V, double *b,
 
     gretl_matrix_free(e);
 
-    fp = open_plot_input_file(PLOT_ELLIPSE, &err);
+    fp = open_plot_input_file(PLOT_ELLIPSE, 0, &err);
     if (err) {
 	return err;
     }
@@ -7594,7 +7595,7 @@ int correlogram_plot (const char *vname,
     FILE *fp;
     int err = 0;
 
-    fp = open_plot_input_file(PLOT_CORRELOGRAM, &err);
+    fp = open_plot_input_file(PLOT_CORRELOGRAM, 0, &err);
 
     if (!err) {
 	real_correlogram_print_plot(vname, acf, pacf, 
@@ -7723,7 +7724,7 @@ int periodogram_plot (const char *vname,
     FILE *fp;
     int err = 0;
 
-    fp = open_plot_input_file(PLOT_PERIODOGRAM, &err);
+    fp = open_plot_input_file(PLOT_PERIODOGRAM, 0, &err);
 
     if (!err) {
 	real_pergm_plot(vname, T, L, x, opt, fp);
@@ -7804,7 +7805,7 @@ static int qq_plot_two_series (const int *list,
     }
 
     if (!err) {
-	fp = open_plot_input_file(PLOT_QQ, &err);
+	fp = open_plot_input_file(PLOT_QQ, 0, &err);
     }
 
     if (err) {
@@ -7895,7 +7896,7 @@ static int normal_qq_plot (const int *list,
 	}
     }
 
-    fp = open_plot_input_file(PLOT_QQ, &err);
+    fp = open_plot_input_file(PLOT_QQ, 0, &err);
     if (err) {
 	free(y);
 	return err;
@@ -7955,6 +7956,207 @@ int qq_plot (const int *list, const DATASET *dset, gretlopt opt)
     } else {
 	err = E_DATA;
     }
+
+    return err;
+}
+
+static int pd_from_compfac (const DATASET *dset,
+			    int compfac,
+			    char *stobs)
+{
+    int pd = -1;
+    
+    if (dset->pd == 1 && (compfac == 12 || compfac == 4)) {
+	/* annual from monthly or quarterly */
+	pd = compfac;
+    } else if (dset->pd == 4 && compfac == 3) {
+	/* quarterly from monthly */
+	pd = 12;
+    } else if (dset->pd == 4) {
+	/* maybe quarterly from daily? */
+	if (compfac >= 60 && compfac <= 69) {
+	    pd = 5;
+	} else if (compfac >= 71 && compfac <= 81) {
+	    pd = 6;
+	} else if (compfac >= 82 && compfac <= 93) {
+	    return 7;
+	}	
+    } else if (dset->pd == 12) {
+	/* maybe monthly from daily? */
+	if (compfac >= 20 && compfac <= 23) {
+	    pd = 5;
+	} else if (compfac >= 24 && compfac <= 27) {
+	    pd = 6;
+	} else if (compfac >= 28 && compfac <= 31) {
+	    pd = 7;
+	}
+    }
+
+    if (pd > 0) {
+	char *p, tmp[OBSLEN];
+	int y, q, m;
+	
+	ntodate(tmp, dset->t1, dset);
+	y = atoi(tmp);
+	p = strchr(tmp, ':');
+	
+	if ((dset->pd == 4 || dset->pd == 12) && p == NULL) {
+	    return -1;
+	}
+	
+	if (dset->pd == 1) {
+	    if (pd == 4) {
+		sprintf(stobs, "%d:1", y);
+	    } else if (pd == 12) {
+		sprintf(stobs, "%d:01", y);
+	    }
+	} else if (dset->pd == 4) {
+	    q = atoi(p + 1);
+	    m = (q==1)? 1 : (q==2)? 4 : (q==3)? 7 : 10;
+	    if (pd == 12) {
+		sprintf(stobs, "%d:%02d", y, m);
+	    } else {
+		/* daily */
+		sprintf(stobs, "%d-%02d-01", y, m);
+	    }
+	} else if (dset->pd == 12) {
+	    /* daily */
+	    m = atoi(p + 1);
+	    sprintf(stobs, "%d-%02d-01", y, m);
+	}
+    }
+
+    return pd;
+}
+
+static void transcribe_graph_name (DATASET *targ, int i,
+				   const DATASET *src, int j)
+{
+    const char *s = series_get_display_name(src, j);
+    
+    if (s != NULL && *s != '\0') {
+	series_record_display_name(targ, i, s);
+    }
+}
+
+/* high-frequency plot for MIDAS */
+
+int hf_plot (const int *list, const char *literal,
+	     const DATASET *dset, gretlopt opt)
+{
+    DATASET *hset;
+    double xit;
+    char stobs[OBSLEN];
+    int *gplist = NULL;
+    int *hflist = NULL;
+    int *lflist = NULL;
+    char *p;
+    gretlopt plotopt = OPT_T;
+    int plotpd = 0;
+    int nv, nlf = 0;
+    int cfac;
+    int i, s, t, T;
+    int err;
+
+    if (list == NULL || list[0] < 3) {
+	return E_INVARG;
+    } else if (!dataset_is_time_series(dset)) {
+	return E_PDWRONG;
+    }
+
+    if (gretl_list_has_separator(list)) {
+	err = gretl_list_split_on_separator(list, &hflist, &lflist);
+	if (err) {
+	    return err;
+	} else {
+	    cfac = hflist[0];
+	    nlf = lflist[0];
+	    nv = 2 + nlf;
+	}
+    } else {
+	cfac = list[0];
+	nv = 2;
+    }
+
+    T = sample_size(dset) * cfac;
+
+    hset = create_auxiliary_dataset(nv, T, OPT_NONE);
+    if (hset == NULL) {
+	return E_ALLOC;
+    }
+
+    /* set the hf series name */
+    strcpy(hset->varname[1], dset->varname[list[1]]);
+    p = strrchr(hset->varname[1], '_');
+    if (p != NULL) {
+	*p = '\0';
+    }
+    transcribe_graph_name(hset, 1, dset, list[1]);
+
+    s = 0;
+    /* transcribe high-frequency data */
+    for (t=dset->t1; t<=dset->t2; t++) {
+	for (i=cfac; i>0; i--) {
+	    xit = dset->Z[list[i]][t];
+	    hset->Z[1][s++] = xit;
+	}
+    }
+
+    if (lflist != NULL) {
+	/* add low-frequency term(s), if any */
+	for (i=1; i<=nlf; i++) {
+	    int vi = lflist[i];
+
+	    strcpy(hset->varname[i+1], dset->varname[vi]);
+	    transcribe_graph_name(hset, i+1, dset, vi);
+	    for (s=0; s<hset->n; s++) {
+		hset->Z[i+1][s] = NADBL;
+	    }
+	    s = 0;
+	    for (t=dset->t1; t<=dset->t2; t++) {
+		xit = dset->Z[vi][t];
+		hset->Z[i+1][s] = xit;
+		s += cfac;
+	    }
+	}
+    }
+
+    gplist = gretl_consecutive_list_new(1, nv - 1);
+
+    if (lflist != NULL) {
+	free(lflist);
+	lflist = gretl_consecutive_list_new(2, nv - 1);
+    }
+
+    /* try to set a suitable time-series interpretation
+       on the data to be plotted 
+    */
+    plotpd = pd_from_compfac(dset, cfac, stobs);
+    if (plotpd > 0) {
+	char numstr[8];
+
+	sprintf(numstr, "%d", plotpd);
+	set_obs(numstr, stobs, hset, OPT_T);
+    }
+
+    if (opt & OPT_O) {
+	plotopt |= OPT_O;
+    }
+    if (opt & OPT_U) {
+	plotopt |= OPT_U;
+    }
+
+    set_effective_plot_ci(HFPLOT);
+    na_skiplist = lflist; /* file-scope global */
+    err = gnuplot(gplist, literal, hset, plotopt);
+    na_skiplist = NULL;
+    set_effective_plot_ci(GNUPLOT);
+
+    free(gplist);
+    free(hflist);
+    free(lflist);
+
+    destroy_dataset(hset);
 
     return err;
 }
@@ -8108,7 +8310,7 @@ int gnuplot_process_file (gretlopt opt, PRN *prn)
 	return E_FOPEN;
     }
 
-    fq = open_plot_input_file(PLOT_USER, &err);
+    fq = open_plot_input_file(PLOT_USER, 0, &err);
 
     if (err) {
 	fclose(fp);

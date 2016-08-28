@@ -264,7 +264,7 @@ void do_add_obs (void);
 
 void do_remove_obs (void);
 
-void add_logs_etc (int ci, int varnum);
+void add_logs_etc (int ci, int varnum, int midas);
 
 void add_discrete_dummies (int varnum);
 
@@ -321,6 +321,10 @@ void delete_single_var (int id);
 void display_selected (void);
 
 void display_var (void);
+
+void midas_list_callback (const int *list,
+			  const char *listname,
+			  int ci);
 
 /* script- and file-related functions */
 

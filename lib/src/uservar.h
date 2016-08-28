@@ -25,6 +25,13 @@ typedef enum {
     UVAR_DELETE
 } UvarAction;
 
+typedef enum {
+    UV_PRIVATE = 1 << 0,
+    UV_SHELL   = 1 << 1,
+    UV_MAIN    = 1 << 2,
+    UV_NODECL  = 1 << 3
+} UVFlags;
+
 typedef int (*USER_VAR_FUNC) (const char *, GretlType, int);
 
 typedef struct user_var_ user_var;
@@ -77,6 +84,12 @@ void *user_var_unstack_value (user_var *uvar);
 
 int user_var_get_level (user_var *uvar);
 
+int user_var_get_flags (user_var *uvar);
+
+int user_var_set_flag (user_var *uvar, UVFlags flag);
+
+void user_var_privatize_by_name (const char *name);
+
 int user_var_set_name (user_var *uvar, const char *name);
 
 int user_var_adjust_level (user_var *uvar, int adj);
@@ -111,6 +124,8 @@ void destroy_user_vars (void);
 int destroy_user_vars_at_level (int level);
 
 int destroy_private_matrices (void);
+
+int destroy_private_uvars (void);
 
 int delete_user_vars_of_type (GretlType type, PRN *prn);
 
@@ -153,6 +168,8 @@ int gretl_scalar_add_mutable (const char *name, double val);
 
 int gretl_scalar_convert (const char *name, gretl_matrix **pm);
 
+int private_scalar_add (double val, const char *name);
+
 int add_auxiliary_scalar (const char *name, double val);
 
 void set_auxiliary_scalars (void);
@@ -190,5 +207,17 @@ int deserialize_user_vars (const char *dirname);
 int print_user_var_by_name (const char *name,
 			    const DATASET *dset,
 			    PRN *prn);
+
+int list_user_vars_of_type (const DATASET *dset,
+			    PRN *prn);
+
+int leads_midas_list (int ID, const DATASET *dset,
+		      char *listname);
+
+int in_midas_list (int ID, const DATASET *dset,
+		   char *listname);
+
+const char *
+get_listname_by_consecutive_content (int l0, int l1);
 
 #endif /* USERVAR_H_ */

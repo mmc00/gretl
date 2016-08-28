@@ -135,6 +135,8 @@ static const char *test_type_key (ModelTestType t)
 	return "within_F";
     } else if (t == GRETL_TEST_RE_WALD) {
 	return "re_wald_test";
+    } else if (t == GRETL_TEST_XDEPEND) {
+	return "cross_sectional_dependence_test";
     } else {
 	return NULL;
     }
@@ -177,6 +179,7 @@ static model_data_item *
 replicate_data_item (const model_data_item *orig)
 {
     model_data_item *item = malloc(sizeof *item);
+    int err = 0;
 
     if (item != NULL) {
 	item->key = gretl_strdup(orig->key);
@@ -189,6 +192,8 @@ replicate_data_item (const model_data_item *orig)
     if (item != NULL) {
 	if (orig->type == GRETL_TYPE_MATRIX) {
 	    item->ptr = gretl_matrix_copy(orig->ptr);
+	} else if (orig->type == GRETL_TYPE_ARRAY) {
+	    item->ptr = gretl_array_copy(orig->ptr, &err);
 	} else {
 	    item->ptr = malloc(orig->size);
 	}
@@ -200,7 +205,8 @@ replicate_data_item (const model_data_item *orig)
     }	
 
     if (item != NULL) {
-	if (orig->type != GRETL_TYPE_MATRIX) {
+	if (orig->type != GRETL_TYPE_MATRIX &&
+	    orig->type != GRETL_TYPE_ARRAY) {
 	    memcpy(item->ptr, orig->ptr, orig->size);
 	}
 	item->type = orig->type;
@@ -339,6 +345,31 @@ int gretl_model_set_matrix_as_data (MODEL *pmod, const char *key,
     return gretl_model_set_data_with_destructor(pmod, key, (void *) m, 
 						GRETL_TYPE_MATRIX, 0, 
 						matrix_free_callback);
+}
+
+static void array_free_callback (void *p)
+{
+    gretl_array_destroy((gretl_array *) p);
+}
+
+/**
+ * gretl_model_set_array_as_data:
+ * @pmod: pointer to #MODEL.
+ * @key: key string, used in retrieval.
+ * @A: array to attach.
+ *
+ * Attaches @A to @pmod as data, recoverable via the key @key 
+ * using gretl_model_get_data().
+ *
+ * Returns: 0 on success, 1 on failure.
+ */
+
+int gretl_model_set_array_as_data (MODEL *pmod, const char *key, 
+				   gretl_array *A)
+{
+    return gretl_model_set_data_with_destructor(pmod, key, (void *) A, 
+						GRETL_TYPE_ARRAY, 0, 
+						array_free_callback);
 }
 
 /**
@@ -1821,6 +1852,12 @@ int *gretl_model_get_x_list (const MODEL *pmod)
 		    list[i] = pmod->list[i+2];
 		}
 	    }
+	}
+    } else if (pmod->ci == MIDASREG) {
+	int *lfx = gretl_model_get_data(pmod, "lfxlist");
+
+	if (lfx != NULL) {
+	    list = gretl_list_copy(lfx);
 	}
     } else if (ordered_model(pmod)) {
 	nx = pmod->list[0] - 1;
@@ -3612,8 +3649,8 @@ static struct test_strings tstrings[] = {
       N_("Breusch-Pagan test"),
       N_("Variance of the unit-specific error = 0") },
     { GRETL_TEST_PANEL_TIMEDUM,
-      N_("Wald test for joint significance of time dummies"),
-      NULL },
+      N_("Wald joint test on time dummies"),
+      N_("No time effects") },
     { GRETL_TEST_HET_1,
       N_("Pesaran-Taylor test for heteroskedasticity"),
       N_("heteroskedasticity not present") },
@@ -3635,6 +3672,9 @@ static struct test_strings tstrings[] = {
     { GRETL_TEST_PANEL_WELCH,
       N_("Robust test for differing group intercepts"),
       N_("The groups have a common intercept") },
+    { GRETL_TEST_XDEPEND,
+      N_("Pesaran CD test for cross-sectional dependence"),
+      N_("No cross-sectional dependence") },    
     { GRETL_TEST_MAX, NULL, NULL }
 }; 
 
@@ -4310,6 +4350,10 @@ static void serialize_model_data_items (const MODEL *pmod, FILE *fp)
 	    gretl_matrix *m = (gretl_matrix *) item->ptr;
 
 	    gretl_matrix_serialize(m, NULL, fp);
+	} else if (item->type == GRETL_TYPE_ARRAY) {
+	    gretl_array *A = (gretl_array *) item->ptr;
+
+	    gretl_array_serialize(A, fp);
 	} else {
 	    ; /* no-op: not handled */
 	}
@@ -5327,6 +5371,11 @@ int command_ok_for_model (int test_ci, gretlopt opt,
     int mci = pmod->ci;
     int ok = 1;
 
+    if (mci == MIDASREG) {
+	/* treat as a case of NLS */
+	mci = NLS;
+    }
+
     if (mci == NLS && test_ci == FCAST) {
 	return 1;
     }
@@ -5385,6 +5434,9 @@ int command_ok_for_model (int test_ci, gretlopt opt,
 	    ok = (mci != ARCH && mci != GARCH);
 	} else if (opt & OPT_C) {
 	    ok = (mci == AR1);
+	} else if (opt & OPT_D) {
+	    /* x-sectional dependence */
+	    ok = 1;
 	} else if (opt & OPT_N) {
 	    /* normality */
 	    if (mci == LOGIT || mci == HECKIT || mci == DURATION) {
@@ -5448,6 +5500,9 @@ int model_test_ok (int ci, gretlopt opt, const MODEL *pmod,
 {
     int ok = command_ok_for_model(ci, opt, pmod);
 
+    /* for now we'll treat MIDASREG as a case of NLS */
+    if (ci == MIDASREG) ci = NLS;
+
     if (ok && pmod->missmask != NULL) {
 	/* can't do these with embedded missing obs */
 	if (ci == CUSUM || 
@@ -5487,7 +5542,9 @@ int model_test_ok (int ci, gretlopt opt, const MODEL *pmod,
 
     if (ok && !dataset_is_panel(dset)) {
 	/* panel-only tests */
-	if (ci == HAUSMAN || (ci == MODTEST && (opt & OPT_P))) {
+	if (ci == HAUSMAN) {
+	    ok = 0;
+	} else if (ci == MODTEST && (opt & (OPT_P | OPT_D))) {
 	    ok = 0;
 	}
     }

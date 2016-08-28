@@ -18,7 +18,8 @@
  */
 
 #include "libgretl.h"
-#include <matrix_extra.h>
+#include "uservar.h"
+#include "matrix_extra.h"
 
 #define TRDEBUG 0
 
@@ -41,7 +42,9 @@ enum {
 
 enum {
     INVERSE = NC + 1,
-    RESAMPLE
+    RESAMPLE,
+    HFDIFF,
+    HFLDIFF
 };
 
 static char *get_mangled_name_by_id (int v);
@@ -84,7 +87,6 @@ make_transform_varname (char *vname, const char *orig, int ci,
 {
     *vname = '\0';
 
-
     if (ci == DIFF) {
 	strcpy(vname, "d_");
 	strncat(vname, orig, len - 2);
@@ -104,17 +106,37 @@ make_transform_varname (char *vname, const char *orig, int ci,
 	strcpy(vname, "sq_");
 	strncat(vname, orig, len - 3);
     } else if (ci == LAGS) {
-	char ext[6];
+	char ext[8];
 
 	if (aux >= 0) {
-	    /* an actual lag */
+	    /* an actual lag (or contemporaneous value) */
 	    sprintf(ext, "_%d", aux);
+	    strncat(vname, orig, len - strlen(ext));
+	    strcat(vname, ext);
 	} else {
-	    /* in fact a lead */
+	    /* a lead: in naming the output series we'll
+	       try to avoid appending a plain digit to
+	       a series name that already ends in a digit,
+	       since this may get confusing
+	    */
+	    int n1, n2;
+	    
 	    sprintf(ext, "%d", -aux);
+	    n1 = strlen(orig);
+	    n2 = strlen(ext);
+	    if (n1 + n2 + 2 < VNAMELEN) {
+		if (isdigit(orig[n1-1])) {
+		    /* separate the digits */
+		    sprintf(vname, "%s_f%d", orig, -aux);
+		} else {
+		    sprintf(vname, "%s%d", orig, -aux);
+		}
+	    } else {
+		/* Oh, well, can't be helped */
+		strncat(vname, orig, len - n2);
+		strcat(vname, ext);
+	    }		
 	}
-	strncat(vname, orig, len - strlen(ext));
-	strcat(vname, ext);
     } else if (ci == DUMMIFY) {
 	char ext[6];
 
@@ -165,6 +187,10 @@ make_transform_label (char *label, const char *parent,
 	sprintf(label, "= 1/%s", parent);
     } else if (ci == RESAMPLE) {
 	sprintf(label, "= resampled %s", parent);
+    } else if (ci == HFDIFF) {
+	sprintf(label, _("= high-frequency difference of %s"), parent);
+    } else if (ci == HFLDIFF) {
+	sprintf(label, _("= high-frequency log difference of %s"), parent);
     } else {
 	err = 1;
     }
@@ -398,6 +424,57 @@ static int get_diff (int v, double *diffvec, int ci,
     }
 
     return 0;
+}
+
+/* write a matrix containing high-frequency differences of
+   the series in @list over the current sample range
+*/
+
+static gretl_matrix *get_hf_diffs (const int *list,
+				   int ci, double mult,
+				   const DATASET *dset,
+				   int *err)
+{
+    gretl_matrix *dX = NULL;
+    double **Z = dset->Z;
+    double x0, x1, dti;
+    int n = list[0];
+    int v1 = list[1];
+    int i, vi, s, t, T;
+
+    T = dset->t2 - dset->t1 + 1;
+    dX = gretl_zero_matrix_new(T, n);
+
+    if (dX == NULL) {
+	*err = E_ALLOC;
+	return NULL;
+    }
+
+    for (t=T-1; t>=0; t--) {
+	s = t + dset->t1;
+	for (i=0; i<n; i++) {
+	    vi = list[i+1];
+	    x0 = Z[vi][s];
+	    if (i < n-1) {
+		x1 = Z[list[i+2]][s];
+	    } else if (s > 0) {
+		x1 = Z[v1][s-1];
+	    } else {
+		x1 = NADBL;
+	    }
+	    dti = NADBL;
+	    if (!na(x0) && !na(x1)) {
+		if (ci == DIFF) {
+		    dti = mult * (x0 - x1);
+		} else if (x0 > 0 && x1 > 0) {
+		    dti = mult * log(x0/x1);
+		}
+	    }
+	    gretl_matrix_set(dX, t, i, dti);
+	}
+    }
+
+    return dX;
 }
 
 /* orthogonal deviations */
@@ -1190,7 +1267,6 @@ static int lag_wanted (int p, const gretl_matrix *v, int n)
 	int i;
 
 	ret = 0; /* reverse the assumption */
-
 	for (i=0; i<n; i++) {
 	    if (v->val[i] == p) {
 		ret = 1;
@@ -1202,34 +1278,26 @@ static int lag_wanted (int p, const gretl_matrix *v, int n)
     return ret;
 }
 
-static int process_hf_input (const gretl_matrix *lvec,
-			     DATASET *dset,
-			     int compfac,
-			     int *lf_min, int *lf_max,
-			     int *skip_first,
-			     int *n_terms)
+static int process_hf_lags_input (int hf_min, int hf_max,
+				  DATASET *dset,
+				  int compfac,
+				  int *lf_min, int *lf_max,
+				  int *skip_first,
+				  int *n_terms)
 {
-    int hf_min, hf_max;
-    int i, n;
-
-    if (dset->pd != 12 && dset->pd != 4) {
-	return E_INVARG;
+    if (dset->pd != 1 && dset->pd != 12 && dset->pd != 4) {
+	return E_PDWRONG;
     }
 
-    n = gretl_vector_get_length(lvec);
-
-    for (i=1; i<n; i++) {
-	if (lvec->val[i] != lvec->val[i-1] + 1) {
-	    return E_INVARG;
-	}
-    }
-
-    hf_min = lvec->val[0];
-    hf_max = lvec->val[n-1];
     *lf_min = (int) ceil(hf_min / (double) compfac);
     *lf_max = (int) ceil(hf_max / (double) compfac);
     *skip_first = (hf_min - 1) % compfac;
     *n_terms = hf_max - hf_min + 1;
+
+    if (*skip_first < 0) {
+	/* handle leads */
+	*skip_first = compfac + *skip_first;
+    }
 
 #if 0
     fprintf(stderr, "hf_min = %d, lf_min = %d\n", hf_min, *lf_min);
@@ -1245,19 +1313,20 @@ static int process_hf_input (const gretl_matrix *lvec,
  * list_laggenr:
  * @plist: on entry, pointer to list of variables to process.  On exit
  * the list holds the ID numbers of the lag variables.
- * @order: number of lags to generate (or 0 for automatic).
- * @lvec: (optional alternative) vector holding lags to generate.
+ * @lmin: minimum lag to include (defaults to 1).
+ * @lmax: maximum lag to include (or 0 for automatic).
+ * @lvec: (alternative to @lmin, @lmax) vector holding lags to generate.
  * @dset: dataset struct.
  * @opt: may contain OPT_L to order the list by lag rather than
  * by variable. 
  *
- * Generates and adds to the data set @order lagged values of the 
+ * Generates and adds to the data set lagged values of the 
  * variables given in the list pointed to by @plist.
  *
  * Returns: 0 on successful completion, 1 on error.
  */
 
-int list_laggenr (int **plist, int order,
+int list_laggenr (int **plist, int lmin, int lmax,
 		  const gretl_matrix *lvec,
 		  DATASET *dset, int compfac,
 		  gretlopt opt)
@@ -1267,69 +1336,106 @@ int list_laggenr (int **plist, int order,
     int *laglist = NULL;
     int l, i, j, v, lv;
     int startlen, l0 = 0;
-    int n = 0, lmin = 0;
     int skip_first = 0;
+    int veclen = 0;
     int n_terms = 0;
-    int err;
+    int err = 0;
+
+    if (compfac < 0) {
+	return E_INVARG;
+    } else if (compfac > 0) {
+	/* MIDAS: we want @lmin and @lmax, not @lvec */
+	if (lvec != NULL) {
+	    return E_INVARG;
+	}	
+	if (!gretl_is_midas_list(list, dset)) {
+	    gretl_warnmsg_set("The argument does not seem to be a MIDAS list");
+	}
+    }
 
     if (lvec != NULL) {
-	n = gretl_vector_get_length(lvec);
-	if (n == 0) {
-	    return E_INVARG;
+	/* got a vector of lags in @lvec */
+	veclen = gretl_vector_get_length(lvec);
+	if (veclen == 0) {
+	    err = E_INVARG;
+	} else {
+	    lmin = lvec->val[0];
+	    lmax = lvec->val[veclen-1];
+	    n_terms = veclen;
 	}
-	lmin = lvec->val[0];
-	order = lvec->val[n-1];
-	if (compfac > 0) {
-	    err = process_hf_input(lvec, dset, compfac, &lmin, &order,
-				   &skip_first, &n_terms);
-	    if (err) {
-		return err;
-	    }
-	}	    
+    } else if (compfac > 0) {
+	/* the MIDAS case */
+	int hmin = lmin, hmax = lmax;
+
+	if (hmax < hmin) {
+	    err = E_INVARG;
+	} else {
+	    err = process_hf_lags_input(hmin, hmax, dset, compfac, &lmin,
+					&lmax, &skip_first, &n_terms);
+	}
     } else {
+	/* non-MIDAS, using order = @lmax, ignoring @lmin */
+	if (lmax < 0 || lmax > dset->n) {
+	    gretl_errmsg_sprintf(_("Invalid lag order %d"), lmax);
+	    return E_INVARG;
+	} else if (lmax == 0) {
+	    lmax = default_lag_order(dset);
+	}
 	lmin = 1;
+	n_terms = lmax;
     }
 
-    if (order < 0 || order > dset->n) {
-	gretl_errmsg_sprintf(_("Invalid lag order %d"), order);
-	return E_INVARG;
+    if (err) {
+	return err;
     }
 
-    if (order == 0) {
-	order = default_lag_order(dset);
-    } 
+    /* Note: at this point @lmin and @lmax are defined in terms of
+       the frequency of @dset, even when we're handling midas data.
+       In the regular case, @n_terms holds the number of lag terms
+       wanted per series in the input @list, but in the midas case
+       @n_terms is the total number of hf lag terms wanted (since
+       the input @list actually represents a single series).
+    */    
 
     err = transform_preprocess_list(list, dset, LAGS);
     if (err) {
 	return err;
     }
 
-    laglist = make_lags_list(list, order);
+    if (compfac) {
+	laglist = gretl_list_new(n_terms);
+    } else {
+	laglist = make_lags_list(list, n_terms);
+    }
+    
     if (laglist == NULL) {
 	destroy_mangled_names();
 	return E_ALLOC;
     }
 
-    startlen = get_starting_length(list, dset, (order > 9)? 3 : 2);
+    startlen = get_starting_length(list, dset, (lmax > 9)? 3 : 2);
 
     j = 1;
 
     if (compfac > 0) {
-	/* high-frequency lags, by lags */
-	int hfp = 0;
-	
-	for (l=lmin; l<=order; l++) {
+	/* midas high-frequency lags, by lags */
+	int hfpmax = n_terms + skip_first;
+	int mp, hfp = 0;
+
+	for (l=lmin; l<=lmax; l++) {
 	    for (i=1; i<=list[0]; i++) {
 		hfp++;
 		if (hfp <= skip_first) {
 		    continue;
-		} else if (hfp > (n_terms + skip_first)) {
+		} else if (hfp > hfpmax) {
 		    break;
 		}
 		v = list[i];
 		lv = get_transform(LAGS, v, l, 0.0, dset,
 				   startlen, origv, NULL);
 		if (lv > 0) {
+		    mp = series_get_midas_period(dset, v);
+		    series_set_midas_period(dset, lv, mp);
 		    laglist[j++] = lv;
 		    l0++;
 		}
@@ -1337,8 +1443,8 @@ int list_laggenr (int **plist, int order,
 	}	
     } else if (opt & OPT_L) {
 	/* order the list by lags */
-	for (l=lmin; l<=order; l++) {
-	    if (!lag_wanted(l, lvec, n)) {
+	for (l=lmin; l<=lmax; l++) {
+	    if (!lag_wanted(l, lvec, veclen)) {
 		continue;
 	    }
 	    for (i=1; i<=list[0]; i++) {
@@ -1355,8 +1461,8 @@ int list_laggenr (int **plist, int order,
 	/* order by variable */
 	for (i=1; i<=list[0]; i++) {
 	    v = list[i];
-	    for (l=lmin; l<=order; l++) {
-		if (!lag_wanted(l, lvec, n)) {
+	    for (l=lmin; l<=lmax; l++) {
+		if (!lag_wanted(l, lvec, veclen)) {
 		    continue;
 		}		
 		lv = get_transform(LAGS, v, l, 0.0, dset,
@@ -1403,14 +1509,14 @@ int default_lag_order (const DATASET *dset)
  * @list: on entry, list of variables to process; on exit,
  * ID numbers of the generated variables.
  * @ci: must be DIFF, LDIFF or SDIFF.
- * @dset: dataset struct.
+ * @dset: pointer to dataset struct.
  *
  * Generate differences of the variables in @list, and add them
  * to the data set.  If @ci is DIFF these are ordinary first
  * differences; if @ci is LDIFF they are log differences; and
  * if @ci is SDIFF they are seasonal differences.
  *
- * Returns: 0 on successful completion, 1 on error.
+ * Returns: 0 on successful completion, non-zero on error.
  */
 
 int list_diffgenr (int *list, int ci, DATASET *dset)
@@ -1454,6 +1560,130 @@ int list_diffgenr (int *list, int ci, DATASET *dset)
     list[0] = l0;
 
     destroy_mangled_names();
+
+    return err;
+}
+
+static int check_hf_difflist (const int *list,
+			      const DATASET *dset,
+			      int ci, int *n_add)
+{
+    char vname[VNAMELEN];
+    int i, v, li, err = 0;
+
+    for (i=1; i<=list[0] && !err; i++) {
+	li = list[i];
+	make_transform_varname(vname, dset->varname[li],
+			       ci, 0, VNAMELEN - 8);
+	v = current_series_index(dset, vname);
+	if (v > 0) {
+	    *n_add -= 1;
+	} else if (gretl_is_user_var(vname)) {
+	    gretl_errmsg_sprintf("%s: collides with existing object name",
+				 vname);
+	    err = E_TYPES;
+	}
+    }
+
+    return err;
+}
+
+/**
+ * hf_list_diffgenr:
+ * @list: on entry, midas list of variables to process; on exit,
+ * ID numbers of the generated variables.
+ * @ci: must be DIFF or LDIFF.
+ * @parm: optional scalar multiplier.
+ * @dset: pointer to dataset struct.
+ *
+ * Generate high-frequency differences of the variables in @list
+ * and add them to the data set.  If @ci is DIFF these are ordinary
+ * first differences; if @ci is LDIFF they are log differences.
+ * If @parm is not NA then the new series are all multiplied by
+ * the specified value (as in multiplication of log-differences
+ * by 100).
+ *
+ * Returns: 0 on successful completion, non-zero on error.
+ */
+
+int hf_list_diffgenr (int *list, int ci, double parm, DATASET *dset)
+{
+    gretl_matrix *dX = NULL;
+    int n_add, hfci = 0;
+    int set_midas = 1;
+    int err = 0;
+
+    if (list[0] == 0) {
+	return 0;
+    }
+
+    if (ci == DIFF) {
+	hfci = HFDIFF;
+    } else if (ci == LDIFF) {
+	hfci = HFLDIFF;
+    } else {
+	return E_INVARG;
+    }
+
+    if (!dataset_is_time_series(dset)) {
+	return E_PDWRONG;
+    }
+
+    n_add = list[0];
+    err = check_hf_difflist(list, dset, ci, &n_add);
+    if (err) {
+	return err;
+    }
+
+    if (!gretl_is_midas_list(list, dset)) {
+	gretl_warnmsg_set("The argument does not seem to be a MIDAS list");
+	set_midas = 0;
+    }
+
+    if (na(parm)) {
+	/* set to default */
+	parm = 1.0;
+    }
+
+    dX = get_hf_diffs(list, ci, parm, dset, &err);
+
+    if (!err) {
+	char vname[VNAMELEN];
+	char label[MAXLABEL];
+	const char *parent;
+	int i, s, t, n = dX->cols;
+	int vi, v0 = dset->v;
+	int offset = 0;
+
+	err = dataset_add_series(dset, n_add);
+
+	if (!err) {
+	    for (i=0; i<n; i++) {
+		parent = dset->varname[list[i+1]];
+		make_transform_varname(vname, parent, ci, 0,
+				       VNAMELEN - 8);
+		vi = current_series_index(dset, vname);
+		if (vi < 0) {
+		    vi = v0 + offset;
+		    offset++;
+		    strcpy(dset->varname[vi], vname);
+		    make_transform_label(label, parent, hfci, 0);
+		    series_record_label(dset, vi, label);
+		}
+		s = 0;
+		for (t=dset->t1; t<=dset->t2; t++) {
+		    dset->Z[vi][t] = gretl_matrix_get(dX, s++, i);
+		}
+		list[i+1] = vi;
+	    }
+	    list[0] = n;
+	}
+	gretl_matrix_free(dX);
+    }
+
+    if (!err && set_midas) {
+	gretl_list_set_midas(list, dset);
+    }
 
     return err;
 }

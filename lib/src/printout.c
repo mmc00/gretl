@@ -26,6 +26,7 @@
 #include "gretl_func.h"
 #include "uservar.h"
 #include "gretl_string_table.h"
+#include "gretl_midas.h"
 
 #include <time.h>
 
@@ -2111,13 +2112,33 @@ static int print_by_var (const int *list, const DATASET *dset,
     return 0;
 }
 
+static int midas_print_list (const int *list,
+			     const DATASET *dset,
+			     PRN *prn)
+{
+    DATASET *tmpset = NULL;
+    int err = 0;
+
+    tmpset = midas_aux_dataset(list, dset, &err);
+
+    if (!err) {
+	int mlist[2] = {1, 0};
+	
+	err = print_by_obs(mlist, tmpset, OPT_NONE, 0, prn);
+	destroy_dataset(tmpset);
+    }
+
+    return err;
+}
+
 /**
  * printdata:
  * @list: list of variables to print.
  * @mstr: optional string holding names of non-series objects to print.
  * @dset: dataset struct.
  * @opt: if OPT_O, print the data by observation (series in columns);
- * if OPT_N, use simple obs numbers, not dates.
+ * if OPT_N, use simple obs numbers, not dates; if OPT_M, print midas
+ * list in original time-series order.
  * @prn: gretl printing struct.
  *
  * Print the data for the variables in @list over the currently
@@ -2161,6 +2182,12 @@ int printdata (const int *list, const char *mstr,
     /* at this point plist should have something in it */
     if (plist == NULL) {
 	return E_ALLOC;
+    }
+
+    if (opt & OPT_M) {
+	err = midas_print_list(plist, dset, prn);
+	free(plist);
+	return err;
     }
 
     if (gretl_list_has_separator(plist)) {
@@ -2531,7 +2558,6 @@ static int print_fcast_stats (const FITRESID *fr, gretlopt opt,
 {
     const char *strs[] = {
 	N_("Mean Error"),
-	N_("Mean Squared Error"),
 	N_("Root Mean Squared Error"),
 	N_("Mean Absolute Error"),
 	N_("Mean Percentage Error"),
@@ -2543,7 +2569,7 @@ static int print_fcast_stats (const FITRESID *fr, gretlopt opt,
     };
     gretl_matrix *m;
     double x;
-    int i, j, t1, t2;
+    int i, t1, t2;
     int n, nmax = 0;
     int len, err = 0;
 
@@ -2560,18 +2586,14 @@ static int print_fcast_stats (const FITRESID *fr, gretlopt opt,
 
     len = gretl_vector_get_length(m);
 
-    j = 0;
     for (i=0; i<len; i++) {
 	x = gretl_vector_get(m, i);
 	if (!isnan(x)) {
-	    n = g_utf8_strlen(_(strs[j]), -1);	    
-	    if (n > nmax) nmax = n;
-	    if (i == 2) {
-		n = g_utf8_strlen(_(strs[j+1]), -1);
-		if (n > nmax) nmax = n;
+	    n = g_utf8_strlen(_(strs[i]), -1);	    
+	    if (n > nmax) {
+		nmax = n;
 	    }
 	}
-	j += (i == 2)? 2 : 1;
     }
 
     nmax += 2;
@@ -2580,17 +2602,11 @@ static int print_fcast_stats (const FITRESID *fr, gretlopt opt,
     pputs(prn, _("Forecast evaluation statistics"));
     pputs(prn, "\n\n");
 
-    j = 0;
     for (i=0; i<len; i++) {
 	x = gretl_vector_get(m, i);
 	if (!isnan(x)) {
-	    pprintf(prn, "  %-*s % .5g\n", UTF_WIDTH(_(strs[j]), nmax), _(strs[j]), x);
-	    if (i == 1) {
-		pprintf(prn, "  %-*s % .5g\n", UTF_WIDTH(_(strs[j+1]), nmax), 
-			_(strs[j+1]), sqrt(x));	
-	    }
+	    pprintf(prn, "  %-*s % .5g\n", UTF_WIDTH(_(strs[i]), nmax), _(strs[i]), x);
 	}
-	j += (i == 1)? 2 : 1;
     }
     pputc(prn, '\n');
     
@@ -2876,6 +2892,7 @@ print_iter_info (int iter, double crit, int type, int k,
     const char *cstrs[] = {
 	N_("loglikelihood"),
 	N_("GMM criterion"),
+	N_("SSR"),
 	N_("Criterion"),
     };
     const char *cstr = cstrs[type];

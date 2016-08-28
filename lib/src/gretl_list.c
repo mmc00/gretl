@@ -20,6 +20,7 @@
 #include "libgretl.h"
 #include "gretl_list.h"
 #include "gretl_func.h"
+#include "gretl_midas.h"
 #include "libset.h"
 #include "uservar.h"
 
@@ -106,6 +107,84 @@ int *get_list_by_name (const char *name)
 int gretl_is_list (const char *name)
 {
     return get_user_var_of_type_by_name(name, GRETL_TYPE_LIST) != NULL;
+}
+
+/**
+ * gretl_is_midas_list:
+ * @list: the list array.
+ * @dset: pointer to dataset.
+ *
+ * Returns: 1 if @list has been set as a MIDAS list in an
+ * approved manner, 0 otherwise.
+ */
+
+int gretl_is_midas_list (const int *list, const DATASET *dset)
+{
+    int ret = 0;
+
+    if (list != NULL && list[0] > 2) {
+	int i, m, p;
+	
+	if (!series_is_midas_anchor(dset, list[1])) {
+	    return 0;
+	}
+
+	m = series_get_midas_period(dset, list[1]);
+	if (!is_valid_midas_frequency_ratio(dset, m) || list[0] != m) {
+	    return 0;
+	}
+
+	ret = 1;
+	for (i=2; i<=list[0] && ret; i++) {
+	    p = series_get_midas_period(dset, list[i]);
+	    if (p != m - 1) {
+		ret = 0;
+	    }
+	    m = p;
+	}
+    }
+
+    return ret;
+}
+
+/**
+ * gretl_list_set_midas:
+ * @list: the list array.
+ * @dset: pointer to dataset.
+ *
+ * Attempts to set the MIDAS flag on the members of @list.
+ *
+ * 0 on success, non-zero code on failure.
+ */
+
+int gretl_list_set_midas (const int *list, DATASET *dset)
+{
+    int err = 0;
+
+    if (list != NULL) {
+	int i, m = list[0];
+
+	if (!is_valid_midas_frequency_ratio(dset, m)) {
+	    err = E_INVARG;
+	}
+	
+	for (i=1; i<=list[0] && !err; i++) {
+	    if (list[i] < 1 || list[i] >= dset->v) {
+		err = E_INVARG;
+	    }
+	}
+
+	if (!err) {
+	    series_set_midas_anchor(dset, list[1]);
+	    series_set_midas_period(dset, list[1], m);
+
+	    for (i=2; i<=list[0]; i++) {
+		series_set_midas_period(dset, list[i], m - i + 1);
+	    }
+	}
+    }
+
+    return err;
 }
 
 /**
@@ -2248,7 +2327,9 @@ int gretl_list_has_separator (const int *list)
  * or %E_DATA if @list does not contain a separator.
  */
 
-int gretl_list_split_on_separator (const int *list, int **plist1, int **plist2)
+int gretl_list_split_on_separator (const int *list,
+				   int **plist1,
+				   int **plist2)
 {
     int *list1 = NULL, *list2 = NULL;
     int i, n = 0;

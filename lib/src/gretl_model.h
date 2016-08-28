@@ -112,6 +112,7 @@ struct VCVInfo_ {
                           c == LAD || \
                           c == LOGISTIC || \
                           c == LOGIT || \
+			  c == MIDASREG || \
                           c == MLE || \
                           c == MPOLS || \
 			  c == NEGBIN || \
@@ -174,7 +175,7 @@ struct VCVInfo_ {
 
 /* model where the specification is not based on a list
    of variables */
-#define NONLIST_MODEL(c) (c == NLS || c == MLE || c == GMM)
+#define NONLIST_MODEL(c) (c == NLS || c == MLE || c == GMM || c == MIDASREG)
 
 #define is_model_ref_cmd(c) (c == ADD || \
 	                     c == ARCH || \
@@ -222,6 +223,7 @@ typedef enum {
     GRETL_TEST_WITHIN_F,
     GRETL_TEST_PANEL_WELCH,
     GRETL_TEST_RE_WALD,
+    GRETL_TEST_XDEPEND,
     GRETL_TEST_MAX
 } ModelTestType;
 
@@ -270,6 +272,9 @@ int gretl_model_set_matrix_as_data (MODEL *pmod, const char *key,
 int gretl_model_set_list_as_data (MODEL *pmod, const char *key, int *list);
 
 int gretl_model_set_string_as_data (MODEL *pmod, const char *key, char *str);
+
+int gretl_model_set_array_as_data (MODEL *pmod, const char *key,
+				   gretl_array *A);
 
 int gretl_model_destroy_data_item (MODEL *pmod, const char *key);
 

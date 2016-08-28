@@ -28,7 +28,7 @@ RCFLAGS = --define __WIN32__ --define __WIN95__ --define MSRC \
 GTKLIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs gtk+-win32-2.0)
 GLIBLIB := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs glib-2.0)
 JSON_LIB = $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs json-glib-1.0)
-RL_LIBS = -lreadline -lhistory
+RL_LIBS = -lreadline
 GUI_LIBS = -lwsock32 -lole32 -lshlwapi $(GTKLIBS) -lgtksourceview-2.0 -lxml2.dll -L$(imports)
 GRETLLIB = -L$(imports) -lgretl -lintl
 LIBS = -lm $(GRETLLIB) -ladvapi32
@@ -211,6 +211,7 @@ LIBSRC = adf_kpss.c \
 	gretl_help.c \
 	gretl_list.c \
 	gretl_matrix.c \
+	gretl_midas.c \
 	gretl_model.c \
 	gretl_normal.c \
 	gretl_panel.c \

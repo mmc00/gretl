@@ -26,6 +26,7 @@
 #include "matrix_extra.h"
 #include "usermat.h"
 #include "dbread.h"
+#include "gretl_midas.h"
 #ifdef USE_CURL
 # include "gretl_www.h"
 #endif
@@ -393,8 +394,8 @@ static int get_native_series_obs (SERIESINFO *sinfo,
 	    strcpy(sinfo->endobs, q + 2);
 	}
     } else {
-	*sinfo->stobs = 0;
-	*sinfo->endobs = 0;
+	*sinfo->stobs = '\0';
+	*sinfo->endobs = '\0';
 	strncat(sinfo->stobs, stobs, 8);
 	strncat(sinfo->endobs, endobs, 8);
     }
@@ -2007,6 +2008,8 @@ get_compact_method_and_advance (const char *s, CompactMethod *method)
 	    *method = COMPACT_SOP;
 	} else if (!strcmp(comp, "last")) {
 	    *method = COMPACT_EOP;
+	} else if (!strcmp(comp, "spread")) {
+	    *method = COMPACT_SPREAD;
 	}
 
 	p = strchr(p, ')');
@@ -2699,7 +2702,7 @@ int db_get_series (const char *line, DATASET *dset,
 		}
 		strings_array_free(tmp, nmatch);
 	    } else {
-		err = E_DATA;
+		err = E_INVARG;
 	    }
 	} else {
 	    err = get_one_db_series(vnames[i], dset, cmethod,
@@ -2995,12 +2998,18 @@ init_datainfo_from_sinfo (DATASET *dset, SERIESINFO *sinfo)
     dset->t2 = dset->n - 1;
 }
 
-/* for now (2016-06-06) we'll do "spread" compaction only for
-   monthly to quarterly or annual, or quarterly to annual
+/* We'll do "spread" compaction for monthly to quarterly or annual,
+   quarterly to annual, or daily to monthly or quarterly.
 */
 
 static int compact_spread_pd_check (int high, int low)
 {
+    if ((low == 12 || low == 4) &&
+	(high == 5 || high == 6 || high == 7)) {
+	/* daily to monthly or quarterly */
+	return 0;
+    }
+    
     if (!(high == 12 && low == 1) &&
 	!(high == 12 && low == 4) &&
 	!(high == 4 && low == 1)) {
@@ -3099,7 +3108,7 @@ int lib_add_db_data (double **dbZ, SERIESINFO *sinfo,
 		err = compact_data_set(tmpset, dset->pd, cmethod, 0, 0);
 	    }
 	    if (!err) {
-		err = merge_or_replace_data(dset, &tmpset, OPT_X, prn);
+		err = merge_or_replace_data(dset, &tmpset, OPT_X | OPT_U, prn);
 	    }
 	}
 	return err;
@@ -3305,6 +3314,251 @@ static double *compact_series (const DATASET *dset, int i, int oldn,
     return x;
 }
 
+/* Determine year and period (either month or quarter,
+   depending on the value of @pd) for observation @t in
+   daily dataset @dset.
+*/
+
+static int daily_yp (const DATASET *dset, int t,
+		     int pd, int *y, int *p)
+{
+    char obs[12];
+    int mon, day;
+
+    ntodate(obs, t, dset);
+    
+    if (sscanf(obs, YMD_READ_FMT, y, &mon, &day) != 3) {
+	return E_DATA;
+    }
+
+    if (pd == 12) {
+	*p = mon;
+    } else {
+	/* convert month to quarter */
+	*p = 1 + (mon - 1) / 3;
+    }
+
+    return 0;
+}
+
+#define DAYDBG 0
+
+/* For a single row, @cset_t, of a compacted dataset,
+   write daily values into the set of monthly or
+   quarterly series that will represent them. The
+   daily data are drawn from @dset and transcribed to
+   @cset.
+*/
+
+static void fill_cset_t (const DATASET *dset,
+			 int *startday,
+			 DATASET *cset,
+			 int cset_t,
+			 int compfac,
+			 int qmonth)
+{
+    char obs[OBSLEN];
+    double cvec[30];
+    int idx[30];
+    const double *z;
+    int y, p, pstart = 0;
+    int effn, ndays = 0;
+    int i, j, k, s, t, t0;
+    double zsum = 0.0;
+
+    t0 = *startday;
+
+    /* how many daily obs do we have in this month? */
+    for (t=t0; t<dset->n; t++) {
+	daily_yp(dset, t, 12, &y, &p);
+	if (t == t0) {
+	    pstart = p;
+	} else if (p != pstart) {
+	    break;
+	}
+	ndays++;
+    }
+
+#if 0
+    fprintf(stderr, "fill_cset_t: ndays = %d, compfac = %d\n",
+	    ndays, compfac);
+#endif
+
+    /* construct array of month-day indices */
+    for (j=0; j<compfac && j<ndays; j++) {
+	ntodate(obs, t0 + j, dset);
+	idx[j] = date_to_daily_index(obs, dset->pd);
+    }
+
+    /* the outer loop is over the daily series in the
+       source dataset */
+
+    k = 1 + qmonth * compfac;
+
+    for (i=1; i<dset->v; i++) {
+	z = dset->Z[i] + t0;
+	for (j=0; j<compfac; j++) {
+	    cvec[j] = NADBL;
+	}
+	effn = 0;
+	zsum = 0.0;
+	for (j=0; j<compfac && j<ndays; j++) {
+	    s = idx[j];
+	    cvec[s] = z[j];
+	    if (!na(cvec[s])) {
+		zsum += cvec[s];
+		effn++;
+	    }
+	}
+	if (effn < compfac) {
+	    /* we have some padding to do */
+	    double zbar = zsum / effn;
+	
+	    for (j=0; j<compfac; j++) {
+		if (na(cvec[j])) {
+		    cvec[j] = zbar;
+		}
+	    }
+	}
+	/* transcribe into target dataset */
+	for (j=0; j<compfac; j++) {
+	    cset->Z[k+j][cset_t] = cvec[j];
+	}
+
+	k += compfac;
+    }
+
+    *startday += ndays;
+}
+
+/* compact daily data to monthly or quarterly using the
+   "spread" method */
+
+static DATASET *compact_daily_spread (const DATASET *dset,
+				      int newpd,
+				      int *nv,
+				      int *err)
+{
+    const char *periods[] = {
+	"month",
+	"quarter"
+    };
+    const char *period;
+    DATASET *cset = NULL;
+    char label[MAXLABEL];
+    int compfac;
+    int v, i, j, k, t, T;
+    int startyr, startper;
+    int endyr, endper;
+    int startday;
+
+    fprintf(stderr, "*** compact_daily_spread (newpd=%d) ***\n", newpd);
+
+    daily_yp(dset, 0, newpd, &startyr, &startper);
+    daily_yp(dset, dset->n - 1, newpd, &endyr, &endper);
+    compfac = midas_days_per_period(dset->pd, newpd);
+
+    if (newpd == 12) {
+	period = periods[0];
+    } else if (newpd == 4) {
+	period = periods[1];
+    } else {
+	*err = E_DATA;
+	return NULL;
+    }
+
+    T = newpd * (endyr - startyr) + (endper - startper + 1);
+
+    if (T <= 1) {
+	*err = E_DATA;
+	return NULL;
+    }
+
+    /* the number of series, after compaction */
+    v = 1 + (dset->v - 1) * compfac;
+
+#if 1
+    fprintf(stderr, "oldpd %d, newpd %d, nvars=%d, T=%d, start=%d:%d, end=%d:%d\n",
+	    dset->pd, newpd, v, T, startyr, startper, endyr, endper);
+#endif
+    
+    cset = create_new_dataset(v, T, 0);
+    if (cset == NULL) {
+	*err = E_ALLOC;
+	return NULL;
+    }
+
+    if (newpd == 12) {
+	sprintf(cset->stobs, "%d:%02d", startyr, startper);
+	sprintf(cset->endobs, "%d:%02d", endyr, endper);
+    } else {
+	sprintf(cset->stobs, "%d:%d", startyr, startper);
+	sprintf(cset->endobs, "%d:%d", endyr, endper);
+    }
+
+    cset->pd = newpd;
+    cset->structure = TIME_SERIES;
+    cset->sd0 = get_date_x(cset->pd, cset->stobs);
+
+    /* ensure no uninitialized data */
+    for (i=1; i<v; i++) {
+	for (t=0; t<T; t++) {
+	    cset->Z[i][t] = NADBL;
+	}
+    }
+
+    /* do the actual data transcription first */
+    startday = 0;
+    for (t=0; t<T; t++) {
+	if (newpd == 4) {
+	    fill_cset_t(dset, &startday, cset, t, compfac/3, 0);
+	    fill_cset_t(dset, &startday, cset, t, compfac/3, 1);
+	    fill_cset_t(dset, &startday, cset, t, compfac/3, 2);
+	} else {
+	    fill_cset_t(dset, &startday, cset, t, compfac, 0);
+	}
+    }
+
+    /* then name the series and reorganize */
+
+    k = 1;
+    for (i=1; i<dset->v; i++) {
+	double *xtmp;
+	char sfx[6];
+	int p;
+
+	/* switch data order */
+	for (j=0; j<compfac/2; j++) {
+	    p = k + compfac - j - 1;
+	    xtmp = cset->Z[k+j];
+	    cset->Z[k+j] = cset->Z[p];
+	    cset->Z[p] = xtmp;
+	}
+
+	/* names and labels */
+	for (j=0; j<compfac; j++) {
+	    strcpy(cset->varname[k+j], dset->varname[i]);
+	    gretl_trunc(cset->varname[k+j], VNAMELEN - 5);
+	    sprintf(sfx, "_d%02d", compfac - j);
+	    strcat(cset->varname[k+j], sfx);	
+	    sprintf(label, "%s in day %d of %s", dset->varname[i],
+		    compfac - j, period);
+	    series_record_label(cset, k+j, label);
+	}
+	
+	/* advance column write position for next source series */
+	k += compfac;
+    }
+
+#if 0
+    PRN *prn = gretl_print_new(GRETL_PRINT_STDERR, NULL);
+    printdata(NULL, NULL, cset, OPT_O, prn);
+    gretl_print_destroy(prn);
+#endif
+
+    return cset;
+}
+
 /* compact an entire dataset, transcribing from each higher-frequency
    series to a set of lower-frequency series, each of which holds the
    observations from a given sub-period
@@ -3329,10 +3583,8 @@ static DATASET *compact_data_spread (const DATASET *dset, int newpd,
     char label[MAXLABEL];
     int oldpd = dset->pd;
     int compfac = oldpd / newpd;
-    int v, i, j, k, t, s, T;
+    int v, i, j, k, t, T;
     int q0 = 0, qT = 0;
-    int reverse = 1;
-    int offset;
 
     if (newpd == 1) {
 	T = endmaj - startmaj + 1;
@@ -3391,29 +3643,14 @@ static DATASET *compact_data_spread (const DATASET *dset, int newpd,
 
     for (i=1; i<dset->v; i++) {
 	/* loop across original data series */
-	offset = startmin - 1;
-	s = 0;
+	double *xtmp;
+	int offset = startmin - 1;
+	int p, s = 0;
+	
 	for (t=0; t<T; t++) {
 	    /* loop across new time periods */
 	    for (j=0; j<compfac; j++) {
 		/* loop across new series <- sub-periods */
-		int named = 0;
-
-		if (!named) {
-		    strcpy(cset->varname[k+j], dset->varname[i]);
-		    if (oldpd == 12) {
-			gretl_trunc(cset->varname[k+j], VNAMELEN - 5);
-			sprintf(sfx, "_m%02d", j+1);
-		    } else {
-			gretl_trunc(cset->varname[k+j], VNAMELEN - 4);
-			sprintf(sfx, "_q%d", j+1);
-		    }
-		    strcat(cset->varname[k+j], sfx);
-		    sprintf(label, "%s in %s %d of %s", dset->varname[i],
-			    p0, j+1, p1);
-		    series_record_label(cset, k+j, label);
-		    named = 1;
-		}
 		while (s < offset) {
 		    cset->Z[k+j][t] = NADBL;
 		    offset--;
@@ -3427,22 +3664,39 @@ static DATASET *compact_data_spread (const DATASET *dset, int newpd,
 		s++;
 	    }
 	}
-	if (reverse) {
-	    /* reverse the new columns: most recent first */
-	    char stmp[VNAMELEN];
-	    double *xtmp;
-	    int p;
-	    
-	    for (j=0; j<compfac/2; j++) {
-		p = k+compfac-j-1;
-		xtmp = cset->Z[k+j];
-		strcpy(stmp, cset->varname[k+j]);
-		cset->Z[k+j] = cset->Z[p];
-		strcpy(cset->varname[k+j], cset->varname[p]);
-		cset->Z[p] = xtmp;
-		strcpy(cset->varname[p], stmp);
+
+	/* reverse the new columns: most recent first */
+	for (j=0; j<compfac/2; j++) {
+	    p = k + compfac - j - 1;
+	    xtmp = cset->Z[k+j];
+	    cset->Z[k+j] = cset->Z[p];
+	    cset->Z[p] = xtmp;
+	}
+
+	/* names and labels */
+	for (j=0; j<compfac; j++) {
+	    strcpy(cset->varname[k+j], dset->varname[i]);
+	    if (oldpd == 12 && newpd == 4) {
+		gretl_trunc(cset->varname[k+j], VNAMELEN - 4);
+		sprintf(sfx, "_m%d", compfac - j);
+	    } else if (oldpd == 12) {
+		/* going to annual */
+		gretl_trunc(cset->varname[k+j], VNAMELEN - 5);
+		sprintf(sfx, "_m%02d", compfac - j);
+	    } else {
+		gretl_trunc(cset->varname[k+j], VNAMELEN - 4);
+		sprintf(sfx, "_q%d", compfac - j);
+	    }
+	    strcat(cset->varname[k+j], sfx);
+	    sprintf(label, "%s in %s %d of %s", dset->varname[i],
+		    p0, compfac - j, p1);
+	    series_record_label(cset, k+j, label);
+	    series_set_midas_period(cset, k+j, compfac - j);
+	    if (j == 0) {
+		series_set_midas_anchor(cset, k+j);
 	    }
 	}
+
 	/* advance column write position for next source series */
 	k += compfac;
     }
@@ -4293,6 +4547,53 @@ int maybe_expand_daily_data (DATASET *dset)
     return err;
 }
 
+static int do_compact_spread (DATASET *dset, int newpd)
+{
+    DATASET *cset = NULL;
+    int nv = 0;
+    int err;
+
+    err = compact_spread_pd_check(dset->pd, newpd);
+    if (err) {
+	return err;
+    }
+
+    if (dated_daily_data(dset)) {
+	err = maybe_expand_daily_data(dset);
+	if (err) {
+	    gretl_errmsg_set("Error expanding daily data with missing observations");
+	} else {
+	    cset = compact_daily_spread(dset, newpd, &nv, &err);
+	}
+    } else {
+	int startmaj, startmin;
+	int endmaj, endmin;
+	
+
+	/* get starting obs major and minor components */
+	if (!get_obs_maj_min(dset->stobs, &startmaj, &startmin)) {
+	    return E_DATA;
+	}
+
+	/* get ending obs major and minor components */
+	if (!get_obs_maj_min(dset->endobs, &endmaj, &endmin)) {
+	    return E_DATA;
+	} 
+
+	cset = compact_data_spread(dset, newpd, startmaj, startmin,
+				   endmaj, endmin, &nv, &err);
+    }
+    
+    if (!err) {
+	free_Z(dset);
+	clear_datainfo(dset, CLEAR_FULL);
+	*dset = *cset;
+	free(cset);
+    }    
+
+    return err;
+}
+
 /**
  * compact_data_set:
  * @dset: dataset struct.
@@ -4325,10 +4626,7 @@ int compact_data_set (DATASET *dset, int newpd,
     gretl_error_clear();
 
     if (default_method == COMPACT_SPREAD) {
-	err = compact_spread_pd_check(oldpd, newpd);
-	if (err) {
-	    return err;
-	}
+	return do_compact_spread(dset, newpd);
     }    
 
     if (oldpd == 52) {
@@ -4387,21 +4685,6 @@ int compact_data_set (DATASET *dset, int newpd,
 	if (!get_obs_maj_min(dset->endobs, &endmaj, &endmin)) {
 	    return 1;
 	} 
-    }
-
-    if (default_method == COMPACT_SPREAD) {
-	DATASET *cset;
-	int nv = 0;
-	
-	cset = compact_data_spread(dset, newpd, startmaj, startmin,
-				   endmaj, endmin, &nv, &err);
-	if (!err) {
-	    free_Z(dset);
-	    clear_datainfo(dset, CLEAR_FULL);
-	    *dset = *cset;
-	    free(cset);
-	}
-	return err;
     }
 
     min_startskip = oldpd;

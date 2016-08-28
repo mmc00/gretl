@@ -24,7 +24,6 @@
 #include "usermat.h"
 #include "gretl_string_table.h"
 #include "matrix_extra.h"
-#include "gretl_array.h"
 #include "libset.h"
 #include "monte_carlo.h"
 #include "gretl_typemap.h"
@@ -377,6 +376,22 @@ int private_matrix_add (gretl_matrix *M, const char *name)
     return real_user_var_add(name, GRETL_TYPE_MATRIX, M, OPT_P);
 }
 
+int private_scalar_add (double val, const char *name)
+{
+    double *px = malloc(sizeof *px);
+    int err;
+
+    if (px == NULL) {
+	err = E_ALLOC;
+    } else {
+	*px = val;
+	err = real_user_var_add(name, GRETL_TYPE_DOUBLE, 
+				px, OPT_P);
+    }
+    
+    return err;
+}
+
 /**
  * user_var_delete_by_name:
  * @name: name of the variable to delete.
@@ -725,6 +740,30 @@ const char *user_var_get_name_by_data (const void *data)
 int user_var_get_level (user_var *uvar)
 {
     return (uvar == NULL)? -1 : uvar->level;
+}
+
+int user_var_get_flags (user_var *uvar)
+{
+    return (uvar == NULL)? 0 : (int) uvar->flags;
+}
+
+int user_var_set_flag (user_var *uvar, UVFlags flag)
+{
+    if (uvar != NULL) {
+	uvar->flags |= flag;
+	return 0;
+    } else {
+	return E_INVARG;
+    }
+}
+
+void user_var_privatize_by_name (const char *name)
+{
+    user_var *u = get_user_var_by_name(name);
+
+    if (u != NULL) {
+	u->flags |= UV_PRIVATE;
+    }
 }
 
 void *user_var_get_value (user_var *uvar)
@@ -1301,7 +1340,8 @@ static int real_destroy_user_vars_at_level (int level, int type,
 
 #if HDEBUG
     fprintf(stderr, "real_destroy_user_vars_at_level: level %d, "
-	    "type %d (%s)\n", level, type, gretl_type_get_name(type));
+	    "type %d (%s), imin=%d\n", level, type,
+	    gretl_type_get_name(type), imin);
 #endif
     
     for (i=imin; i<n_vars; i++) {
@@ -2385,4 +2425,131 @@ int print_user_var_by_name (const char *name,
     }
 
     return 0;
+}
+
+int list_user_vars_of_type (const DATASET *dset,
+			    PRN *prn)
+{
+    const char *typename;
+    GretlType t;
+
+    typename = get_optval_string(VARLIST, OPT_T);
+    if (typename == NULL) {
+	return E_INVARG;
+    }
+
+    if (!strcmp(typename, "accessor")) {
+	list_ok_dollar_vars((DATASET *) dset, prn);
+	return 0;
+    }
+
+    t = gretl_type_from_string(typename);
+    if (t == GRETL_TYPE_NONE) {
+	return E_INVARG;
+    }
+
+    if (t == GRETL_TYPE_SERIES) {
+	list_series(dset, prn);
+    } else if (t == GRETL_TYPE_DOUBLE) {
+	print_scalars(prn);
+    } else if (t == GRETL_TYPE_LIST ||
+	       t == GRETL_TYPE_MATRIX ||
+	       t == GRETL_TYPE_BUNDLE ||
+	       t == GRETL_TYPE_STRING) {
+	int i, n = 0;
+
+	pprintf(prn, "variables of type %s:", typename);
+	for (i=0; i<n_vars; i++) {
+	    if (uvars[i]->type == t) {
+		if (n == 0) {
+		    pputc(prn, '\n');
+		}		
+		pprintf(prn, "  %s\n", uvars[i]->name);
+		n++;
+	    }
+	}
+	if (n == 0) {
+	    pprintf(prn, " %s\n", _("none"));
+	}
+	pputc(prn, '\n');
+    } else {
+	return E_INVARG;
+    }
+
+    return 0;
+}
+
+int leads_midas_list (int ID, const DATASET *dset,
+		      char *listname)
+{
+    int level = gretl_function_depth();
+    int *list;
+    int i, ret = 0;
+
+    for (i=0; i<n_vars && !ret; i++) {
+	if (uvars[i]->type == GRETL_TYPE_LIST &&
+	    uvars[i]->level == level) {
+	    list = uvars[i]->ptr;
+	    if (list[0] > 2 && list[1] == ID) {
+		ret = gretl_is_midas_list(list, dset);
+		if (ret && listname != NULL) {
+		    strcpy(listname, uvars[i]->name);
+		}
+	    }
+	}
+    }
+
+    return ret;
+}
+
+int in_midas_list (int ID, const DATASET *dset,
+		   char *listname)
+{
+    int level = gretl_function_depth();
+    int *list;
+    int i, ret = 0;
+
+    for (i=0; i<n_vars && !ret; i++) {
+	if (uvars[i]->type == GRETL_TYPE_LIST &&
+	    uvars[i]->level == level) {
+	    list = uvars[i]->ptr;
+	    if (list[0] > 2 && in_gretl_list(list, ID)) {
+		ret = gretl_is_midas_list(list, dset);
+		if (ret && listname != NULL) {
+		    strcpy(listname, uvars[i]->name);
+		}
+	    }
+	}
+    }
+
+    return ret;
+}
+
+const char *get_listname_by_consecutive_content (int l0, int l1)
+{
+    int level = gretl_function_depth();
+    const char *ret = NULL;
+    int i, j, *list;
+
+    for (i=0; i<n_vars; i++) {
+	if (uvars[i]->type == GRETL_TYPE_LIST &&
+	    uvars[i]->level == level) {
+	    list = uvars[i]->ptr;
+	    if (list[0] == l0 && list[1] == l1) {
+		int found = 1;
+		
+		for (j=2; j<=l0; j++) {
+		    if (list[j] != list[j-1] + 1) {
+			found = 0;
+			break;
+		    }
+		}
+		if (found) {
+		    return uvars[i]->name;
+		}
+	    }
+	}
+    }
+
+    return ret;
 }

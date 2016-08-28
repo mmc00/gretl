@@ -161,10 +161,12 @@ static int nls_dynamic_check (nlspec *s, char *formula)
 {
     GENERATOR *genr;
     double *y;
-    int t, err = 0;
+    int T = s->dset->n;
+    int v = s->dv;
+    int err = 0;
 
     /* back up the dependent variable */
-    y = copyvec(s->dset->Z[s->dv], s->dset->n);
+    y = copyvec(s->dset->Z[v], T);
     if (y == NULL) {
 	return E_ALLOC;
     }
@@ -178,13 +180,12 @@ static int nls_dynamic_check (nlspec *s, char *formula)
 			OPT_P | OPT_N, NULL, &err);
 
     if (!err && genr_is_autoregressive(genr)) {
+	fprintf(stderr, "nls_dynamic_check: setting NL_AUTOREG\n");
 	s->flags |= NL_AUTOREG;
     }
 
     /* restore the dependent variable */
-    for (t=0; t<s->dset->n; t++) {
-	s->dset->Z[s->dv][t] = y[t];
-    }    
+    memcpy(s->dset->Z[v], y, T * sizeof *y);
 
     destroy_genr(genr);
     free(y);
@@ -246,7 +247,7 @@ static int unassigned_fncall (const char *s)
     return ret;
 }
 
-static void genr_setup_error (const char *s, int exec)
+static void genr_setup_error (const char *s, int err, int exec)
 {
     gchar *msg;
 
@@ -257,8 +258,8 @@ static void genr_setup_error (const char *s, int exec)
 	msg = g_strdup_printf(_("The formula '%s'\n produced an error "
 				"on compilation"), s);
     }
-    
-    gretl_errmsg_append(msg);
+
+    gretl_errmsg_append(msg, err);
     g_free(msg);
 }
 
@@ -330,7 +331,7 @@ static int nls_genr_setup (nlspec *s)
 	}
 
 	if (err) {
-	    genr_setup_error(formula, 0);
+	    genr_setup_error(formula, err, 0);
 	    break;
 	}
 
@@ -342,7 +343,7 @@ static int nls_genr_setup (nlspec *s)
 	genr_unset_na_check(s->genrs[i]);
 
 	if (err) {
-	    genr_setup_error(formula, 1);
+	    genr_setup_error(formula, err, 1);
 	    break;
 	}
 
@@ -1175,7 +1176,7 @@ static double get_mle_ll (const double *b, void *p)
    also for checking derivatives in the MLE case
 */
 
-static int nl_function_calc (double *f, void *p)
+static int nl_function_calc (double *f, double *x, void *p)
 {
     nlspec *s = (nlspec *) p;
     const double *y;
@@ -1185,7 +1186,7 @@ static int nl_function_calc (double *f, void *p)
     fprintf(stderr, "\n*** nl_function_calc called\n");
 #endif
 
-    /* calculate residual given current parameter estimates */
+    /* calculate function given current parameter estimates */
     err = nl_calculate_fvec(s);
     if (err) {
 	return err;
@@ -1199,23 +1200,20 @@ static int nl_function_calc (double *f, void *p)
 	y = s->dset->Z[s->lhv] + s->t1;
     }
 
-    /* transcribe from dataset to array f */
-
+    /* transcribe from vector or series to array @f */
     for (t=0; t<s->nobs; t++) {
 	if (na(y[t])) {
 	    fprintf(stderr, "nl_calculate_fvec: produced NA at obs %d\n", t);
 	    return 1;
 	}
-
 	f[t] = y[t];
-
 #if NLS_DEBUG > 1
 	fprintf(stderr, "fvec[%d] = %.14g\n", t,  f[t]);
 #endif
-
 	if (s->ci == MLE) {
 	    s->crit += f[t];
 	} else {
+	    /* sum of squares */
 	    s->crit += f[t] * f[t];
 	}
     }
@@ -1223,88 +1221,70 @@ static int nl_function_calc (double *f, void *p)
     s->iters += 1;
 
     if (s->ci == NLS && (s->opt & OPT_V)) {
-	pprintf(s->prn, _("iteration %2d: SSR = %.8g\n"), s->iters, s->crit);
+	/* nls verbose output */
+	print_iter_info(s->iters, s->crit, C_SSR, s->ncoeff,
+			x, NULL, 0, s->prn);
     }
 
     return 0;
 }
 
-static int get_nls_derivs (int T, int offset, double *g, double **G,
-			   void *p)
+static int get_nls_derivs (int T, double *g, DATASET *gdset, void *p)
 {
     nlspec *spec = (nlspec *) p;
     double *gi;
     double x;
-    int j, t;
+    int j, t, k;
     int err = 0;
 
     if (g != NULL) {
+	/* coming from nls_calc, writing to flat array */
 	gi = g;
-    } else if (G != NULL) {
-	gi = (*G) + offset;
+    } else if (gdset != NULL) {
+	/* coming from GNR, writing to a dataset */
+	gi = gdset->Z[2];
     } else {
 	return 1;
     }
 
-#if NLS_DEBUG
-    fprintf(stderr, "get_nls_derivs: T = %d, offset = %d\n", T, offset);
-#endif
+    k = 0;
 
-    for (j=0; j<spec->nparam; j++) {
-
+    for (j=0; j<spec->nparam && !err; j++) {
 	if (nls_calculate_deriv(spec, j)) {
 	    return 1;
 	}
-
-#if NLS_DEBUG
-	fprintf(stderr, "param[%d]: done nls_calculate_deriv\n", j);
-#endif
-
 	if (matrix_deriv(spec, j)) {
 	    gretl_matrix *m = get_derivative_matrix(spec, j, &err);
 	    int i;
 
-	    if (err) {
-		return err;
-	    }
-
-#if NLS_DEBUG
-	    fprintf(stderr, "param[%d]: matrix at %p (%d x %d)\n", j, 
-		    (void *) m, m->rows, m->cols);
-#endif
-
-	    for (i=0; i<m->cols; i++) {
+	    for (i=0; i<m->cols && !err; i++) {
 		x = gretl_matrix_get(m, 0, i);
 		for (t=0; t<T; t++) {
-		    if (t > 0 && m->rows > 0) {
+		    if (t > 0 && t < m->rows) {
 			x = gretl_matrix_get(m, t, i);
 		    }
 		    gi[t] = (spec->ci == MLE)? x : -x;
-#if NLS_DEBUG > 1
-		    fprintf(stderr, " set g[%d] = M(%d,%d) = %.14g\n", 
-			    t, t, i, gi[t]);
-#endif
 		}
-		if (g != NULL) {
+		if (++k == spec->ncoeff) {
+		    break;
+		} if (g != NULL) {
 		    gi += T;
 		} else {
-		    gi = *(++G) + offset;
+		    gi = gdset->Z[k+2];
 		}
 	    }
 	} else if (scalar_deriv(spec, j)) {
-	    /* transcribe from scalar var to array g */
 	    x = gretl_scalar_get_value(spec->params[j].dname, NULL);
 	    for (t=0; t<T; t++) {
 		gi[t] = (spec->ci == MLE)? x : -x;
 	    }
-	    if (j < spec->nparam - 1) {
-		/* advance the writing position */
-		if (g != NULL) {
-		    gi += T;
-		} else {
-		    gi = *(++G) + offset;
-		}
-	    }	    
+	    if (++k == spec->ncoeff) {
+		break;
+	    } else if (g != NULL) {
+		gi += T;
+	    } else {
+		gi = gdset->Z[k+2];
+	    }
 	} else {
 	    /* derivative is series */
 	    int s, v = spec->params[j].dnum;
@@ -1314,27 +1294,18 @@ static int get_nls_derivs (int T, int offset, double *g, double **G,
 		v = spec->params[j].dnum = spec->dset->v - 1;
 	    }
 
-#if NLS_DEBUG
-	    fprintf(stderr, "param[%d]: dnum = %d\n", j, v);
-#endif
-
 	    /* transcribe from dataset to array g */
 	    for (t=0; t<T; t++) {
 		s = t + spec->t1;
 		x = spec->dset->Z[v][s];
 		gi[t] = (spec->ci == MLE)? x : -x;
-#if NLS_DEBUG > 1
-		fprintf(stderr, " set g[%d] = s->Z[%d][%d] = %.14g\n", 
-			t, v, s, gi[t]);
-#endif
 	    }
-	    if (j < spec->nparam - 1) {
-		/* advance the writing position */
-		if (g != NULL) {
-		    gi += T;
-		} else {
-		    gi = *(++G) + offset;
-		}
+	    if (++k == spec->ncoeff) {
+		break;
+	    } else if (g != NULL) {
+		gi += T;
+	    } else {
+		gi = gdset->Z[k+2];
 	    }
 	}
     }
@@ -1342,7 +1313,7 @@ static int get_nls_derivs (int T, int offset, double *g, double **G,
     return err;
 }
 
-/* for use with analytical derivatives */
+/* for use with analytical derivatives, at present only for mle */
 
 static int get_mle_gradient (double *b, double *g, int n, 
 			     BFGS_CRIT_FUNC llfunc,
@@ -1356,32 +1327,15 @@ static int get_mle_gradient (double *b, double *g, int n,
 
     update_coeff_values(b, spec);
 
-#if ML_DEBUG
-    fprintf(stderr, "get_mle_gradient\n");
-#endif
-
     i = 0;
 
-    for (j=0; j<spec->nparam; j++) {
-
+    for (j=0; j<spec->nparam && !err; j++) {
 	if (nls_calculate_deriv(spec, j)) {
 	    return 1;
 	}
-
-#if ML_DEBUG
-	fprintf(stderr, "mle: param %d (%s): done nls_calculate_deriv\n", 
-		j, spec->params[j].name);
-#endif
-
 	if (matrix_deriv(spec, j)) {
 	    m = get_derivative_matrix(spec, j, &err);
-#if ML_DEBUG > 1
-	    gretl_matrix_print(m, "deriv matrix");
-#endif
-	    if (err) {
-		break;
-	    }
-	    for (k=0; k<m->cols; k++) {
+	    for (k=0; k<m->cols && !err; k++) {
 		g[i] = 0.0;
 		for (t=0; t<m->rows; t++) {
 		    x = gretl_matrix_get(m, t, k);
@@ -1392,9 +1346,6 @@ static int get_mle_gradient (double *b, double *g, int n,
 			g[i] += x;
 		    }
 		}
-#if ML_DEBUG > 1
-		fprintf(stderr, "set gradient g[%d] = %g\n", i, g[i]);
-#endif
 		i++;
 	    }
 	} else if (scalar_deriv(spec, j)) {
@@ -1409,16 +1360,9 @@ static int get_mle_gradient (double *b, double *g, int n,
 	    /* the derivative must be a series */
 	    int v = spec->params[j].dnum;
 
-#if ML_DEBUG > 1
-	    fprintf(stderr, "param[%d], dnum = %d\n", j, v);
-#endif
 	    g[i] = 0.0;
-
 	    for (t=spec->t1; t<=spec->t2; t++) {
 		x = spec->dset->Z[v][t];
-#if ML_DEBUG > 1
-		fprintf(stderr, "s->Z[%d][%d] = %g\n", v, t, x);
-#endif
 		if (na(x)) {
 		    fprintf(stderr, "NA in gradient calculation\n");
 		    err = 1;
@@ -1426,9 +1370,6 @@ static int get_mle_gradient (double *b, double *g, int n,
 		    g[i] += x;
 		}
 	    }
-#if ML_DEBUG > 1
-	    fprintf(stderr, "set gradient g[%d] = %g\n", i, g[i]);
-#endif
 	    i++;
 	} 
     }
@@ -1489,8 +1430,7 @@ static gretl_matrix *mle_hessian_inverse (nlspec *spec, int *err)
 /* Compute auxiliary statistics and add them to the NLS 
    model struct */
 
-static void add_stats_to_model (MODEL *pmod, nlspec *spec,
-				const double **Z)
+static void add_stats_to_model (MODEL *pmod, nlspec *spec)
 {
     int dv = spec->dv;
     double d, tss;
@@ -1499,16 +1439,20 @@ static void add_stats_to_model (MODEL *pmod, nlspec *spec,
     pmod->ess = spec->crit;
     pmod->sigma = sqrt(pmod->ess / (pmod->nobs - spec->ncoeff));
     
-    pmod->ybar = gretl_mean(pmod->t1, pmod->t2, Z[dv]);
-    pmod->sdy = gretl_stddev(pmod->t1, pmod->t2, Z[dv]);
+    pmod->ybar = gretl_mean(pmod->t1, pmod->t2, spec->dset->Z[dv]);
+    pmod->sdy = gretl_stddev(pmod->t1, pmod->t2, spec->dset->Z[dv]);
 
     s = (spec->missmask != NULL)? 0 : pmod->t1;
 
     tss = 0.0;
     for (t=pmod->t1; t<=pmod->t2; t++) {
-	d = Z[dv][s++] - pmod->ybar;
+	d = spec->dset->Z[dv][s++] - pmod->ybar;
 	tss += d * d;
-    } 
+    }
+
+    /* before over-writing the Gauss-Newton R^2, record it:
+       it should be very small at convergence */
+    gretl_model_set_double(pmod, "GNR_Rsquared", pmod->rsq);
 
     if (tss == 0.0) {
 	pmod->rsq = pmod->adjrsq = NADBL;
@@ -1639,6 +1583,7 @@ static int mle_add_vcv (MODEL *pmod, nlspec *spec)
 
 static int add_nls_std_errs_to_model (MODEL *pmod)
 {
+    double abst, tstat_max = 0;
     int i, k;
 
     if (pmod->vcv == NULL && makevcv(pmod, pmod->sigma)) {
@@ -1647,13 +1592,19 @@ static int add_nls_std_errs_to_model (MODEL *pmod)
 
     for (i=0; i<pmod->ncoeff; i++) {
 	k = ijton(i, i, pmod->ncoeff);
-	if (pmod->vcv[k] == 0.0) {
-	    pmod->sderr[i] = 0.0;
-	} else if (pmod->vcv[k] > 0.0) {
-	    pmod->sderr[i] = sqrt(pmod->vcv[k]);
-	} else {
+	if (pmod->vcv[k] < 0.0) {
 	    pmod->sderr[i] = NADBL;
+	} else {
+	    pmod->sderr[i] = sqrt(pmod->vcv[k]);
+	    abst = fabs(pmod->coeff[i] / pmod->sderr[i]);
+	    if (abst > tstat_max) {
+		tstat_max = abst;
+	    }
 	}
+    }
+
+    if (tstat_max > 0) {
+	gretl_model_set_double(pmod, "GNR_tmax", tstat_max);
     }
 
     return 0;
@@ -1719,6 +1670,10 @@ static int nl_model_add_spec_info (MODEL *pmod, nlspec *spec)
 	pputc(prn, '\n');
     }
 
+    if (spec->naux > 0) {
+	gretl_model_set_int(pmod, "nl_naux", spec->naux);
+    }
+
     for (i=0; i<spec->naux; i++) {
 	pprintf(prn, "%s\n", spec->aux[i]);
     }
@@ -1774,10 +1729,7 @@ static int copy_user_parnames (MODEL *pmod, nlspec *spec)
     for (i=0; i<pmod->ncoeff && !err; i++) {
 	pname = strtok((i == 0)? tmp : NULL, sep);
 	if (pname == NULL) {
-	    fprintf(stderr, "copy_user_parnames: too few strings\n");
-	    gretl_errmsg_sprintf(_("modprint: expected %d names"), 
-				 pmod->ncoeff);
-	    err = E_DATA;
+	    pmod->params[i] = gretl_strdup("unnamed");
 	} else {
 	    pmod->params[i] = gretl_strdup(pname);
 	    if (pmod->params[i] == NULL) {
@@ -1872,28 +1824,53 @@ static int add_param_names_to_model (MODEL *pmod, nlspec *spec)
     return err;
 }
 
-static void 
-add_fit_resid_to_model (MODEL *pmod, nlspec *spec, double *uhat, 
-			const DATASET *dset, int perfect)
+static int
+add_fit_resid_to_model (MODEL *pmod, nlspec *spec, int perfect)
 {
-    int t, j = 0;
+    DATASET *dset = spec->dset;
+    int T = dset->n;
+    int yno = spec->dv;
+    double *tmp;
+    int s, t;
+    int err = 0;
 
-    if (perfect) {
-	for (t=pmod->t1; t<=pmod->t2; t++) {
-	    pmod->uhat[t] = 0.0;
-	    pmod->yhat[t] = dset->Z[spec->dv][t];
-	}
+    /* we need full-length arrays for uhat, yhat */
+
+    tmp = realloc(pmod->uhat, T * sizeof *tmp);
+    if (tmp == NULL) {
+	return E_ALLOC;
     } else {
-	for (t=pmod->t1; t<=pmod->t2; t++) {
-	    pmod->uhat[t] = uhat[j];
-	    pmod->yhat[t] = dset->Z[spec->dv][t] - uhat[j];
-	    j++;
+	pmod->uhat = tmp;
+    }
+
+    tmp = realloc(pmod->yhat, T * sizeof *tmp);
+    if (tmp == NULL) {
+	return E_ALLOC;
+    } else {
+	pmod->yhat = tmp;
+    }
+
+    /* OK, we got them, now transcribe */
+
+    s = 0;
+    for (t=0; t<T; t++) {
+	if (t < pmod->t1 || t > pmod->t2) {
+	    pmod->uhat[t] = pmod->yhat[t] = NADBL;
+	} else if (perfect) {
+	    pmod->uhat[t] = 0.0;
+	    pmod->yhat[t] = dset->Z[yno][t];
+	} else {
+	    pmod->uhat[t] = spec->fvec[s];
+	    pmod->yhat[t] = dset->Z[yno][t] - spec->fvec[s];
+	    s++;
 	}
     }
 
     if (perfect || (spec->flags & NL_AUTOREG)) {
 	pmod->rho = pmod->dw = NADBL;
     }
+
+    return err;
 }
 
 /* this may be used later for generating out-of-sample forecasts --
@@ -1918,6 +1895,51 @@ static int transcribe_nls_function (MODEL *pmod, const char *s)
     return err;
 }
 
+static int finalize_nls_model (MODEL *pmod, nlspec *spec,
+			       int perfect)
+{
+    DATASET *dset = spec->dset;
+    int err = 0;
+    
+    pmod->ci = spec->ci;
+    pmod->t1 = spec->t1;
+    pmod->t2 = spec->t2;
+    pmod->full_n = dset->n;
+
+    pmod->smpl.t1 = spec->dset->t1;
+    pmod->smpl.t2 = spec->dset->t2;
+    
+    add_stats_to_model(pmod, spec);
+    
+    err = add_nls_std_errs_to_model(pmod);
+
+    if (!err) {
+	err = add_fit_resid_to_model(pmod, spec, perfect);
+    }
+
+    if (!err) {
+	err = add_param_names_to_model(pmod, spec);
+    }
+
+    if (!err) {
+	ls_criteria(pmod);
+	pmod->fstt = pmod->chisq = NADBL;
+	add_coeffs_to_model(pmod, spec->coeff);
+	pmod->list[1] = spec->dv;
+
+	/* set additional data on model to be shipped out */
+	gretl_model_set_int(pmod, "iters", spec->iters);
+	gretl_model_set_double(pmod, "tol", spec->tol);
+	transcribe_nls_function(pmod, spec->nlfunc);
+	if (spec->flags & NL_AUTOREG) {
+	    gretl_model_set_int(pmod, "dynamic", 1);
+	}
+	pmod->opt = spec->opt;
+    }
+
+    return err;
+}
+
 #if NLS_DEBUG > 1
 static void 
 print_GNR_dataset (const int *list, DATASET *gdset)
@@ -1936,8 +1958,7 @@ print_GNR_dataset (const int *list, DATASET *gdset)
 
 /* Gauss-Newton regression to calculate standard errors for the NLS
    parameters (see Davidson and MacKinnon).  This model is taken
-   as the basis for the model struct returned by the nls function,
-   which is why we make the artificial dataset, gZ, full length.
+   as the basis for the model struct returned by the "nls" command.
 */
 
 static MODEL GNR (nlspec *spec, DATASET *dset, PRN *prn)
@@ -1949,17 +1970,9 @@ static MODEL GNR (nlspec *spec, DATASET *dset, PRN *prn)
     gretlopt lsqopt;
     int i, j, t, v;
     int T = spec->nobs;
-    int iters = spec->iters;
     int perfect = 0;
 
-#if NLS_DEBUG
-    fprintf(stderr, "GNR: T = %d\n", T);
-    v = dset->v;
-    fprintf(stderr, "dinfo->v = %d\n", v);
-    fprintf(stderr, "Z[%d] = %p\n", v-1, (void *) dset->Z[v-1]);
-#endif
-
-    if (gretl_iszero(0, spec->nobs - 1, uhat)) {
+    if (gretl_iszero(0, T - 1, uhat)) {
 	pputs(prn, _("Perfect fit achieved\n"));
 	perfect = 1;
 	for (t=0; t<spec->nobs; t++) {
@@ -1968,84 +1981,54 @@ static MODEL GNR (nlspec *spec, DATASET *dset, PRN *prn)
 	spec->crit = 0.0;
     }
 
-    /* number of variables = 1 (const) + 1 (depvar) + spec->ncoeff
+    /* number of variables = const + depvar + spec->ncoeff
        (derivatives) */
-    gdset = create_auxiliary_dataset(spec->ncoeff + 2, dset->n, 0);
-    if (gdset == NULL) {
-	gretl_model_init(&gnr, NULL);
-	gnr.errcode = E_ALLOC;
-	return gnr;
-    }
-
-    /* transcribe sample info */
-    gdset->t1 = spec->t1;
-    gdset->t2 = spec->t2;
-    gdset->pd = dset->pd;
-    gdset->structure = dset->structure;
-
-    glist = gretl_list_new(spec->ncoeff + 1);
-
-    if (glist == NULL) {
+    gdset = create_auxiliary_dataset(2 + spec->ncoeff, T, 0);
+    glist = gretl_consecutive_list_new(1, spec->ncoeff + 1);
+    if (gdset == NULL || glist == NULL) {
 	destroy_dataset(gdset);
+	free(glist);
 	gretl_model_init(&gnr, NULL);
 	gnr.errcode = E_ALLOC;
 	return gnr;
     }
 
-    j = 0;
+    if (dataset_is_time_series(dset)) {
+	/* this may inflect the choice of variance estimator
+	   when the --robust flag is given */
+	gdset->structure = SPECIAL_TIME_SERIES;
+    }
 
-    /* dependent variable (NLS residual) */
-    glist[1] = 1;
+    /* dependent variable (NLS residual): write into
+       slot 1 in gdset */
     strcpy(gdset->varname[1], "gnr_y");
-    for (t=0; t<gdset->n; t++) {
-	if (t < gdset->t1 || t > gdset->t2) {
-	    gdset->Z[1][t] = NADBL;
-	} else {
-	    gdset->Z[1][t] = uhat[j++];
-	}
+    for (t=0; t<T; t++) {
+	gdset->Z[1][t] = uhat[t];
     }
 
+    /* independent variables: derivatives wrt NLS params,
+       starting at slot 2 in gdset */
     for (i=0; i<spec->ncoeff; i++) {
-	/* independent vars: derivatives wrt NLS params */
-	v = i + 2;
-	glist[v] = v;
-	sprintf(gdset->varname[v], "gnr_x%d", i + 1);
+	sprintf(gdset->varname[i+2], "gnr_x%d", i + 1);
     }
-
     if (analytic_mode(spec)) {
-	for (i=0; i<spec->ncoeff; i++) {
-	    v = i + 2;
-	    for (t=0; t<gdset->t1; t++) {
-		gdset->Z[v][t] = NADBL;
-	    }
-	    for (t=gdset->t2; t<gdset->n; t++) {
-		gdset->Z[v][t] = NADBL;
-	    }
-	}
-#if NLS_DEBUG
-	fprintf(stderr, "GNR: calling get_nls_derivs\n");
-	fprintf(stderr, "Z[%d] = %p\n", dset->v-1, (void *) dset->Z[dset->v-1]);
-#endif
-	get_nls_derivs(T, spec->t1, NULL, gdset->Z + 2, spec);
+	get_nls_derivs(T, NULL, gdset, spec);
     } else {
 	for (i=0; i<spec->ncoeff; i++) {
 	    v = i + 2;
-	    j = T * i; /* calculate offset into jac */
-	    for (t=0; t<gdset->n; t++) {
-		if (t < gdset->t1 || t > gdset->t2) {
-		    gdset->Z[v][t] = NADBL;
-		} else {
-		    gdset->Z[v][t] = spec->jac[j++];
-		}
+	    j = T * i; /* offset into jac array */
+	    for (t=0; t<T; t++) {
+		gdset->Z[v][t] = spec->jac[j++];
 	    }
 	}
     }
 
 #if NLS_DEBUG > 1
+    printlist(glist, "glist");
     print_GNR_dataset(glist, gdset);
 #endif
 
-    lsqopt = OPT_A | OPT_B; /* OPT_B: don't calculate R^2 */
+    lsqopt = OPT_A;
     if (spec->opt & OPT_R) {
 	/* robust variance matrix, if wanted */
 	lsqopt |= OPT_R;
@@ -2063,35 +2046,12 @@ static MODEL GNR (nlspec *spec, DATASET *dset, PRN *prn)
     if (gnr.errcode) {
 	pputs(prn, _("In Gauss-Newton Regression:\n"));
 	errmsg(gnr.errcode, prn);
-    } 
-
-    if (gnr.list[0] != glist[0]) {
+    } else if (gnr.list[0] != glist[0]) {
 	gnr.errcode = E_JACOBIAN;
     }
 
     if (gnr.errcode == 0) {
-	gnr.ci = spec->ci;
-	add_stats_to_model(&gnr, spec, (const double **) dset->Z);
-	if (add_nls_std_errs_to_model(&gnr)) {
-	    gnr.errcode = E_ALLOC;
-	}
-    }
-
-    if (gnr.errcode == 0) {
-	ls_criteria(&gnr);
-	gnr.fstt = gnr.chisq = NADBL;
-	add_coeffs_to_model(&gnr, spec->coeff);
-	add_param_names_to_model(&gnr, spec);
-	add_fit_resid_to_model(&gnr, spec, uhat, dset, perfect);
-	gnr.list[1] = spec->dv;
-
-	/* set relevant data on model to be shipped out */
-	gretl_model_set_int(&gnr, "iters", iters);
-	gretl_model_set_double(&gnr, "tol", spec->tol);
-	transcribe_nls_function(&gnr, spec->nlfunc);
-	if (spec->flags & NL_AUTOREG) {
-	    gretl_model_set_int(&gnr, "dynamic", 1);
-	}
+	gnr.errcode = finalize_nls_model(&gnr, spec, perfect);
     }
 
     destroy_dataset(gdset);
@@ -2349,6 +2309,7 @@ static int nls_calc (int m, int n, double *x, double *fvec,
 		     void *p)
 {
     nlspec *s = (nlspec *) p;
+    int err;
 
 #if NLS_DEBUG
     fprintf(stderr, "nls_calc called by minpack with iflag = %d\n", 
@@ -2360,12 +2321,16 @@ static int nls_calc (int m, int n, double *x, double *fvec,
 
     if (*iflag == 1) {
 	/* calculate function at x, results into fvec */
-	if (nl_function_calc(fvec, p)) {
+	err = nl_function_calc(fvec, x, p);
+	if (err) {
+	    fprintf(stderr, "nl_function_calc: err = %d\n", err);
 	    *iflag = -1;
 	} 
     } else if (*iflag == 2) {
 	/* calculate jacobian at x, results into jac */
-	if (get_nls_derivs(m, 0, jac, NULL, p)) {
+	err = get_nls_derivs(m, jac, NULL, p);
+	if (err) {
+	    fprintf(stderr, "get_nls_derivs: err = %d\n", err);
 	    *iflag = -1; 
 	}
     }
@@ -2583,7 +2548,7 @@ static int lm_calculate (nlspec *spec, PRN *prn)
     lmder1_(nls_calc, m, n, spec->coeff, spec->fvec, spec->jac, ldjac, 
 	    spec->tol, &info, ipvt, wa, lwa, spec);
 
-    switch ((int) info) {
+    switch (info) {
     case -1: 
 	err = 1;
 	break;
@@ -2628,7 +2593,7 @@ nls_calc_approx (int m, int n, double *x, double *fvec,
 
     /* calculate function at x, results into fvec */  
     if (!err) {
-	err = errc = nl_function_calc(fvec, p);
+	err = errc = nl_function_calc(fvec, x, p);
     }
     
     if (err) {
@@ -3214,7 +3179,7 @@ static MODEL real_nl_model (nlspec *spec, DATASET *dset,
 			    gretlopt opt, PRN *prn)
 {
     MODEL nlmod;
-    int i, t, origv;
+    int origv;
     int err = 0;
 
     if (spec == NULL) {
@@ -3287,7 +3252,9 @@ static MODEL real_nl_model (nlspec *spec, DATASET *dset,
 	spec->jac = NULL;
     } else {
 	/* allocate auxiliary arrays */
-	spec->fvec = malloc(spec->nobs * sizeof *spec->fvec);
+	size_t fvec_bytes = spec->nobs * sizeof *spec->fvec;
+	    
+	spec->fvec = malloc(fvec_bytes);
 	spec->jac = malloc(spec->nobs * spec->ncoeff * sizeof *spec->jac);
 
 	if (spec->fvec == NULL || spec->jac == NULL) {
@@ -3296,14 +3263,11 @@ static MODEL real_nl_model (nlspec *spec, DATASET *dset,
 	}
 
 	if (spec->lvec != NULL) {
-	    for (t=0; t<spec->nobs; t++) {
-		spec->fvec[t] = spec->lvec->val[t];
-	    }
+	    memcpy(spec->fvec, spec->lvec->val, fvec_bytes);
 	} else {
-	    i = 0;
-	    for (t=spec->t1; t<=spec->t2; t++) {
-		spec->fvec[i++] = spec->dset->Z[spec->lhv][t];
-	    }
+	    double *src = spec->dset->Z[spec->lhv] + spec->t1;
+	    
+	    memcpy(spec->fvec, src, fvec_bytes);
 	}
     }
 
@@ -3314,7 +3278,7 @@ static MODEL real_nl_model (nlspec *spec, DATASET *dset,
 	spec->tol = libset_get_double(NLS_TOLER);
     }
 
-    if (spec->ci != GMM && !(spec->opt & OPT_Q)) {
+    if (spec->ci != GMM && !(spec->opt & (OPT_Q | OPT_M))) {
 	pputs(prn, (numeric_mode(spec))?
 	      _("Using numerical derivatives\n") :
 	      _("Using analytical derivatives\n"));
@@ -3341,7 +3305,7 @@ static MODEL real_nl_model (nlspec *spec, DATASET *dset,
 	}
     }
 
-    if (!(spec->opt & OPT_Q) && !(spec->flags & NL_NEWTON)) {
+    if (!(spec->opt & (OPT_Q | OPT_M)) && !(spec->flags & NL_NEWTON)) {
 	pprintf(prn, _("Tolerance = %g\n"), spec->tol);
     }
 
@@ -3351,7 +3315,7 @@ static MODEL real_nl_model (nlspec *spec, DATASET *dset,
 		/* coefficients only: don't bother with GNR */
 		add_nls_coeffs(&nlmod, spec);
 	    } else {
-		/* Use Gauss-Newton Regression for covariance matrix,
+		/* use Gauss-Newton Regression for covariance matrix,
 		   standard errors */
 		nlmod = GNR(spec, spec->dset, prn);
 	    }
@@ -3786,6 +3750,56 @@ MODEL ivreg_via_gmm (const int *list, DATASET *dset, gretlopt opt)
     return model;
 }
 
+/* For forecasting purposes ("fcast" command): in general
+   it's not enough just to run the genr command that
+   creates or revises the dependent variable; we may also
+   have to generate some intermediate quantities. In
+   nl_model_run_aux_genrs() we retrieve any auxiliary
+   genrs from @pmod and try running them.
+*/
+
+int nl_model_run_aux_genrs (const MODEL *pmod, 
+			    DATASET *dset)
+{
+    char line[MAXLEN];
+    const char *buf;
+    int i, j, n_aux = 0;
+    int err = 0;
+
+    n_aux = gretl_model_get_int(pmod, "nl_naux");
+    if (n_aux == 0) {
+	/* nothing to be done? */
+	return 0;
+    }
+
+    buf = gretl_model_get_data(pmod, "nlinfo");
+    if (buf == NULL) {
+	return E_DATA;
+    }
+
+    bufgets_init(buf);
+
+    i = j = 0;
+    while (bufgets(line, sizeof line, buf) && !err) {
+	if (*line == '#') {
+	    continue;
+	}
+	if (i > 0 && j < n_aux) {
+	    tailstrip(line);
+	    err = generate(line, dset, GRETL_TYPE_ANY, OPT_P, NULL);
+	    if (err) {
+		genr_setup_error(line, err, 1);
+	    }
+	    j++;
+	}
+	i++;
+    }
+
+    bufgets_finalize(buf);
+
+    return err;
+}
+
 /* apparatus for bootstrapping NLS forecast errors */
 
 /* reconstitute the nlspec based on the information saved in @pmod */
@@ -3816,7 +3830,12 @@ static int set_nlspec_from_model (const MODEL *pmod,
 
     if (err) {
 	clear_nlspec(&private_spec);
-    } 
+    } else {
+	private_spec.opt = pmod->opt;
+	if (private_spec.opt & OPT_V) {
+	    private_spec.opt ^= OPT_V;
+	}
+    }
 
     return err;
 }
@@ -3898,7 +3917,7 @@ int nls_boot_calc (const MODEL *pmod, DATASET *dset,
     int i, ix, im, s, t, fT;
     int err = 0;
 
-    /* build the 'private' spec, based on pmod */
+    /* build the 'private' spec, based on @pmod */
     err = set_nlspec_from_model(pmod, dset);
     if (err) {
 	return err;

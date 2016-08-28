@@ -131,16 +131,22 @@ int list_linear_combo (double *y, const int *list,
 		       const gretl_vector *b, 
 		       const DATASET *dset);
 
-gretl_matrix *midas_weights (int m, const gretl_matrix *theta,
+gretl_matrix *midas_weights (int p, const gretl_matrix *m,
 			     int method, int *err);
 
-gretl_matrix *midas_gradient (int m, const gretl_matrix *theta,
+gretl_matrix *midas_gradient (int p, const gretl_matrix *m,
 			      int method, int *err);
 
 int midas_linear_combo (double *y, const int *list,
 			const gretl_matrix *theta,
 			int method,
 			const DATASET *dset);
+
+int *vector_to_midas_list (const gretl_matrix *v,
+			   int f_ratio,
+			   const char *prefix,
+			   DATASET *dset,
+			   int *err);
 
 double imhof (const gretl_matrix *m, double arg, int *err);
 

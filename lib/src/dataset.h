@@ -38,7 +38,8 @@ typedef enum {
     VAR_HIDDEN     = 1 << 1,
     VAR_GENERATED  = 1 << 2,
     VAR_LISTARG    = 1 << 3,
-    VAR_TIMECOL    = 1 << 4
+    VAR_TIMECOL    = 1 << 4,
+    VAR_HFANCHOR   = 1 << 5
 } VarFlags;
 
 typedef enum {
@@ -400,8 +401,11 @@ int dataset_drop_last_variables (DATASET *dset, int delvars);
 int dataset_renumber_variable (int v_old, int v_new, 
 			       DATASET *dset);
 
-int renumber_series_with_checks (const char *s, int fixmax,
-				 DATASET *dset, PRN *prn);
+int renumber_series_with_checks (const int *list,
+				 const char *param,
+				 int fixmax,
+				 DATASET *dset,
+				 PRN *prn);
 
 int maybe_prune_dataset (DATASET **pdset, void *p);
 
@@ -460,7 +464,7 @@ int series_is_generated (const DATASET *dset, int i);
 
 int series_is_listarg (const DATASET *dset, int i);
 
-VarFlags series_get_flags (DATASET *dset, int i);
+VarFlags series_get_flags (const DATASET *dset, int i);
 
 void series_set_flag (DATASET *dset, int i, VarFlags flag);
 
@@ -554,5 +558,14 @@ const char *panel_group_names_varname (const DATASET *dset);
 int is_panel_group_names_series (const DATASET *dset, int v);
 
 int is_dataset_series (const DATASET *dset, const double *x);
+
+int series_get_midas_period (const DATASET *dset, int i);
+
+void series_set_midas_period (const DATASET *dset, int i,
+			      int period);
+
+int series_is_midas_anchor (const DATASET *dset, int i);
+
+void series_set_midas_anchor (const DATASET *dset, int i);
 
 #endif /* DATASET_H */

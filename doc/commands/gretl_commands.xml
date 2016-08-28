@@ -7340,6 +7340,122 @@
 
   </command>
 
+  <command name="midasreg" section="Estimation" label="MIDAS regression">
+    <usage>
+      <arguments>
+        <argument>depvar</argument>
+        <argument>indepvars</argument>
+	<argument separated="true">MIDAS-terms</argument>
+      </arguments>
+      <options>
+        <option>
+	  <flag>--vcv</flag>
+	  <effect>print covariance matrix</effect>
+        </option>
+        <option>
+	  <flag>--robust</flag>
+	  <effect>robust standard errors</effect>
+        </option>
+        <option>
+	  <flag>--quiet</flag>
+	  <effect>suppress printing of results</effect>
+        </option>
+      </options>
+      <examples>
+        <example>midasreg y 0 y(-1) ; mds(X, 1, 9, 1, theta)</example>
+	<example>midasreg y 0 y(-1) ; mds(X, 1, 9, 0)</example>
+	<example>midasreg y 0 y(-1) ; mdsl(XL, 2, theta)</example>
+	<demos>
+	  <demo>gdp_midas.inp</demo>
+	</demos>
+      </examples>
+    </usage>
+
+    <description>
+      <para>
+	Carries out least-squares estimation (either NLS or OLS,
+	depending on the specification) of a MIDAS (Mixed Data
+	Sampling) model. Such models include one or more independent
+	variables that are observed at a higher frequency than the
+	dependent variable; for a good brief introduction see <cite
+	key="armesto10">Armesto, Engemann and Owyang (2010)</cite>.
+      </para>
+      <para context="cli">
+	The variables in <repl>indepvars</repl> should be of the same
+	frequency as the dependent variable. This list should usually
+	include <lit>const</lit> or <lit>0</lit> (intercept) and
+	typically includes one or more lags of the dependent variable.
+	The high-frequency terms are given after a semicolon; each one
+	takes the form of a number of comma-separated arguments within
+	parentheses, prefixed by either <lit>mds</lit> or
+	<lit>mdsl</lit>.
+      </para>
+      <para context="gui">
+	The variables under <repl>Regressors</repl> are of the same
+	frequency as the dependent variable, and are selected from the
+	upper list on the left. MIDAS models typically include one or
+	more lags of the dependent variable; that is controlled by the
+	<quote>AR order</quote> spin button, which defaults to 1 lag.
+	To add MIDAS (high frequency) terms, select from the lower
+	left-hand list and use the lower green arrow (or right-click).
+      </para>
+      <para context="gui">
+	On adding a MIDAS term, a dialog pops up to let you select
+	the range of lags, the parameterization type, and (for
+	types that do not have a fixed number of parameters) the
+	number of hyper-parameters. You can bring this dialog up
+	again to revise a specification by right-clicking on a
+	MIDAS term on the right.
+      </para>      
+      <para context="cli">
+	<lit>mds</lit>: this variant generally requires 5 arguments,
+	as follows: the name of a <quote>MIDAS list</quote>, two
+	integers giving the minimum and maximum high-frequency lags,
+	an integer between 0 and 4 specifying the type of
+	parameterization to use, and the name of a vector holding
+	initial values of the parameters. The example below calls for
+	lags 3 to 11 of the high-frequency series represented by the
+	list <lit>X</lit>, using parameterization type 1 (exponential
+	Almon, see below) with initializer <lit>theta</lit>.
+      </para>
+      <code context="cli">
+	mds(X, 3, 11, 1, theta)
+      </code>
+      <para context="cli">
+	<lit>mdsl</lit>: generally requires 3 arguments: the name of a
+	list of MIDAS lags, an integer to specify the parameterization
+	and the name of an initialization vector. In this case the
+	minimum and maximum lags are implicit in the initial list
+	argument. In the example below <lit>Xlags</lit> should be a
+	list which already holds all the required lags; such a list
+	can be constructed using the <fncref targ="hflags"/> function.
+      </para>
+      <code context="cli">
+	mdsl(XLags, 1, theta)
+      </code>
+      <para context="cli">
+	The supported types of parameterization are as follows: 0 =
+	<quote>unrestricted MIDAS</quote> or U-MIDAS (each lag has its
+	own coefficient); 1 = normalized exponential Almon (requires
+	at least one parameter and commonly uses two); 2 = normalized
+	beta with a zero last lag (requires exactly two parameters); 3
+	= normalized beta with non-zero last lag (requires three
+	parameters); and 4 = (non-normalized) Almon polynomial, which
+	requires at least one parameter.
+      </para>
+      <para context="cli">
+	In a specification which includes only U-MIDAS terms,
+	estimation proceeds using OLS and the final initializer
+	argument for <lit>mds</lit> or <lit>mdsl</lit> is not
+	required.
+      </para>
+    </description>
+
+    <gui-access>
+      <menu-path>/Model/Time series/MIDAS</menu-path>
+    </gui-access>
+  </command>
+
   <command name="missing" section="Dataset" context="gui"
     label="Missing data values">
 
@@ -7820,6 +7936,10 @@
 	  <effect>common factor restriction, AR1 models only</effect>
         </option>
         <option>
+	  <flag>--xdepend</flag>
+	  <effect>cross-sectional dependence, panel data only</effect>
+        </option>	
+        <option>
 	  <flag>--quiet</flag>
 	  <effect>don't print details</effect>
         </option>
@@ -7842,11 +7962,13 @@
 	heteroskedasticity; the LMF test for serial correlation <cite
 	key="kiviet86" p="true">(Kiviet, 1986)</cite>; a test for ARCH
 	(Autoregressive Conditional Heteroskedasticity; see also the
-	<cmd>arch</cmd> command); or a test of the common factor
-	restriction implied by AR(1) estimation.  With the exception
-	of the normality and common factor test most of the options
-	are only available for models estimated via OLS, but see below
-	for details regarding two-stage least squares.
+	<cmd>arch</cmd> command); a test of the common factor
+	restriction implied by AR(1) estimation; or a test for
+	cross-sectional dependence in panel-data models.  With the
+	exception of the normality, common factor and cross-sectional
+	dependence tests most of the options are only available for
+	models estimated via OLS, but see below for details regarding
+	two-stage least squares.
       </para>
       <para>
 	The optional <lit>order</lit> argument is relevant only in case
@@ -7875,6 +7997,13 @@
 	dynamic model, which is used to test the common factor restriction
 	implicit in the AR(1) specification.
       </para>
+      <para>
+	The <opt>xdepend</opt> option is available only for models
+	estimated on panel data. The test statistic is that developed
+	by <cite key="pesaran04">Pesaran (2004)</cite>. The null
+	hypothesis is that the error term is independently distributed
+	across the cross-sectional units or individuals.
+      </para>      
       <para>
 	By default, the program prints the auxiliary regression on
 	which the test statistic is based, where applicable.  This may
@@ -9442,7 +9571,7 @@
       <subhead>Plotting a band with matrix data</subhead>
       <para>
 	The <opt>band</opt> and <opt>band-style</opt> options mostly
-	work as described in the help for <lit>gnuplot</lit>,
+	work as described in the help for <cmdref targ="gnuplot"/>,
 	with the following exception: when the data to be plotted are
 	given in the form of a matrix, the first parameter to
 	<opt>band</opt> must be given as the name of a matrix with two
@@ -11130,17 +11259,18 @@
 
     <description>
       <para>
-	The most common use of this command is the first variant shown above,
-	where it is used to set the value of a selected program parameter.
-	This is discussed in detail below.  The other uses are: with
-	<opt>to-file</opt>, to write a script file containing all the
-	current parameter settings; with <opt>from-file</opt> to read a
-	script file containing parameter settings and apply them to the
-	current session; with <lit>stopwatch</lit> to zero the gretl
-	<quote>stopwatch</quote> which can be used to measure CPU time (see
-	the entry for the <lit>$stopwatch</lit> accessor in the gretl function
-	reference); or, if the word <lit>set</lit> is given alone, to print
-	the current settings.
+	The most common use of this command is the first variant shown
+	above, where it is used to set the value of a selected program
+	parameter.  This is discussed in detail below.  The other uses
+	are: with <opt>to-file</opt>, to write a script file
+	containing all the current parameter settings; with
+	<opt>from-file</opt> to read a script file containing
+	parameter settings and apply them to the current session; with
+	<lit>stopwatch</lit> to zero the gretl
+	<quote>stopwatch</quote> which can be used to measure CPU time
+	(see the entry for the <fncref targ="$stopwatch"/> accessor);
+	or, if the word <lit>set</lit> is given alone, to print the
+	current settings.
       </para>
       <para>
 	Values set via this comand remain in force for the duration of
@@ -11696,6 +11826,10 @@
 	  <flag>--continuous</flag>
 	  <effect>mark series as continuous</effect>
 	</option>
+	<option>
+	  <flag>--midas</flag>
+	  <effect>mark as component of high-frequency data</effect>
+	</option>	
       </options>
       <examples>
         <example>setinfo x1 --description="Description of x1"</example>
@@ -11706,10 +11840,12 @@
 
     <description context="cli">
       <para>
-	Sets up to three attributes of <repl>series</repl>, given by name
-	or ID number, as follows.
+	If the options <opt>description</opt> or <opt>graph-name</opt>
+	are invoked the argument must be a single series, otherwise it
+	may be a list of series in which case it operates on all
+	members of the list. This command sets up to four attributes
+	as follows.
       </para>
-
       <para>
 	If the <opt>description</opt> flag is given followed by a
 	string in double quotes, that string is used to set the
@@ -11717,13 +11853,11 @@
 	to the <cmdref targ="labels"/> command, and is also shown in
 	the main window of the GUI program.
       </para>
-
       <para>
 	If the <opt>graph-name</opt> flag is given followed by a
 	quoted string, that string will be used in place of the
 	variable's name in graphs.
       </para>
-
       <para>
 	If one or other of the <opt>discrete</opt> or
 	<opt>continuous</opt> option flags is given, the variable's
@@ -11731,7 +11865,13 @@
 	all series as continuous; setting a series as discrete
 	affects the way the variable is handled in frequency plots.
       </para>
-
+      <para>
+	The <opt>midas</opt> option sets a flag indicating that a
+	given series holds data of a higher frequency than the base
+	frequency of the dataset; for example, the dataset is
+	quarterly and the series holds values for month 1, 2 or 3
+	of each quarter. (MIDAS = Mixed Data Sampling.)
+      </para>
     </description>
 
     <description context="gui">
@@ -13397,29 +13537,31 @@
     <usage>
       <options>
 	<option>
-	  <flag>--scalars</flag>
-	  <effect>list scalars</effect>
-	</option>
-	<option>
-	  <flag>--accessors</flag>
-	  <effect>list accessor variables</effect>
-	</option>
+	  <flag>--type</flag>
+	  <optparm>typename</optparm>
+	</option>	
       </options>
     </usage>
 
     <description>
       <para>
-	By default, prints a listing of the (series) variables
-	currently available; <cmd>ls</cmd> may be used as an alias for
-	this command.
+	By default, prints a listing of the series in the current
+	dataset (if any); <cmd>ls</cmd> may be used as an alias.
       </para>
       <para>
-	If the <opt>scalars</opt> option is given, prints a listing
-	of any currently defined scalar variables and their
-	values. Otherwise, if the <opt>accessors</opt> option is
-	given, prints a list of the internal variables currently
-	available via accessors such as <fncref targ="$nobs"/> and
-	<fncref targ="$uhat"/>.
+	If the <opt>type</opt> option is given, it should be followed
+	(after an equals sign) by one of the following typenames:
+	<lit>series</lit>, <lit>scalar</lit>, <lit>matrix</lit>,
+	<lit>list</lit>, <lit>string</lit>, <lit>bundle</lit> or
+	<lit>accessor</lit>. The effect is to print the names of all
+	currently defined objects of the named type.
+      </para>
+      <para>
+	As a special case, if the typename is <lit>accessor</lit>, the
+	names printed are those of the internal variables currently
+	available as <quote>accessors,</quote> such as <fncref
+	targ="$nobs"/> and <fncref targ="$uhat"/> (regardless of their
+	specific type).
       </para>
     </description>
 

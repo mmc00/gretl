@@ -173,7 +173,7 @@ int split_graph_fontspec (const char *s, char *name, int *psz);
 
 void gnuplot_missval_string (FILE *fp);
 
-FILE *open_plot_input_file (PlotType ptype, int *err);
+FILE *open_plot_input_file (PlotType ptype, GptFlags flags, int *err);
 
 int finalize_plot_input_file (FILE *fp);
 
@@ -227,6 +227,9 @@ int hurstplot (const int *list, DATASET *dset, gretlopt opt,
 	       PRN *prn);
 
 int qq_plot (const int *list, const DATASET *dset, gretlopt opt);
+
+int hf_plot (const int *list, const char *literal,
+	     const DATASET *dset, gretlopt opt);
 
 int correlogram_plot (const char *vname,
 		      const double *acf, 

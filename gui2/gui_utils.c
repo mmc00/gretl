@@ -271,6 +271,7 @@ static GtkActionEntry model_test_items[] = {
     { "cusum", NULL, N_("_CUSUM test"), NULL, NULL, G_CALLBACK(do_chow_cusum) },
     { "cusum:r", NULL, N_("CUSUM_SQ test"), NULL, NULL, G_CALLBACK(do_chow_cusum) },
     { "modtest:c", NULL, N_("_Common factor"), NULL, NULL, G_CALLBACK(do_modtest) },
+    { "modtest:d", NULL, N_("_Cross-sectional dependence"), NULL, NULL, G_CALLBACK(do_modtest) },
     { "hausman", NULL, N_("_Panel diagnostics"), NULL, NULL, G_CALLBACK(do_panel_tests) }
 };
 
@@ -2694,6 +2695,28 @@ static void add_multinomial_probs_item (windata_t *vwin)
     vwin_menu_add_item(vwin, mpath, &entry);
 }
 
+static void midas_plot_callback (GtkAction *action, gpointer p)
+{
+    windata_t *vwin = (windata_t *) p;
+    MODEL *pmod = vwin->data;
+    gretl_matrix *C = NULL;
+    int err;
+
+    if (pmod == NULL) return;
+
+    C = gretl_model_get_data(pmod, "midas_coeffs");
+
+    if (C != NULL) {
+	const char *literal =
+	    "{set title 'MIDAS coefficients';"
+	    " set xlabel 'high-frequency lag';"
+	    " set ylabel '';}";
+	
+	err = matrix_plot(C, NULL, literal,  OPT_P | OPT_S | OPT_G);
+	gui_graph_handler(err);
+    }
+}
+
 #define intervals_model(m) (m->ci == LAD && \
 			    gretl_model_get_data(m, "coeff_intervals"))
 
@@ -3049,6 +3072,12 @@ static void add_vars_to_plot_menu (windata_t *vwin)
 	entry.label = _("Residual _periodogram");
 	entry.callback = G_CALLBACK(residual_periodogram_callback);
 	vwin_menu_add_item(vwin, "/menubar/Graphs", &entry);
+	if (gretl_model_get_data(pmod, "midas_coeffs") != NULL) {
+	    entry.name = "MIDAScoeffs";
+	    entry.label = _("_MIDAS coefficients");
+	    entry.callback = G_CALLBACK(midas_plot_callback);
+	    vwin_menu_add_item(vwin, "/menubar/Graphs", &entry);
+	}
     } else {
 	vwin_menu_add_separator(vwin, "/menubar/Graphs");
     }

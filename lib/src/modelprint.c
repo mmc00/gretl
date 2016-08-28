@@ -638,6 +638,40 @@ static void print_probit_rho (const MODEL *pmod, PRN *prn)
     gretl_prn_newline(prn);
 }
 
+static void print_GNR_info (const MODEL *pmod, PRN *prn)
+{
+    double R2 = gretl_model_get_double(pmod, "GNR_Rsquared");
+    double tmax = gretl_model_get_double(pmod, "GNR_tmax");
+    const char *msg;
+
+    if (na(R2) || na(tmax)) {
+	return;
+    }
+    
+    ensure_vsep(prn);
+
+    if (tex_format(prn)) {
+	pprintf(prn, "GNR: $R^2$ = %g, max $|t|$ = %g\n", R2, tmax);
+    } else {
+	pprintf(prn, "GNR: R-squared = %g, max |t| = %g\n", R2, tmax);
+    }
+
+    if (R2 > 1.0e-8 || tmax > 1.0e-4) {
+	msg = N_("Warning: convergence is questionable");
+    } else {
+	msg = N_("Convergence seems to be reasonably complete");
+    }
+    pputs(prn, _(msg));
+    gretl_prn_newline(prn);
+
+    if (gretl_model_get_int(pmod, "near-singular")) {
+	msg = N_("Warning: Jacobian near to rank-deficiency");
+	pputs(prn, _(msg));
+    }
+
+    gretl_prn_newline(prn);
+}
+
 static void maybe_print_lad_warning (const MODEL *pmod, PRN *prn)
 {
     if (gretl_model_get_int(pmod, "nonunique")) {
@@ -1019,6 +1053,12 @@ const char *estimator_string (const MODEL *pmod, PRN *prn)
     } else if (pmod->ci == OLS && 
 	       gretl_model_get_int(pmod, "restricted")) {
 	return N_("Restricted OLS");
+    } else if (pmod->ci == MIDASREG) {
+	if (gretl_model_get_int(pmod, "umidas")) {
+	    return N_("MIDAS (OLS)");
+	} else {
+	    return N_("MIDAS (NLS)");
+	}
     } else {
 	return simple_estimator_string(pmod->ci, prn);
     }
@@ -2378,6 +2418,12 @@ static void print_coeff_table_end (const MODEL *pmod, PRN *prn)
 	pputs(prn, "}\n\n");
     }
 
+    if (pmod->ci == NLS || pmod->ci == MIDASREG) {
+	/* we'll handle near-singularity elsewhere, in
+	   conjunction with printing GNR info */
+	return;
+    }
+
     if (plain_format(prn) && gretl_model_get_int(pmod, "near-singular")) {
 	const char *msg = N_("Warning: data matrix close to singularity!");
 
@@ -3351,6 +3397,10 @@ int printmodel (MODEL *pmod, const DATASET *dset, gretlopt opt,
 	print_duration_alpha(pmod, prn);
     } else if (pmod->ci == BIPROBIT) {
 	print_probit_rho(pmod, prn);
+    } else if (pmod->ci == NLS ||
+	       (pmod->ci == MIDASREG &&
+		!gretl_model_get_int(pmod, "umidas"))) {
+	print_GNR_info(pmod, prn);
     }
 
     /* FIXME alternate R^2 measures (within, centered) */
@@ -3363,7 +3413,7 @@ int printmodel (MODEL *pmod, const DATASET *dset, gretlopt opt,
 
     if (plain_format(prn) && pmod->ci != MLE && pmod->ci != PANEL &&
 	pmod->ci != ARMA && pmod->ci != NLS && pmod->ci != GMM &&
-	pmod->ci != LAD && pmod->ci != HECKIT && 
+	pmod->ci != LAD && pmod->ci != HECKIT && pmod->ci != MIDASREG &&
 	pmod->ci != ARBOND && pmod->ci != DPANEL && pmod->ci != GARCH && 
 	pmod->ci != DURATION && !ordered_model(pmod) && !multinomial_model(pmod) && 
 	!COUNT_MODEL(pmod->ci) && !intreg_model(pmod) &&

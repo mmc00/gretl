@@ -25,6 +25,7 @@
 #include "ssheet.h"
 #include "selector.h"
 #include "varinfo.h"
+#include "uservar.h"
 #include "treeutils.h"
 #include "session.h"
 #include "gretl_ipc.h"
@@ -174,6 +175,8 @@ void iconview_menubar_state (gboolean s)
     flip(mdata->ui, "/menubar/View/IconView", s);
 }
 
+#define OK_MIDAS_PD(p) (p == 1 || p == 4 || p == 12)
+
 #define COMPACTABLE(d) (d->structure == TIME_SERIES && \
                         (d->pd == 4 || d->pd == 12 || \
                          d->pd == 5 || d->pd == 6 || \
@@ -235,6 +238,12 @@ void time_series_menu_state (gboolean s)
 
     /* Model menu */
     flip(mdata->ui, "/menubar/Model/TSModels", s);
+#if 1 /* not ready yet */
+    flip(mdata->ui, "/menubar/Model/TSModels/midasreg",
+	 s && OK_MIDAS_PD(dataset->pd));
+#else    
+    flip(mdata->ui, "/menubar/Model/TSModels/midasreg", FALSE);
+#endif    
 
     /* Sample menu */
     flip(mdata->ui, "/menubar/Data/DataCompact", 
@@ -353,61 +362,6 @@ void check_var_labels_state (GtkMenuItem *item, gpointer p)
     flip(mdata->ui, "/menubar/Data/VarLabels", s);
 }
 
-static gint var_popup_click (GtkWidget *w, gpointer p)
-{
-    gchar *item = (gchar *) p;
-    int v = mdata_active_var();
-
-    if (!strcmp(item, _("Display values"))) { 
-	display_var();
-    } else if (!strcmp(item, _("Summary statistics"))) { 
-	do_menu_op(VAR_SUMMARY, NULL, OPT_NONE);
-    } else if (!strcmp(item, _("Time series plot"))) { 
-	do_graph_var(v);
-    } else if (!strcmp(item, _("Panel plot..."))) { 
-	do_graph_var(v);
-    } else if (!strcmp(item, _("Frequency distribution"))) { 
-	do_freq_dist();
-    } else if (!strcmp(item, _("Boxplot"))) {
-	menu_boxplot_callback(v);
-    } else if (!strcmp(item, _("Gini coefficient"))) {
-	do_gini();
-    } else if (!strcmp(item, _("Correlogram"))) {
-	do_corrgm();
-    } else if (!strcmp(item, _("Periodogram"))) { 
-	do_pergm(NULL);
-    } else if (!strcmp(item, _("ARIMA model"))) {
-	selector_set_varnum(v);
-	modelspec_dialog(ARMA);
-    } else if (!strcmp(item, _("Dickey-Fuller test"))) { 
-	unit_root_test(ADF);
-    } else if (!strcmp(item, _("KPSS test"))) { 
-	unit_root_test(KPSS);
-    } else if (!strcmp(item, _("Edit attributes"))) {  
-	varinfo_dialog(v);
-    } else if (!strcmp(item, _("Edit values"))) {  
-	show_spreadsheet(SHEET_EDIT_VARLIST);
-    } else if (!strcmp(item, _("Copy to clipboard"))) { 
-	csv_selected_to_clipboard();
-    } else if (!strcmp(item, _("Delete"))) { 
-	delete_single_var(v);
-    } else if (!strcmp(item, _("Add log"))) {
-	add_logs_etc(LOGS, v);
-    } else if (!strcmp(item, _("Add difference"))) {
-	add_logs_etc(DIFF, v);
-    } else if (!strcmp(item, _("Add percent change..."))) {
-	percent_change_dialog(v);
-    } else if (!strcmp(item, _("Dummify..."))) {
-	add_discrete_dummies(v);
-    } else if (!strcmp(item, _("Define new variable..."))) { 
-	genr_callback();
-    }
-
-    gtk_widget_destroy(mdata->popup);
-
-    return FALSE;
-}
-
 static int missvals_in_selection (void)
 {
     int *list = main_window_selection_as_list();
@@ -450,14 +404,261 @@ static int uniform_corr_option (const gchar *title, gretlopt *popt)
     return resp;
 }
 
+static int series_is_dummifiable (int v)
+{
+    if (!series_is_discrete(dataset, v)) {
+	return 0;
+    } else if (gretl_isdummy(0, dataset->n-1, dataset->Z[v])) {
+	return 0;
+    } else {
+	return 1;
+    }
+}
+
+static int dataset_could_be_midas (const DATASET *dset)
+{
+    if (dataset_is_time_series(dset) &&
+	(dset->pd == 1 || dset->pd == 4 || dset->pd == 12)) {
+	return 1;
+    } else {
+	return 0;
+    }
+}
+
+enum MenuIdx_ {
+    MNU_DISP,
+    MNU_EDIT,
+    MNU_STATS,
+    MNU_TPLOT,
+    MNU_PPLOT,
+    MNU_FDIST,
+    MNU_BPLOT,
+    MNU_CGRAM,
+    MNU_PGRAM,
+    MNU_ATTRS,
+    MNU_CORR,
+    MNU_XCORR,
+    MNU_SCATR,
+    MNU_CLIPB,
+    MNU_DELET,
+    MNU_SEPAR,
+    MNU_LOGS,
+    MNU_DIFF,
+    MNU_PCDIF,
+    MNU_DUMIF,
+    MNU_GENR,
+    MNU_LIST
+};
+
+enum MDSIdx_ {
+    MDS_DISP,
+    MDS_TPLOT,
+    MDS_LOGS,
+    MDS_DIFF,
+    MDS_SEPAR,
+    MDS_CDISP,
+    MDS_CEDIT,
+    MDS_CDEL,
+    MDS_GENR,
+    MDS_LIST
+};
+
+enum MenuTarg_ {
+    T_SINGLE,
+    T_MULTI,
+    T_BOTH,
+};
+
+typedef enum MenuIdx_ MenuIdx;
+typedef enum MDSIdx_ MDSIdx;
+typedef enum MenuTarg_ MenuTarg;
+
+struct popup_entries {
+    MenuIdx idx;       /* one of the MenuIdxvalues above */
+    const char *str;   /* translatable string */
+    MenuTarg target;   /* one of the MenuTarget values above */
+};
+
+struct mpopup_entries {
+    MDSIdx idx;        /* one of the MDSIdx values above */
+    const char *str;   /* translatable string */
+};
+
+struct popup_entries main_pop_entries[] = {
+    { MNU_DISP,  N_("Display values"), T_BOTH },
+    { MNU_EDIT,  N_("Edit values"), T_BOTH },
+    { MNU_STATS, N_("Summary statistics"), T_BOTH },
+    { MNU_TPLOT, N_("Time series plot"), T_BOTH },
+    { MNU_PPLOT, N_("Panel plot..."), T_SINGLE },
+    { MNU_FDIST, N_("Frequency distribution"), T_SINGLE },
+    { MNU_BPLOT, N_("Boxplot"), T_SINGLE },
+    { MNU_CGRAM, N_("Correlogram"), T_SINGLE, },
+    { MNU_PGRAM, N_("Periodogram"), T_SINGLE, },
+    { MNU_ATTRS, N_("Edit attributes"), T_SINGLE },
+    { MNU_CORR,  N_("Correlation matrix"), T_MULTI },
+    { MNU_XCORR, N_("Cross-correlogram"), T_MULTI },
+    { MNU_SCATR, N_("XY scatterplot"), T_MULTI },
+    { MNU_CLIPB, N_("Copy to clipboard"), T_BOTH },
+    { MNU_DELET, N_("Delete"), T_BOTH },
+    { MNU_SEPAR, NULL, T_BOTH },
+    { MNU_LOGS,  N_("Add log"), T_SINGLE },
+    { MNU_DIFF,  N_("Add difference"), T_SINGLE },
+    { MNU_PCDIF, N_("Add percent change..."), T_SINGLE },
+    { MNU_DUMIF, N_("Dummify..."), T_SINGLE },
+    { MNU_LOGS,  N_("Add logs"), T_MULTI },
+    { MNU_DIFF,  N_("Add differences"), T_MULTI },
+    { MNU_SEPAR, NULL, T_BOTH },
+    { MNU_GENR,  N_("Define new variable..."), T_BOTH },
+    { MNU_LIST,  N_("Define list"), T_MULTI }
+};
+
+struct mpopup_entries midas_pop_entries[] = {
+    { MDS_DISP,  N_("Display values") },
+    { MDS_TPLOT, N_("Time series plot") },
+    { MDS_LOGS,  N_("Add logs...") },
+    { MDS_DIFF,  N_("Add differences...") },
+    { MDS_SEPAR, NULL },
+    { MDS_CDISP, N_("Display components") },
+    { MDS_CEDIT, N_("Edit components") },
+    { MDS_CDEL,  N_("Delete components") },
+    { MDS_SEPAR, NULL },
+    { MDS_GENR,  N_("Define new variable...") },
+    { MDS_LIST,  N_("Define list") }
+};
+
+static gint var_popup_click (GtkWidget *w, gpointer p)
+{
+    MenuIdx i = GPOINTER_TO_INT(p);
+    int v = mdata_active_var();
+
+    switch (i) {
+    case MNU_DISP:
+	display_var();
+	break;
+    case MNU_STATS:
+	do_menu_op(VAR_SUMMARY, NULL, OPT_NONE);
+	break;
+    case MNU_TPLOT:
+    case MNU_PPLOT:
+	do_graph_var(v);
+	break;
+    case MNU_FDIST:
+	do_freq_dist();
+	break;
+    case MNU_BPLOT:
+	menu_boxplot_callback(v);
+	break;
+    case MNU_CGRAM:
+	do_corrgm();
+	break;
+    case MNU_PGRAM:
+	do_pergm(NULL);
+	break;
+    case MNU_ATTRS:
+	varinfo_dialog(v);
+	break;
+    case MNU_EDIT:
+	show_spreadsheet(SHEET_EDIT_VARLIST);
+	break;
+    case MNU_CLIPB:
+	csv_selected_to_clipboard();
+	break;
+    case MNU_DELET:
+	delete_single_var(v);
+	break;
+    case MNU_LOGS:
+    case MNU_DIFF:
+	add_logs_etc(i == MNU_LOGS ? LOGS : DIFF, v, 0);
+	break;
+    case MNU_PCDIF:
+	percent_change_dialog(v);
+	break;
+    case MNU_DUMIF:
+	add_discrete_dummies(v);
+	break;
+    case MNU_GENR:
+	genr_callback();
+	break;
+    default:
+	break;
+    }
+
+    gtk_widget_destroy(mdata->popup);
+
+    return FALSE;
+}
+
+GtkWidget *build_var_popup (int selvar)
+{
+    GtkWidget *menu, *item;
+    int i, j, n = G_N_ELEMENTS(main_pop_entries);
+    int real_panel = multi_unit_panel_sample(dataset);
+    int nullbak = 0;
+
+    menu = gtk_menu_new();
+
+    for (j=0; j<n; j++) {
+	if (main_pop_entries[j].target == T_MULTI) {
+	    /* not applicable */
+	    continue;
+	}
+	i = main_pop_entries[j].idx;
+	if (i == MNU_SEPAR) {
+	    if (!nullbak) {
+		/* don't insert two consecutive separators */
+		item = gtk_separator_menu_item_new();
+		gtk_widget_show(item);
+		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+		nullbak = 1;
+	    }
+	    continue;
+	}
+	if (real_panel && (i == MNU_TPLOT || i == MNU_BPLOT)) {
+	    /* don't offer regular ts or boxplot */
+	    continue;
+	}
+	if (!real_panel && i == MNU_PPLOT) {
+	    /* don't offer panel plot */
+	    continue;
+	}	
+	if ((i == MNU_CGRAM || i == MNU_PGRAM) &&
+	    !dataset_is_time_series(dataset)) {
+	    /* correlogram, periodogram */ 
+	    continue;
+	}
+	if ((i == MNU_TPLOT || i == MNU_DIFF || i == MNU_PCDIF) &&
+	    !extended_ts(dataset)) {
+	    /* time-series plot, difference, percent change */
+	    continue;
+	}
+	if (i == MNU_BPLOT && dataset_is_time_series(dataset)) {
+	    /* skip boxplot option */
+	    continue;
+	}
+	if (i == MNU_DUMIF && !series_is_dummifiable(selvar)) {
+	    /* skip dummify option */
+	    continue;
+	}
+	item = gtk_menu_item_new_with_label(_(main_pop_entries[j].str));
+	g_signal_connect(G_OBJECT(item), "activate",
+			 G_CALLBACK(var_popup_click),
+			 GINT_TO_POINTER(i));
+	gtk_widget_show(item);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	nullbak = 0;
+    }
+
+    return menu;
+}
+
 static gint selection_popup_click (GtkWidget *w, gpointer p)
 {
-    gchar *item = (gchar *) p;
+    MenuIdx i = GPOINTER_TO_INT(p);
     int ci = 0;
 
-    if (!strcmp(item, _("Summary statistics"))) {
+    if (i == MNU_STATS) {
 	ci = SUMMARY;
-    } else if (!strcmp(item, _("Correlation matrix"))) {
+    } else if (i == MNU_CORR) {
 	ci = CORR;
     }
 
@@ -483,27 +684,25 @@ static gint selection_popup_click (GtkWidget *w, gpointer p)
 	    do_menu_op(ci, buf, OPT_NONE);
 	    free(buf);
 	}
-    } else if (!strcmp(item, _("Display values"))) { 
+    } else if (i == MNU_DISP) { 
 	display_selected(); 
-    } else if (!strcmp(item, _("Cross-correlogram")))  {
+    } else if (i == MNU_XCORR)  {
 	xcorrgm_callback();
-    } else if (!strcmp(item, _("Time series plot"))) { 
+    } else if (i == MNU_TPLOT) { 
 	plot_from_selection(GR_PLOT);
-    } else if (!strcmp(item, _("XY scatterplot")))  {
+    } else if (i == MNU_SCATR)  {
 	plot_from_selection(GR_XY);
-    } else if (!strcmp(item, _("Copy to clipboard"))) { 
-	csv_selected_to_clipboard();
-    } else if (!strcmp(item, _("Edit values")))  {
+    } else if (i == MNU_EDIT)  {
  	show_spreadsheet(SHEET_EDIT_VARLIST);
-    } else if (!strcmp(item, _("Delete")))  {
+    } else if (i == MNU_CLIPB) { 
+	csv_selected_to_clipboard();
+    } else if (i == MNU_DELET)  {
 	delete_selected_vars();
-    } else if (!strcmp(item, _("Add logs")))  {
-	add_logs_etc(LOGS, 0);
-    } else if (!strcmp(item, _("Add differences")))  {
-	add_logs_etc(DIFF, 0);
-    } else if (!strcmp(item, _("Define list"))) { 
+    } else if (i == MNU_LOGS || i == MNU_DIFF)  {
+	add_logs_etc(i == MNU_LOGS ? LOGS : DIFF, 0, 0);
+    } else if (i == MNU_LIST) { 
 	make_list_from_main();
-    } else if (!strcmp(item, _("Define new variable..."))) { 
+    } else if (i == MNU_GENR) { 
 	genr_callback();
     }
 
@@ -512,82 +711,97 @@ static gint selection_popup_click (GtkWidget *w, gpointer p)
     return FALSE;
 }
 
-static int series_is_dummifiable (int v)
+static GtkWidget *build_regular_selection_popup (void)
 {
-    if (!series_is_discrete(dataset, v)) {
-	return 0;
-    } else if (gretl_isdummy(0, dataset->n-1, dataset->Z[v])) {
-	return 0;
-    } else {
-	return 1;
-    }
-}
-
-GtkWidget *build_var_popup (int selvar)
-{
-    const char *items[] = {
-	N_("Display values"),
-	N_("Summary statistics"),
-	N_("Time series plot"),
-	N_("Panel plot..."),
-	N_("Frequency distribution"),
-	N_("Boxplot"),
-	N_("Correlogram"),
-	N_("Periodogram"),
-	N_("Edit attributes"),
-	N_("Edit values"),
-	N_("Copy to clipboard"),
-	N_("Delete"),
-	NULL,
-	N_("Add log"),
-	N_("Add difference"),
-	N_("Add percent change..."),
-	N_("Dummify..."),
-	NULL,
-	N_("Define new variable...")
-    };
-    GtkWidget *menu;
-    GtkWidget *item;
-    int i, n = G_N_ELEMENTS(items);
-    int real_panel = multi_unit_panel_sample(dataset);
+    GtkWidget *menu, *item;
+    int i, j, n = G_N_ELEMENTS(main_pop_entries);
+    int nullbak = 0;
 
     menu = gtk_menu_new();
 
-    for (i=0; i<n; i++) {
-	if (items[i] == NULL) {
+    for (j=0; j<n; j++) {
+	if (main_pop_entries[j].target == T_SINGLE) {
+	    /* for single selection only */
+	    continue;
+	}
+	i = main_pop_entries[j].idx;
+	if (i == MNU_SEPAR) {
+	    if (!nullbak) {
+		/* don't insert two consecutive separators */
+		item = gtk_separator_menu_item_new();
+		gtk_widget_show(item);
+		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+		nullbak = 1;
+	    }
+	    continue;
+	}
+	if ((i == MNU_TPLOT || i == MNU_XCORR) &&
+	    !dataset_is_time_series(dataset)) {
+	    continue;
+	}
+	if (!extended_ts(dataset) && i == MNU_TPLOT) {
+	    continue;
+	}
+	item = gtk_menu_item_new_with_label(_(main_pop_entries[j].str));
+	g_signal_connect(G_OBJECT(item), "activate",
+			 G_CALLBACK(selection_popup_click),
+			 GINT_TO_POINTER(i));
+	gtk_widget_show(item);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	nullbak = 0;
+    }
+
+    return menu;
+}
+
+static gint midas_popup_click (GtkWidget *w, gpointer p)
+{
+    MDSIdx i = GPOINTER_TO_INT(p);
+
+    if (i == MDS_DISP || i == MDS_TPLOT) {
+	int *list = main_window_selection_as_list();
+	
+	midas_list_callback(list, NULL, i == MDS_DISP ? PRINT : PLOT);
+	free(list);
+    } else if (i == MDS_LOGS || i == MDS_DIFF)  {
+	add_logs_etc(i == MDS_LOGS ? LOGS : DIFF, 0, 1);
+    } else if (i == MDS_CDISP) {
+	display_selected();
+    } else if (i == MDS_CEDIT) {
+	show_spreadsheet(SHEET_EDIT_VARLIST);
+    } else if (i == MDS_CDEL) {
+	delete_selected_vars();
+    } else if (i == MDS_LIST) { 
+	make_list_from_main();
+    } else if (i == MDS_GENR) { 
+	genr_callback();
+    }
+
+    gtk_widget_destroy(mdata->popup);
+
+    return FALSE;
+}
+
+static GtkWidget *build_midas_popup (void)
+{
+    GtkWidget *menu, *item;
+    int n = G_N_ELEMENTS(midas_pop_entries);
+    int i, j;
+
+    menu = gtk_menu_new();
+
+    for (j=0; j<n; j++) {
+	i = midas_pop_entries[j].idx;
+	if (i == MDS_SEPAR) {
 	    item = gtk_separator_menu_item_new();
 	    gtk_widget_show(item);
 	    gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 	    continue;
 	}
-	if (real_panel && (i == 2 || i == 5)) {
-	    /* don't offer regular ts or boxplot */
-	    continue;
-	}
-	if (!real_panel && i == 3) {
-	    /* don't offer panel plot */
-	    continue;
-	}	
-	if ((i == 6 || i == 7) && !dataset_is_time_series(dataset)) {
-	    /* correlogram, periodogram */ 
-	    continue;
-	}
-	if ((i == 2 || i == 14 || i == 15) && !extended_ts(dataset)) {
-	    /* time-series plot, difference, percent change */
-	    continue;
-	}
-	if (i == 5 && dataset_is_time_series(dataset)) {
-	    /* skip boxplot option */
-	    continue;
-	}
-	if (i == 16 && !series_is_dummifiable(selvar)) {
-	    /* skip dummify option */
-	    continue;
-	}	
-	item = gtk_menu_item_new_with_label(_(items[i]));
+	item = gtk_menu_item_new_with_label(_(midas_pop_entries[j].str));
 	g_signal_connect(G_OBJECT(item), "activate",
-			 G_CALLBACK(var_popup_click),
-			 _(items[i]));
+			 G_CALLBACK(midas_popup_click),
+			 GINT_TO_POINTER(i));
 	gtk_widget_show(item);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
     }
@@ -597,51 +811,22 @@ GtkWidget *build_var_popup (int selvar)
 
 GtkWidget *build_selection_popup (void)
 {
-    const char *items[] = {
-	N_("Display values"),
-	N_("Summary statistics"),
-	N_("Correlation matrix"),
-	N_("Cross-correlogram"),
-	N_("Time series plot"),
-	N_("XY scatterplot"),
-	N_("Edit values"),
-	N_("Copy to clipboard"),
-	N_("Delete"),
-	NULL,
-	N_("Add logs"),
-	N_("Add differences"),
-	NULL,
-	N_("Define list"),
-	N_("Define new variable...")
-    };
-    GtkWidget *menu;
-    GtkWidget *item;
-    int i, n = G_N_ELEMENTS(items);
+    int midas_list = 0;
 
-    menu = gtk_menu_new();
+    if (dataset_could_be_midas(dataset)) {
+	int *list = main_window_selection_as_list();
 
-    for (i=0; i<n; i++) {
-	if (items[i] == NULL) {
-	    item = gtk_separator_menu_item_new();
-	    gtk_widget_show(item);
-	    gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-	    continue;
+	if (gretl_is_midas_list(list, dataset)) {
+	    midas_list = 1;
 	}
-	if (!dataset_is_time_series(dataset) && (i == 3 || i == 11)) {
-	    continue;
-	}
-	if (!extended_ts(dataset) && i == 4) {
-	    continue;
-	}
-	item = gtk_menu_item_new_with_label(_(items[i]));
-	g_signal_connect(G_OBJECT(item), "activate",
-			 G_CALLBACK(selection_popup_click),
-			 _(items[i]));
-	gtk_widget_show(item);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+	free(list);
     }
 
-    return menu;
+    if (midas_list) {
+	return build_midas_popup();
+    } else {
+	return build_regular_selection_popup();
+    }
 }
 
 void clear_sample_label (void)

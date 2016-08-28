@@ -871,6 +871,104 @@ int days_in_month_after (int yr, int mon, int day, int wkdays)
 }
 
 /**
+ * date_to_daily_index:
+ * @date: date in format YYYY-MM-DD.
+ * @wkdays: number of days in week (7, 6 or 5)
+ * 
+ * Returns: the zero-based index of the specified day
+ * within the specified month and year. In the case
+ * of 5- or 6-day data index zero does not necessarily
+ * correspond to the first day of the month but rather
+ * to the first relevant day.
+ */
+
+int date_to_daily_index (const char *date, int wkdays)
+{
+    int y, m, d;
+    int idx = 0;
+
+    if (sscanf(date, YMD_READ_FMT, &y, &m, &d) != 3) {
+	return -1;
+    }
+
+    if (wkdays == 7) {
+	idx = d - 1;
+    } else {
+	int leap = leap_year(y);
+	int n = days_in_month[leap][m];
+	int i, wd;
+
+	for (i=1; i<=n; i++) {
+	    if (d == i) {
+		break;
+	    }
+	    wd = day_of_week_from_ymd(y, m, i);
+	    if (day_in_calendar(wkdays, wd)) {
+		idx++;
+	    }
+	}	
+    } 
+
+    return idx; 
+}
+
+/**
+ * daily_index_to_date:
+ * @date: location to receive the date (YYYY-MM-DD).
+ * @y: year.
+ * @m: month.
+ * @idx: zero-based index of day within month.
+ * @wkdays: number of days in week (7, 6 or 5)
+ *
+ * Fills out @date with the calendar data implied by
+ * the specification of @y, @m, @idx and @wkdays,
+ * provided this specification corresponds to an actual
+ * calendar data.
+
+ * Returns: 0 on successful completion, non-zero if
+ * there is no such calendat date.
+ */
+
+int daily_index_to_date (char *date, int y, int m, int idx,
+			 int wkdays)
+{
+    int day = 0;
+
+    if (m < 1 || m > 12 || idx < 0 || idx > 30) {
+	fprintf(stderr, "daily_index_to_date: y=%d, m=%d, idx=%d\n",
+		y, m, idx);
+	return E_DATA;
+    }
+
+    if (wkdays == 7) {
+	day = idx + 1;
+    } else {
+	int leap = leap_year(y);
+	int n = days_in_month[leap][m];
+	int i, wd, seq = 0;
+
+	for (i=1; i<=n; i++) {
+	    wd = day_of_week_from_ymd(y, m, i);
+	    if (day_in_calendar(wkdays, wd)) {
+		if (seq == idx) {
+		    day = i;
+		    break;
+		}
+		seq++;
+	    }
+	}	
+    }
+
+    if (day <= 0) {
+	*date = '\0';
+	return E_DATA;
+    } else {
+	sprintf(date, YMD_WRITE_FMT, y, m, day);
+	return 0;
+    }
+}
+
+/**
  * n_hidden_missing_obs:
  * @dset: dataset information.
  *

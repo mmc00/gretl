@@ -45,6 +45,7 @@
 #include "objstack.h"
 #include "gretl_xml.h"
 #include "gretl_panel.h"
+#include "gretl_midas.h"
 #include "gretl_foreign.h"
 #include "gretl_help.h"
 #include "gretl_zip.h"
@@ -2621,6 +2622,10 @@ void do_modtest (GtkAction *action, gpointer p)
 	strcpy(title, _("gretl: common factor test"));
 	lib_command_strcpy("modtest --comfac");
 	err = comfac_test(pmod, dset, OPT_S, prn);
+    } else if (opt == OPT_D) {
+	strcpy(title, _("gretl: cross-sectional dependence"));
+	lib_command_strcpy("modtest --xdepend");
+	err = panel_xdepend_test(pmod, dset, OPT_S, prn);
     }
 
     if (err) {
@@ -4100,7 +4105,11 @@ static int real_do_model (int action)
 	break;	
     case MPOLS:
 	*pmod = mp_ols(libcmd.list, dataset);
-	break;	
+	break;
+    case MIDASREG:
+	*pmod = midas_model(libcmd.list, libcmd.param, dataset,
+			    libcmd.opt, prn);
+	break;
     default:
 	errbox(_("Sorry, not implemented yet!"));
 	err = 1;
@@ -4135,12 +4144,75 @@ static int real_do_model (int action)
     return err;
 }
 
+static gchar *compose_midas_param (gpointer p)
+{
+    gui_midas_spec *si, *specs = p;
+    char *tmp, *buf = NULL;
+    int *list = NULL;
+    int umidas = 1;
+    int i;
+
+    if (specs == NULL) {
+	return NULL;
+    }
+
+    for (i=0; i<specs[0].nterms; i++) {
+	if (specs[i].ptype != MIDAS_U) {
+	    umidas = 0;
+	    break;
+	}
+    }
+
+    for (i=0; i<specs[0].nterms; i++) {
+	si = &specs[i];
+	if (si->listname[0] == '\0') {
+	    /* we'll have to construct a list */
+	    int lmax = si->leadvar + si->fratio - 1;
+	    
+	    list = gretl_consecutive_list_new(si->leadvar, lmax);
+	    sprintf(si->listname, "HFL___%d", i+1);
+	    remember_list(list, si->listname, NULL);
+	    user_var_privatize_by_name(si->listname);
+	    
+	}
+	if (umidas) {
+	    tmp = g_strdup_printf("mds(%s,%d,%d,%d)",
+				  si->listname, si->minlag,
+				  si->maxlag, si->ptype);
+	} else if (si->ptype == MIDAS_BETA0 ||
+		   si->ptype == MIDAS_BETAN ||
+		   si->ptype == MIDAS_U) {
+	    tmp = g_strdup_printf("mds(%s,%d,%d,%d,null)",
+				  si->listname, si->minlag,
+				  si->maxlag, si->ptype);
+	} else {
+	    tmp = g_strdup_printf("mds(%s,%d,%d,%d,%d)",
+				  si->listname, si->minlag,
+				  si->maxlag, si->ptype,
+				  si->nparm);
+	}
+	if (i == 0) {
+	    buf = tmp;
+	} else {
+	    gchar *tmp2 = g_strjoin(" ", buf, tmp, NULL);
+
+	    g_free(buf);
+	    g_free(tmp);
+	    buf = tmp2;
+	}
+    }
+
+    return buf;
+}
+
 int do_model (selector *sr) 
 {
     gretlopt opt, addopt = OPT_NONE;
+    gpointer extra_data;
     char estimator[9];
     const char *buf;
     const char *flagstr;
+    gchar *pbuf = NULL;
     int ci;
 
     if (selector_error(sr)) {
@@ -4154,6 +4226,7 @@ int do_model (selector *sr)
 
     ci = selector_code(sr);
     opt = selector_get_opts(sr);
+    extra_data = selector_get_extra_data(sr);
 
     /* In some cases, choices which are represented by option flags in
        gretl script are represented by ancillary "ci" values in the
@@ -4196,13 +4269,19 @@ int do_model (selector *sr)
 	} else {
 	    ci = POISSON;
 	}
+    } else if (ci == MIDASREG) {
+	pbuf = compose_midas_param(extra_data);
     }
 	
     strcpy(estimator, gretl_command_word(ci));
 
     libcmd.opt = opt | addopt;
     flagstr = print_flags(libcmd.opt, ci);
-    lib_command_sprintf("%s %s%s", estimator, buf, flagstr);
+    if (pbuf != NULL) {
+	lib_command_sprintf("%s %s ; %s%s", estimator, buf, pbuf, flagstr);
+    } else {
+	lib_command_sprintf("%s %s%s", estimator, buf, flagstr);
+    }
 
 #if 0
     fprintf(stderr, "\nmodel command elements:\n");
@@ -6154,12 +6233,18 @@ void do_remove_obs (void)
     }
 }
 
-void add_logs_etc (int ci, int varnum)
+void add_logs_etc (int ci, int varnum, int midas)
 {
     char *liststr;
     int *tmplist = NULL;
     int order = 0;
     int err = 0;
+
+    if ((ci == LAGS || ci == DIFF || ci == LDIFF || ci == SDIFF) && midas) {
+	/* FIXME! */
+	warnbox("Please use console or script when transforming MIDAS series");
+	return;
+    }    
 
     if (varnum > 0 && varnum < dataset->v) {
 	liststr = gretl_strdup_printf(" %s", dataset->varname[varnum]);
@@ -6204,13 +6289,17 @@ void add_logs_etc (int ci, int varnum)
     }
 
     if (ci == LAGS) {
-	err = list_laggenr(&tmplist, order, NULL, dataset, 0, OPT_NONE);
+	err = list_laggenr(&tmplist, 1, order, NULL, dataset, 0, OPT_NONE);
     } else if (ci == LOGS) {
 	err = list_loggenr(tmplist, dataset);
     } else if (ci == SQUARE) {
 	err = list_xpxgenr(&tmplist, dataset, OPT_NONE);
     } else if (ci == DIFF || ci == LDIFF || ci == SDIFF) {
 	err = list_diffgenr(tmplist, ci, dataset);
+    }
+
+    if (!err && midas && (ci == LOGS || ci == SQUARE)) {
+	gretl_list_set_midas(tmplist, dataset);
     }
 
     free(tmplist);
@@ -6248,8 +6337,9 @@ static int logs_etc_code (GtkAction *action)
 void logs_etc_callback (GtkAction *action)
 {
     int ci = logs_etc_code(action);
-    
-    add_logs_etc(ci, 0);
+
+    /* FIXME MIDAS */
+    add_logs_etc(ci, 0, 0);
 }
 
 int save_fit_resid (windata_t *vwin, int code)
@@ -7613,7 +7703,50 @@ void display_var (void)
 			   VIEW_SERIES, NULL);
 	series_view_connect(vwin, v);
     }
-	
+}
+
+void midas_list_callback (const int *list,
+			  const char *listname,
+			  int ci)
+{
+    int err = 0;
+
+    if (list == NULL) {
+	list = get_list_by_name(listname);
+	if (list == NULL) {
+	    /* "can't happen" */
+	    errbox("Couldn't find the specified MIDAS list");
+	    return;
+	}
+    }
+
+    if (ci == PRINT) {
+	char *p, title[VNAMELEN];
+	PRN *prn;
+
+	if (bufopen(&prn)) {
+	    return;
+	}
+	err = printdata(list, NULL, dataset, OPT_M, prn);
+	if (err) {
+	    gui_errmsg(err);
+	    gretl_print_destroy(prn);
+	} else {
+	    if (listname != NULL) {
+		strcpy(title, listname);
+	    } else {
+		strcpy(title, dataset->varname[list[1]]);
+		p = strrchr(title, '_');
+		if (p != NULL) *p = '\0';
+	    }
+	    view_buffer(prn, 36, 400, title, PRINT, NULL);
+	}
+    } else if (ci == PLOT) {
+	err = hf_plot(list, NULL, dataset, OPT_G | OPT_O);
+	gui_graph_handler(err);
+    } else {
+	dummy_call();
+    }
 }
 
 static int suppress_logo;
@@ -9446,12 +9579,14 @@ int script_install_function_package (const char *pkgname,
     return err;
 }
 
-static int script_renumber_series (const char *s, DATASET *dset, 
+static int script_renumber_series (const int *list,
+				   const char *parm,
+				   DATASET *dset, 
 				   PRN *prn)
 {
     int err, fixmax = max_untouchable_series_ID();
 
-    err = renumber_series_with_checks(s, fixmax, dset, prn);
+    err = renumber_series_with_checks(list, parm, fixmax, dset, prn);
     if (err) {
 	errmsg(err, prn);
     }
@@ -9925,7 +10060,7 @@ int gui_exec_line (ExecState *s, DATASET *dset, GtkWidget *parent)
 	    close_session(cmd->opt);
 	    break;
 	} else if (cmd->auxint == DS_RENUMBER) {
-	    err = script_renumber_series(cmd->param, dset, prn);
+	    err = script_renumber_series(cmd->list, cmd->parm2, dset, prn);
 	    break;
 	}
 	/* else fall-through intended */

@@ -192,6 +192,7 @@ struct str_table funcs[] = {
     { F_LDIFF,    "ldiff" },
     { F_SDIFF,    "sdiff" },
     { F_LLAG,     "lags" },
+    { F_HFLAG,    "hflags" },
     { F_DROPCOLL, "dropcoll" },
     { F_TOINT,    "int" },
     { F_ROUND,    "round" },
@@ -314,6 +315,7 @@ struct str_table funcs[] = {
     { F_MEXP,     "mexp" },
     { F_FDJAC,    "fdjac" },
     { F_BFGSMAX,  "BFGSmax" },
+    { F_BFGSCMAX, "BFGScmax" },
     { F_NRMAX,    "NRmax" },
     { F_OBSNUM,   "obsnum" },
     { F_ISDISCR,  "isdiscrete" },
@@ -456,9 +458,12 @@ struct str_table funcs[] = {
     { F_SEASONALS, "seasonals" },
     { F_DEFARRAY,  "defarray" },
     { F_KSETUP,    "ksetup" },
-    { F_MLINCOMB,  "mlincomb" },
     { F_MWEIGHTS,  "mweights" },
     { F_MGRADIENT, "mgradient" },
+    { F_MLINCOMB,  "mlincomb" },
+    { F_HFDIFF,    "hfdiff" },
+    { F_HFLDIFF,   "hfldiff" },
+    { F_HFLIST,    "hflist" },
     { 0,           NULL }
 };
 
